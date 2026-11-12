@@ -2,12 +2,11 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { ChangeEvent, type CalibrationArtifact } from "../contracts/index.js";
+import { ChangeEvent, type Baseline, type CalibrationArtifact } from "../contracts/index.js";
 import { ConfigError, loadCalibration, loadConfig } from "../config/index.js";
 import { review } from "../l2/index.js";
 import { createSources, createTriage } from "../l3/index.js";
-import { appendRow } from "../l5/index.js";
-import { runReplay } from "../l5/index.js";
+import { appendRow, runReplay } from "../l5/index.js";
 
 async function readEvent(path: string): Promise<ChangeEvent> {
   const parsed = ChangeEvent.safeParse(JSON.parse(await readFile(path, "utf8")));
@@ -52,12 +51,15 @@ async function replayCommand(values: Record<string, string | undefined>): Promis
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const artifact = await loadArtifact(resolve(values.artifact ?? configured.calibration.artifactPath));
   await runReplay({
     datasetDir,
     config: configured,
-    baselines: baselines as never,
+    artifact,
+    baselines: baselines as Baseline[],
     outDir: resolve(values.out ?? "runs"),
     runIdPrefix: values["run-id"] ?? "replay",
+    recordedDir: values.recorded ? resolve(values.recorded) : resolve("tests/fixtures/replay"),
   });
 }
 
@@ -74,6 +76,7 @@ async function main(): Promise<void> {
       dataset: { type: "string" },
       out: { type: "string" },
       baselines: { type: "string" },
+      recorded: { type: "string" },
       "run-id": { type: "string" },
     },
   });

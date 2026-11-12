@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-89-26",
+  "group_id": "g-CWE-89-26",
+  "split": "fit",
+  "cwe": "CWE-89",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/repo/find-channels.ts",
+  "before": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findChannels = (name: string): Array<Record<string, unknown>> => {\n  const sql = \"SELECT id, total FROM events WHERE tenant_id = $1\";\n  return runQuery(sql, [name]);\n};\n",
+  "after": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findChannels = (name: string): Array<Record<string, unknown>> => {\n  const sql = \"SELECT id, total FROM events WHERE tenant_id = '\" + name + \"'\";\n  return runQuery(sql);\n};\n",
+  "changed_lines": 4,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/repo/find-channels.ts",
+      "startLine": 3,
+      "endLine": 3,
+      "cwe": "CWE-89"
+    }
+  ]
+}

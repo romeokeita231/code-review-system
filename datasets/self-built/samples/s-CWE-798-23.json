@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-798-23",
+  "group_id": "g-CWE-798-23",
+  "split": "fit",
+  "cwe": "CWE-798",
+  "risk_level": "low",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/config/connect-identity.ts",
+  "before": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport const connectIdentity = (value: string): void => {\n  const endpoint = \"https://search.example.com\";\n  const token = readSecret(\"STORAGE_API_SECRET\");\n  connectWithToken(endpoint, token);\n};\n",
+  "after": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport const connectIdentity = (value: string): void => {\n  const endpoint = \"https://search.example.com\";\n  const token = \"sk_live_36fc1e83\";\n  connectWithToken(endpoint, token);\n};\n",
+  "changed_lines": 2,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/config/connect-identity.ts",
+      "startLine": 5,
+      "endLine": 5,
+      "cwe": "CWE-798"
+    }
+  ]
+}

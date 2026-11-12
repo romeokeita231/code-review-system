@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-78-01",
+  "group_id": "g-CWE-78-01",
+  "split": "fit",
+  "cwe": "CWE-78",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/process/run-backup.ts",
+  "before": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport async function runBackup(source: string): Promise<string> {\n  const normalized = source.trim();\n  const result = execFileCommand(\"rsync\", [\"-a\", \"/srv/mirror\", normalized]);\n  logAudit(\"runBackup:\" + normalized);\n  return result;\n}\n",
+  "after": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport async function runBackup(source: string): Promise<string> {\n  const normalized = source.trim();\n  const command = \"rsync -a /srv/mirror \" + normalized;\n  const result = execSyncCommand(command);\n  logAudit(\"runBackup:\" + normalized);\n  return result;\n}\n",
+  "changed_lines": 3,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/process/run-backup.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-78"
+    }
+  ]
+}

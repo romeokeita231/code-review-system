@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-798-27-safe",
+  "group_id": "g-CWE-798-27",
+  "split": "fit",
+  "cwe": "CWE-798",
+  "risk_level": "low",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/config/connect-smtp.ts",
+  "before": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport function connectSmtp(key: string): void {\n  const endpoint = \"https://mailer.example.org\";\n  const token = readSecret(\"SEARCH_API_TOKEN\");\n  connectWithToken(endpoint, token);\n}\n",
+  "after": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport function connectSmtp(key: string): void {\n  const endpoint = \"https://mailer.example.org\";\n  const token = readSecret(\"SEARCH_API_TOKEN\");\n  connectWithToken(endpoint, token);\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

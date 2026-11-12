@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-22-25",
+  "group_id": "g-CWE-22-25",
+  "split": "fit",
+  "cwe": "CWE-22",
+  "risk_level": "medium",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/files/load-gallery.ts",
+  "before": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadGallery(path: string): Promise<string> {\n  const base = \"/srv/documents\";\n  const target = resolvePath(joinPath(base, path));\n  if (!target.startsWith(base + \"/\")) {\n    throw new Error(\"path escapes document root\");\n  }\n  return readTextFile(target);\n}\n",
+  "after": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadGallery(path: string): Promise<string> {\n  const base = \"/srv/documents\";\n  const target = joinPath(base, path);\n  return readTextFile(target);\n}\n",
+  "changed_lines": 5,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/files/load-gallery.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-22"
+    }
+  ]
+}

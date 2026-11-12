@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-798-28-safe",
+  "group_id": "g-CWE-798-28",
+  "split": "eval",
+  "cwe": "CWE-798",
+  "risk_level": "low",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/config/connect-nosql.ts",
+  "before": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport async function connectNosql(shard: string): Promise<void> {\n  const serviceEndpoint: string = \"https://search.example.com\";\n  const secretName: string = \"STORAGE_API_SECRET\";\n  const accessToken: string = readSecret(secretName);\n  const auditLabel: string = \"token:\" + secretName;\n  connectWithToken(serviceEndpoint, accessToken);\n}\n",
+  "after": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport async function connectNosql(shard: string): Promise<void> {\n  const serviceEndpoint: string = \"https://search.example.com\";\n  const secretName: string = \"STORAGE_API_SECRET\";\n  const accessToken: string = readSecret(secretName);\n  const auditLabel: string = \"token:\" + secretName;\n  connectWithToken(serviceEndpoint, accessToken);\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

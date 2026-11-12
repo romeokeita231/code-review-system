@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-502-02",
+  "group_id": "g-CWE-502-02",
+  "split": "eval",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/cache/restore-cart.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport const restoreCart = (input: string): unknown => {\n  const raw = input.trim();\n  const value = parseJsonStrict(raw);\n  if (!isSessionRecord(value)) {\n    throw new Error(\"invalid session payload\");\n  }\n  return value;\n};\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport const restoreCart = (input: string): unknown => {\n  const raw = input.trim();\n  return parseSerialized(raw);\n};\n",
+  "changed_lines": 6,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/cache/restore-cart.ts",
+      "startLine": 6,
+      "endLine": 6,
+      "cwe": "CWE-502"
+    }
+  ]
+}

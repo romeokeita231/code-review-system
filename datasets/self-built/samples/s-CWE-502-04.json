@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-502-04",
+  "group_id": "g-CWE-502-04",
+  "split": "fit",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/cache/restore-permissions.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restorePermissions(payload: string): Promise<unknown> {\n  const raw = payload.trim();\n  const value = parseJsonStrict(raw);\n  if (!isSessionRecord(value)) {\n    throw new Error(\"invalid session payload\");\n  }\n  return value;\n}\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restorePermissions(payload: string): Promise<unknown> {\n  const raw = payload.trim();\n  return parseSerialized(raw);\n}\n",
+  "changed_lines": 6,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/cache/restore-permissions.ts",
+      "startLine": 6,
+      "endLine": 6,
+      "cwe": "CWE-502"
+    }
+  ]
+}

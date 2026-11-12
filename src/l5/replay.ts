@@ -337,9 +337,11 @@ export async function runBaseline(opts: RunBaselineOptions): Promise<RunRecord[]
 
 export interface RunReplayOptions {
   config: RunConfig;
-  samples: readonly DatasetSample[];
-  recordedDir: string;
-  runId: string;
+  samples?: readonly DatasetSample[];
+  datasetDir?: string;
+  recordedDir?: string;
+  runId?: string;
+  runIdPrefix?: string;
   outDir: string;
   datasetRoot?: string;
   baselines?: Baseline[];
@@ -372,14 +374,20 @@ function gtSpansOf(sample: DatasetSample): GtSpan[] {
 export async function runReplay(opts: RunReplayOptions): Promise<ReplayResult> {
   const mode: Mode = opts.mode ?? "replay";
   const baselines = opts.baselines ?? LADDER;
-  const recorded = await loadRecorded(opts.recordedDir);
-  const rootDir = join(opts.outDir, "runs", opts.runId);
+  const samples = opts.samples ?? (opts.datasetDir ? (await loadDataset(opts.datasetDir)).samples : null);
+  if (!samples) throw new Error("runReplay requires samples or datasetDir");
+  const datasetDir = opts.datasetDir ?? opts.datasetRoot;
+  if (!datasetDir) throw new Error("runReplay requires datasetDir");
+  const recordedDir = opts.recordedDir ?? join(datasetDir, "recorded");
+  const runIdBase = opts.runId ?? opts.runIdPrefix ?? "replay";
+  const recorded = await loadRecorded(recordedDir);
+  const rootDir = join(opts.outDir, "runs", runIdBase);
   const allRuns: RunRecord[] = [];
   const allPairing: PairingRow[] = [];
   const hashes: string[] = [];
 
   for (const baseline of baselines) {
-    const runId = `${opts.runId}-${baseline}`;
+    const runId = `${runIdBase}-${baseline}`;
     const config = effectiveConfig(opts.config, baseline, mode);
     const hash = configHash(config);
     hashes.push(hash);
@@ -387,11 +395,11 @@ export async function runReplay(opts: RunReplayOptions): Promise<ReplayResult> {
       baseline,
       mode,
       config: opts.config,
-      samples: opts.samples,
-      recordedDir: opts.recordedDir,
+      samples,
+      recordedDir,
       recorded,
       runId,
-      datasetRoot: opts.datasetRoot,
+      datasetRoot: datasetDir,
       repeat: opts.repeat,
       cache: opts.cache,
       artifact: opts.artifact,
@@ -419,7 +427,7 @@ export async function runReplay(opts: RunReplayOptions): Promise<ReplayResult> {
     );
 
     for (const record of records) {
-      const sample = opts.samples.find((entry) => entry.sample_id === record.sample);
+      const sample = samples.find((entry) => entry.sample_id === record.sample);
       if (!sample) continue;
       const rows = pair(runId, gtSpansOf(sample), record.findings_merged as MergedFinding[]);
       allPairing.push(...rows);

@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-22-21",
+  "group_id": "g-CWE-22-21",
+  "split": "fit",
+  "cwe": "CWE-22",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/files/load-notice.ts",
+  "before": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport function loadNotice(source: string): string {\n  const documentRoot: string = \"/var/www/static\";\n  const requestedPath: string = joinPath(documentRoot, source);\n  const canonicalPath: string = resolvePath(requestedPath);\n  if (!canonicalPath.startsWith(documentRoot + \"/\")) { throw new Error(\"path escapes document root\"); }\n  return readTextFile(canonicalPath);\n}\n",
+  "after": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport function loadNotice(source: string): string {\n  const docRoot: string = \"/var/www/static\";\n  const relativeHit: string = joinPath(docRoot, source);\n  const directHit: string = relativeHit;\n  const unverified: string = directHit;\n  return readTextFile(unverified);\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/files/load-notice.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-22"
+    }
+  ]
+}

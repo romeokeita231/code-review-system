@@ -1,0 +1,1 @@
+{"coverage":{"filesCovered":1,"filesUnknown":0},"findings":[{"confidence":0.99,"cwe":"CWE-79","endLine":5,"evidence":"recorded semgrep hit #1","file":"src/views/render-preview.ts","rawId":"semgrep-s-CWE-79-16-0","severity":3,"source":"semgrep","startLine":5}],"latencyMs":40,"source":"semgrep","status":"ok","tokens":null}

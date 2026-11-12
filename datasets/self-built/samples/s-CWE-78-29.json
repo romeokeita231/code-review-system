@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-78-29",
+  "group_id": "g-CWE-78-29",
+  "split": "fit",
+  "cwe": "CWE-78",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/process/trace-request.ts",
+  "before": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport const traceRequest = (topic: string): string => {\n  const normalized = topic.trim();\n  const result = execFileCommand(\"gpg\", [\"--output\", \"/tmp/key\", normalized]);\n  logAudit(\"traceRequest:\" + normalized);\n  return result;\n};\n",
+  "after": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport const traceRequest = (topic: string): string => {\n  const normalized = topic.trim();\n  const command = \"gpg --output /tmp/key \" + normalized;\n  const result = execSyncCommand(command);\n  logAudit(\"traceRequest:\" + normalized);\n  return result;\n};\n",
+  "changed_lines": 3,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/process/trace-request.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-78"
+    }
+  ]
+}

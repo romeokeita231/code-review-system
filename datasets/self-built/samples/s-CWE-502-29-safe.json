@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-502-29-safe",
+  "group_id": "g-CWE-502-29",
+  "split": "fit",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/cache/restore-slot.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport const restoreSlot = (topic: string): unknown => {\n  const raw = topic.trim();\n  const value = parseJsonStrict(raw);\n  if (!isSessionRecord(value)) {\n    throw new Error(\"invalid session payload\");\n  }\n  return value;\n};\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport const restoreSlot = (topic: string): unknown => {\n  const raw = topic.trim();\n  const value = parseJsonStrict(raw);\n  if (!isSessionRecord(value)) {\n    throw new Error(\"invalid session payload\");\n  }\n  return value;\n};\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

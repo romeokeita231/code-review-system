@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-78-09-safe",
+  "group_id": "g-CWE-78-09",
+  "split": "fit",
+  "cwe": "CWE-78",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/process/generate-report.ts",
+  "before": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport function generateReport(topic: string): string {\n  const normalized = topic.trim();\n  const result = execFileCommand(\"gpg\", [\"--output\", \"/tmp/key\", normalized]);\n  logAudit(\"generateReport:\" + normalized);\n  return result;\n}\n",
+  "after": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport function generateReport(topic: string): string {\n  const normalized = topic.trim();\n  const result = execFileCommand(\"gpg\", [\"--output\", \"/tmp/key\", normalized]);\n  logAudit(\"generateReport:\" + normalized);\n  return result;\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

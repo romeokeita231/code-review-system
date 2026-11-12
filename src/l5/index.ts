@@ -42,3 +42,4 @@ export {
   type RecordedBySample,
 } from "./recorded.js";
 export { writeJsonl, readJsonl, appendRow, encodeRow } from "./jsonl.js";
+export type { PairingRow, RunRecord } from "../contracts/index.js";

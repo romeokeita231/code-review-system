@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-22-07",
+  "group_id": "g-CWE-22-07",
+  "split": "fit",
+  "cwe": "CWE-22",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/files/load-font.ts",
+  "before": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadFont(key: string): Promise<string> {\n  const documentRoot: string = \"/opt/reports\";\n  const requestedPath: string = joinPath(documentRoot, key);\n  const canonicalPath: string = resolvePath(requestedPath);\n  if (!canonicalPath.startsWith(documentRoot + \"/\")) { throw new Error(\"path escapes document root\"); }\n  return readTextFile(canonicalPath);\n}\n",
+  "after": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadFont(key: string): Promise<string> {\n  const docRoot: string = \"/opt/reports\";\n  const relativeHit: string = joinPath(docRoot, key);\n  const directHit: string = relativeHit;\n  const unverified: string = directHit;\n  return readTextFile(unverified);\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/files/load-font.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-22"
+    }
+  ]
+}

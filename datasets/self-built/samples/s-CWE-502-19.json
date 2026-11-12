@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-502-19",
+  "group_id": "g-CWE-502-19",
+  "split": "eval",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/cache/restore-view.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restoreView(topic: string): Promise<unknown> {\n  const raw = topic.trim();\n  const value = parseJsonStrict(raw);\n  if (!isSessionRecord(value)) {\n    throw new Error(\"invalid session payload\");\n  }\n  return value;\n}\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restoreView(topic: string): Promise<unknown> {\n  const raw = topic.trim();\n  return parseSerialized(raw);\n}\n",
+  "changed_lines": 6,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/cache/restore-view.ts",
+      "startLine": 6,
+      "endLine": 6,
+      "cwe": "CWE-502"
+    }
+  ]
+}

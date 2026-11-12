@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-78-10",
+  "group_id": "g-CWE-78-10",
+  "split": "eval",
+  "cwe": "CWE-78",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/process/upload-artifact.ts",
+  "before": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport async function uploadArtifact(target: string): Promise<string> {\n  const normalized = target.trim();\n  const result = execFileCommand(\"tar\", [\"-czf\", \"/var/data\", normalized]);\n  logAudit(\"uploadArtifact:\" + normalized);\n  return result;\n}\n",
+  "after": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport async function uploadArtifact(target: string): Promise<string> {\n  const normalized = target.trim();\n  const command = \"tar -czf /var/data \" + normalized;\n  const result = execSyncCommand(command);\n  logAudit(\"uploadArtifact:\" + normalized);\n  return result;\n}\n",
+  "changed_lines": 3,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/process/upload-artifact.ts",
+      "startLine": 6,
+      "endLine": 7,
+      "cwe": "CWE-78"
+    }
+  ]
+}

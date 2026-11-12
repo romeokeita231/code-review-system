@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-79-21",
+  "group_id": "g-CWE-79-21",
+  "split": "fit",
+  "cwe": "CWE-79",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/views/render-gallery.ts",
+  "before": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport function renderGallery(source: string): string {\n  const escapedName: string = escapeHtml(source);\n  const escapedBio: string = escapeHtml(\"bio:\" + source);\n  const cardHtml: string = \"<article>\" + escapedName + escapedBio + \"</article>\";\n  const renderedPage: string = renderPage(cardHtml);\n  return renderedPage;\n}\n",
+  "after": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport function renderGallery(source: string): string {\n  const rawName: string = source;\n  const rawBio: string = \"bio:\" + source;\n  const cardMarkup: string = \"<article>\" + rawName + rawBio + \"</article>\";\n  const responseBody: string = renderPage(cardMarkup);\n  return responseBody;\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/views/render-gallery.ts",
+      "startLine": 7,
+      "endLine": 7,
+      "cwe": "CWE-79"
+    }
+  ]
+}

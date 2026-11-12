@@ -1,0 +1,1 @@
+{"coverage":{"filesCovered":1,"filesUnknown":0},"findings":[{"confidence":0.97,"cwe":"CWE-798","endLine":6,"evidence":"recorded aor hit #1","file":"src/config/connect-vault.ts","rawId":"aor-s-CWE-798-22-0","severity":3,"source":"aor","startLine":4}],"latencyMs":900,"source":"aor","status":"ok","tokens":1200}

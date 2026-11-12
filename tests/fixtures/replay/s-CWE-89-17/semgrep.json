@@ -1,0 +1,1 @@
+{"coverage":{"filesCovered":1,"filesUnknown":0},"findings":[{"confidence":0.99,"cwe":"CWE-89","endLine":3,"evidence":"recorded semgrep hit #1","file":"src/repo/find-agents.ts","rawId":"semgrep-s-CWE-89-17-0","severity":3,"source":"semgrep","startLine":3}],"latencyMs":40,"source":"semgrep","status":"ok","tokens":null}

@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-79-07",
+  "group_id": "g-CWE-79-07",
+  "split": "eval",
+  "cwe": "CWE-79",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/views/render-notice.ts",
+  "before": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport async function renderNotice(key: string): Promise<string> {\n  const escapedName: string = escapeHtml(key);\n  const escapedBio: string = escapeHtml(\"bio:\" + key);\n  const cardHtml: string = \"<article>\" + escapedName + escapedBio + \"</article>\";\n  const renderedPage: string = renderPage(cardHtml);\n  return renderedPage;\n}\n",
+  "after": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport async function renderNotice(key: string): Promise<string> {\n  const rawName: string = key;\n  const rawBio: string = \"bio:\" + key;\n  const cardMarkup: string = \"<article>\" + rawName + rawBio + \"</article>\";\n  const responseBody: string = renderPage(cardMarkup);\n  return responseBody;\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/views/render-notice.ts",
+      "startLine": 7,
+      "endLine": 7,
+      "cwe": "CWE-79"
+    }
+  ]
+}

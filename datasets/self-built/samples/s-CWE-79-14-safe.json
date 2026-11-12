@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-79-14-safe",
+  "group_id": "g-CWE-79-14",
+  "split": "fit",
+  "cwe": "CWE-79",
+  "risk_level": "medium",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/views/render-alert.ts",
+  "before": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport const renderAlert = (payload: string): string => {\n  const escapedName: string = escapeHtml(payload);\n  const escapedBio: string = escapeHtml(\"bio:\" + payload);\n  const cardHtml: string = \"<article>\" + escapedName + escapedBio + \"</article>\";\n  const renderedPage: string = renderPage(cardHtml);\n  return renderedPage;\n};\n",
+  "after": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport const renderAlert = (payload: string): string => {\n  const escapedName: string = escapeHtml(payload);\n  const escapedBio: string = escapeHtml(\"bio:\" + payload);\n  const cardHtml: string = \"<article>\" + escapedName + escapedBio + \"</article>\";\n  const renderedPage: string = renderPage(cardHtml);\n  return renderedPage;\n};\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

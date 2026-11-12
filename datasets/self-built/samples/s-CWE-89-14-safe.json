@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-89-14-safe",
+  "group_id": "g-CWE-89-14",
+  "split": "fit",
+  "cwe": "CWE-89",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/repo/find-messages.ts",
+  "before": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findMessages = (payload: string): Array<Record<string, unknown>> => {\n  const statement: string = \"SELECT id, total FROM payments WHERE tenant_id = $1 AND status = $2\";\n  const params: unknown[] = [payload, \"active\"];\n  const rows = runQuery(statement, params);\n  const rowCount: number = rows.length;\n  return rows.slice(0, rowCount);\n};\n",
+  "after": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findMessages = (payload: string): Array<Record<string, unknown>> => {\n  const statement: string = \"SELECT id, total FROM payments WHERE tenant_id = $1 AND status = $2\";\n  const params: unknown[] = [payload, \"active\"];\n  const rows = runQuery(statement, params);\n  const rowCount: number = rows.length;\n  return rows.slice(0, rowCount);\n};\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-79-02",
+  "group_id": "g-CWE-79-02",
+  "split": "fit",
+  "cwe": "CWE-79",
+  "risk_level": "medium",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/views/render-comment.ts",
+  "before": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport const renderComment = (input: string): string => {\n  const safeText = escapeHtml(input);\n  const fragment = \"<h3>\" + safeText + \"</h3>\";\n  const page = renderPage(fragment);\n  writeResponse(page);\n  return page;\n};\n",
+  "after": "declare function escapeHtml(value: string): string;\ndeclare function renderPage(fragment: string): string;\ndeclare function writeResponse(body: string): void;\nexport const renderComment = (input: string): string => {\n  const fragment = \"<h3>\" + input + \"</h3>\";\n  const page = renderPage(fragment);\n  writeResponse(page);\n  return page;\n};\n",
+  "changed_lines": 3,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/views/render-comment.ts",
+      "startLine": 5,
+      "endLine": 5,
+      "cwe": "CWE-79"
+    }
+  ]
+}

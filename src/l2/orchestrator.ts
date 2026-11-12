@@ -309,6 +309,11 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   }
 
   const semgrepResult = results.find((result) => result.source === "semgrep");
+  const fitted = ctx.artifact?.thresholds.global;
+  const thresholds = {
+    block: fitted?.block ?? ctx.config.thresholds.block,
+    warn: fitted?.warn ?? ctx.config.thresholds.warn,
+  };
   const semgrepFindings = semgrepResult && semgrepResult.status === "ok" ? semgrepResult.findings : [];
   const pSemgrep =
     semgrepFindings.length > 0
@@ -319,9 +324,9 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   let blockLoop = false;
   let denyFindings: Finding[] = [];
 
-  if (pSemgrep !== null && pSemgrep >= ctx.config.thresholds.block) {
+  if (pSemgrep !== null && pSemgrep >= thresholds.block) {
     const triggering = semgrepFindings.filter(
-      (finding) => singleSourceProbability(finding, ctx.config, ctx.artifact) >= ctx.config.thresholds.block,
+      (finding) => singleSourceProbability(finding, ctx.config, ctx.artifact) >= thresholds.block,
     );
     const keys = triggering.map((finding) => ({ file: finding.file, ruleId: ruleIdOf(finding) }));
     const verdict = guard.check(keys);
@@ -399,7 +404,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
         })),
       );
     }
-  } else if (tier >= 1 && pFused !== null && pFused >= ctx.config.thresholds.warn) {
+  } else if (tier >= 1 && pFused !== null && pFused >= thresholds.warn) {
     const eligible = merged.filter((finding) => finding.blockable);
     if (eligible.length > 0) {
       postDecision = "inject_warn";

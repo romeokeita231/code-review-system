@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-798-26",
+  "group_id": "g-CWE-798-26",
+  "split": "fit",
+  "cwe": "CWE-798",
+  "risk_level": "low",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/config/connect-sftp.ts",
+  "before": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport const connectSftp = (name: string): void => {\n  const endpoint = \"https://billing.example.net/v2\";\n  const token = readSecret(\"MAILER_API_KEY\");\n  connectWithToken(endpoint, token);\n};\n",
+  "after": "declare function readSecret(name: string): string;\ndeclare function connectWithToken(endpoint: string, token: string): void;\nexport const connectSftp = (name: string): void => {\n  const endpoint = \"https://billing.example.net/v2\";\n  const token = \"sk_live_11a28b96\";\n  connectWithToken(endpoint, token);\n};\n",
+  "changed_lines": 2,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/config/connect-sftp.ts",
+      "startLine": 5,
+      "endLine": 5,
+      "cwe": "CWE-798"
+    }
+  ]
+}

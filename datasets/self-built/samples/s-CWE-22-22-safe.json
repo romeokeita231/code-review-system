@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-22-22-safe",
+  "group_id": "g-CWE-22-22",
+  "split": "eval",
+  "cwe": "CWE-22",
+  "risk_level": "medium",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/files/load-readme.ts",
+  "before": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadReadme(input: string): Promise<string> {\n  const base = \"/opt/reports\";\n  const target = resolvePath(joinPath(base, input));\n  if (!target.startsWith(base + \"/\")) {\n    throw new Error(\"path escapes document root\");\n  }\n  return readTextFile(target);\n}\n",
+  "after": "declare function readTextFile(path: string): string;\ndeclare function joinPath(base: string, name: string): string;\ndeclare function resolvePath(path: string): string;\nexport async function loadReadme(input: string): Promise<string> {\n  const base = \"/opt/reports\";\n  const target = resolvePath(joinPath(base, input));\n  if (!target.startsWith(base + \"/\")) {\n    throw new Error(\"path escapes document root\");\n  }\n  return readTextFile(target);\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-502-21",
+  "group_id": "g-CWE-502-21",
+  "split": "eval",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/cache/restore-context.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport function restoreContext(source: string): unknown {\n  const rawPayload: string = source.trim();\n  const decoded: unknown = parseJsonStrict(rawPayload);\n  if (!isSessionRecord(decoded)) { throw new Error(\"invalid session payload\"); }\n  const safeSession: unknown = decoded;\n  return safeSession;\n}\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport function restoreContext(source: string): unknown {\n  const untrusted: string = source;\n  const revived: unknown = parseSerialized(untrusted);\n  const sessionObject: unknown = revived;\n  const restored: unknown = sessionObject;\n  return restored;\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/cache/restore-context.ts",
+      "startLine": 6,
+      "endLine": 6,
+      "cwe": "CWE-502"
+    }
+  ]
+}

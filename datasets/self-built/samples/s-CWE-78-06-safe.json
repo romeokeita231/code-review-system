@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-78-06-safe",
+  "group_id": "g-CWE-78-06",
+  "split": "eval",
+  "cwe": "CWE-78",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/process/rotate-keys.ts",
+  "before": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport function rotateKeys(name: string): string {\n  const normalized = name.trim();\n  const result = execFileCommand(\"rsync\", [\"-a\", \"/srv/mirror\", normalized]);\n  logAudit(\"rotateKeys:\" + normalized);\n  return result;\n}\n",
+  "after": "declare function execSyncCommand(command: string): string;\ndeclare function execFileCommand(file: string, args: string[]): string;\ndeclare function logAudit(event: string): void;\nexport function rotateKeys(name: string): string {\n  const normalized = name.trim();\n  const result = execFileCommand(\"rsync\", [\"-a\", \"/srv/mirror\", normalized]);\n  logAudit(\"rotateKeys:\" + normalized);\n  return result;\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-94-15",
+  "group_id": "g-CWE-94-15",
+  "split": "fit",
+  "cwe": "CWE-94",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/expressions/check-invariant.ts",
+  "before": "declare function normalizeExpression(expression: string): string;\ndeclare function evaluateFormula(expression: string, context: Record<string, number>): number;\nexport function checkInvariant(path: string, context: Record<string, number>): number {\n  const expression = normalizeExpression(path);\n  return evaluateFormula(expression, context);\n}\n",
+  "after": "declare function normalizeExpression(expression: string): string;\ndeclare function evaluateFormula(expression: string, context: Record<string, number>): number;\nexport function checkInvariant(path: string, context: Record<string, number>): number {\n  const evaluator = new Function(\"context\", \"return (\" + path + \");\");\n  return evaluator(context) as number;\n}\n",
+  "changed_lines": 4,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/expressions/check-invariant.ts",
+      "startLine": 4,
+      "endLine": 5,
+      "cwe": "CWE-94"
+    }
+  ]
+}

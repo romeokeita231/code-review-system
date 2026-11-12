@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crs-eval"
+version = "0.1.0"
+description = "Evaluation metrics and paper tables for the Code Review System"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+schema = ["jsonschema>=4"]
+
+[project.scripts]
+crs-eval = "crs_eval.cli:main"
+
+[tool.setuptools]
+packages = ["crs_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

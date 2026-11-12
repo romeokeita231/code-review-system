@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-502-28-safe",
+  "group_id": "g-CWE-502-28",
+  "split": "fit",
+  "cwe": "CWE-502",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/cache/restore-blob.ts",
+  "before": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restoreBlob(shard: string): Promise<unknown> {\n  const rawPayload: string = shard.trim();\n  const decoded: unknown = parseJsonStrict(rawPayload);\n  if (!isSessionRecord(decoded)) { throw new Error(\"invalid session payload\"); }\n  const safeSession: unknown = decoded;\n  return safeSession;\n}\n",
+  "after": "declare function parseSerialized(payload: string): unknown;\ndeclare function parseJsonStrict(payload: string): unknown;\ndeclare function isSessionRecord(value: unknown): boolean;\nexport async function restoreBlob(shard: string): Promise<unknown> {\n  const rawPayload: string = shard.trim();\n  const decoded: unknown = parseJsonStrict(rawPayload);\n  if (!isSessionRecord(decoded)) { throw new Error(\"invalid session payload\"); }\n  const safeSession: unknown = decoded;\n  return safeSession;\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

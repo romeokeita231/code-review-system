@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-89-10",
+  "group_id": "g-CWE-89-10",
+  "split": "eval",
+  "cwe": "CWE-89",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/repo/find-members.ts",
+  "before": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport async function findMembers(target: string): Promise<Array<Record<string, unknown>>> {\n  const sql = \"SELECT id, total FROM orders WHERE tenant_id = $1\";\n  return runQuery(sql, [target]);\n}\n",
+  "after": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport async function findMembers(target: string): Promise<Array<Record<string, unknown>>> {\n  const sql = \"SELECT id, total FROM orders WHERE tenant_id = '\" + target + \"'\";\n  return runQuery(sql);\n}\n",
+  "changed_lines": 4,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/repo/find-members.ts",
+      "startLine": 3,
+      "endLine": 3,
+      "cwe": "CWE-89"
+    }
+  ]
+}

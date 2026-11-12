@@ -1,0 +1,1 @@
+{"coverage":{"filesCovered":1,"filesUnknown":0},"findings":[{"confidence":0.97,"cwe":"CWE-502","endLine":7,"evidence":"recorded aor hit #1","file":"src/cache/restore-form.ts","rawId":"aor-s-CWE-502-14-0","severity":3,"source":"aor","startLine":5}],"latencyMs":900,"source":"aor","status":"ok","tokens":1200}

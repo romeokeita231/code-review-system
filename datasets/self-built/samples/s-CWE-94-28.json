@@ -1,0 +1,25 @@
+{
+  "sample_id": "s-CWE-94-28",
+  "group_id": "g-CWE-94-28",
+  "split": "fit",
+  "cwe": "CWE-94",
+  "risk_level": "high",
+  "paired_safe": false,
+  "language": "ts",
+  "path": "src/expressions/process-term.ts",
+  "before": "declare function normalizeExpression(expression: string): string;\ndeclare function evaluateFormula(expression: string, context: Record<string, number>): number;\nexport async function processTerm(shard: string, context: Record<string, number>): Promise<number> {\n  const trimmed: string = shard.trim();\n  const safeExpression: string = normalizeExpression(trimmed);\n  const limit: number = 100;\n  const value: number = evaluateFormula(safeExpression, context);\n  return Math.min(value, limit);\n}\n",
+  "after": "declare function normalizeExpression(expression: string): string;\ndeclare function evaluateFormula(expression: string, context: Record<string, number>): number;\nexport async function processTerm(shard: string, context: Record<string, number>): Promise<number> {\n  const source: string = shard;\n  const dynamicBody: string = \"return (\" + source + \");\";\n  const compiled = new Function(\"context\", dynamicBody);\n  const calculated: number = compiled(context) as number;\n  return Math.max(calculated, 0);\n}\n",
+  "changed_lines": 10,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": [
+    {
+      "path": "src/expressions/process-term.ts",
+      "startLine": 5,
+      "endLine": 6,
+      "cwe": "CWE-94"
+    }
+  ]
+}

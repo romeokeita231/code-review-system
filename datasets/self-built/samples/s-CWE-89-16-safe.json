@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-89-16-safe",
+  "group_id": "g-CWE-89-16",
+  "split": "eval",
+  "cwe": "CWE-89",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/repo/find-devices.ts",
+  "before": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport async function findDevices(name: string): Promise<Array<Record<string, unknown>>> {\n  const sql = \"SELECT id, total FROM events WHERE tenant_id = $1\";\n  return runQuery(sql, [name]);\n}\n",
+  "after": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport async function findDevices(name: string): Promise<Array<Record<string, unknown>>> {\n  const sql = \"SELECT id, total FROM events WHERE tenant_id = $1\";\n  return runQuery(sql, [name]);\n}\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}

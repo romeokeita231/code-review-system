@@ -1,0 +1,18 @@
+{
+  "sample_id": "s-CWE-89-02-safe",
+  "group_id": "g-CWE-89-02",
+  "split": "eval",
+  "cwe": "CWE-89",
+  "risk_level": "high",
+  "paired_safe": true,
+  "language": "ts",
+  "path": "src/repo/find-users.ts",
+  "before": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findUsers = (input: string): Array<Record<string, unknown>> => {\n  const sql = \"SELECT id, total FROM invoices WHERE tenant_id = $1\";\n  return runQuery(sql, [input]);\n};\n",
+  "after": "declare function runQuery(sql: string, params?: unknown[]): Array<Record<string, unknown>>;\nexport const findUsers = (input: string): Array<Record<string, unknown>> => {\n  const sql = \"SELECT id, total FROM invoices WHERE tenant_id = $1\";\n  return runQuery(sql, [input]);\n};\n",
+  "changed_lines": 0,
+  "expected_detectable_by": [
+    "semgrep",
+    "aor"
+  ],
+  "labels": []
+}
