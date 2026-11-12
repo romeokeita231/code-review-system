@@ -1,0 +1,68 @@
+[
+ {
+  "phase": "warmup",
+  "i": 0,
+  "ms": 4566.1,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2054,
+  "label": "py-taint",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 1,
+  "ms": 4540.9,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2048,
+  "label": "py-taint",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 2,
+  "ms": 4661.7,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2053,
+  "label": "py-taint",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 3,
+  "ms": 4606.0,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2056,
+  "label": "py-taint",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 4,
+  "ms": 4673.2,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2052,
+  "label": "py-taint",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 5,
+  "ms": 4710.0,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "out_bytes": 2056,
+  "label": "py-taint",
+  "err_head": ""
+ }
+]

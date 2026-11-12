@@ -1,0 +1,407 @@
+{
+ "rc": 0,
+ "ms": 740.0,
+ "err_tail": "ked by git with 31 Code rules:\n\n  Language   Rules   Files          Origin   Rules\n ──────────────────────────        ────────────────\n  ts            25       1          Custom      32\n  python         6       1\n\n\n\n┌──────────────┐\n│ Scan Summary │\n└──────────────┘\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 2 files: 5 findings.",
+ "doc": {
+  "version": "1.184.0",
+  "results": [
+   {
+    "check_id": "hardcoded-token",
+    "path": "hit.py",
+    "start": {
+     "line": 7,
+     "col": 12,
+     "offset": 73
+    },
+    "end": {
+     "line": 11,
+     "col": 6,
+     "offset": 230
+    },
+    "extra": {
+     "message": "A hard-coded credential was detected. It is not recommended to store credentials in source-code, as this risks secrets being leaked and used by either an internal or external malicious adversary. It is recommended to use environment variables to securely provide credentials or retrieve credentials from a secure vault or HSM (Hardware Security Module).",
+     "metadata": {
+      "cwe": [
+       "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "references": [
+       "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+       "https://bento.dev/checks/boto3/hardcoded-access-token/",
+       "https://aws.amazon.com/blogs/security/what-to-do-if-you-inadvertently-expose-an-aws-access-key/"
+      ],
+      "owasp": [
+       "A07:2021 - Identification and Authentication Failures",
+       "A07:2025 - Authentication Failures"
+      ],
+      "category": "security",
+      "technology": [
+       "boto3",
+       "secrets"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "likelihood": "HIGH",
+      "impact": "MEDIUM",
+      "confidence": "MEDIUM"
+     },
+     "severity": "WARNING",
+     "fingerprint": "requires login",
+     "lines": "requires login",
+     "validation_state": "NO_VALIDATOR",
+     "engine_kind": "OSS"
+    }
+   },
+   {
+    "check_id": "hardcoded-password-default-argument",
+    "path": "hit.py",
+    "start": {
+     "line": 14,
+     "col": 1,
+     "offset": 233
+    },
+    "end": {
+     "line": 15,
+     "col": 16,
+     "offset": 299
+    },
+    "extra": {
+     "message": "Hardcoded password is used as a default argument to 'connect'. This could be dangerous if a real password is not supplied.",
+     "metadata": {
+      "cwe": [
+       "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "category": "security",
+      "technology": [
+       "python"
+      ],
+      "owasp": [
+       "A07:2021 - Identification and Authentication Failures",
+       "A07:2025 - Authentication Failures"
+      ],
+      "references": [
+       "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "audit"
+      ],
+      "likelihood": "LOW",
+      "impact": "MEDIUM",
+      "confidence": "LOW"
+     },
+     "severity": "WARNING",
+     "fingerprint": "requires login",
+     "lines": "requires login",
+     "validation_state": "NO_VALIDATOR",
+     "engine_kind": "OSS"
+    }
+   },
+   {
+    "check_id": "ssrf-requests",
+    "path": "hit.py",
+    "start": {
+     "line": 19,
+     "col": 12,
+     "offset": 331
+    },
+    "end": {
+     "line": 19,
+     "col": 55,
+     "offset": 374
+    },
+    "extra": {
+     "message": "Data from request object is passed to a new server-side request. This could lead to a server-side request forgery (SSRF). To mitigate, ensure that schemes and hosts are validated against an allowlist, do not forward the response to the user, and ensure proper authentication and transport-layer security in the proxied request.",
+     "metadata": {
+      "cwe": [
+       "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "owasp": [
+       "A10:2021 - Server-Side Request Forgery (SSRF)",
+       "A01:2025 - Broken Access Control"
+      ],
+      "references": [
+       "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+      ],
+      "category": "security",
+      "technology": [
+       "flask"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "likelihood": "MEDIUM",
+      "impact": "HIGH",
+      "confidence": "MEDIUM"
+     },
+     "severity": "ERROR",
+     "fingerprint": "requires login",
+     "lines": "requires login",
+     "validation_state": "NO_VALIDATOR",
+     "engine_kind": "OSS"
+    }
+   },
+   {
+    "check_id": "puppeteer-evaluate-code-injection",
+    "path": "hit.ts",
+    "start": {
+     "line": 7,
+     "col": 10,
+     "offset": 160
+    },
+    "end": {
+     "line": 7,
+     "col": 30,
+     "offset": 180
+    },
+    "extra": {
+     "message": "If unverified user data can reach the `evaluate` method it can result in Server-Side Request Forgery vulnerabilities",
+     "metadata": {
+      "owasp": [
+       "A10:2021 - Server-Side Request Forgery (SSRF)",
+       "A01:2025 - Broken Access Control"
+      ],
+      "cwe": [
+       "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "category": "security",
+      "technology": [
+       "puppeteer"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "audit"
+      ],
+      "likelihood": "LOW",
+      "impact": "LOW",
+      "confidence": "LOW",
+      "references": [
+       "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29"
+      ]
+     },
+     "severity": "WARNING",
+     "fingerprint": "requires login",
+     "lines": "requires login",
+     "validation_state": "NO_VALIDATOR",
+     "engine_kind": "OSS"
+    }
+   },
+   {
+    "check_id": "hardcoded-jwt-secret",
+    "path": "hit.ts",
+    "start": {
+     "line": 11,
+     "col": 3,
+     "offset": 225
+    },
+    "end": {
+     "line": 11,
+     "col": 56,
+     "offset": 278
+    },
+    "extra": {
+     "message": "A hard-coded credential was detected. It is not recommended to store credentials in source-code, as this risks secrets being leaked and used by either an internal or external malicious adversary. It is recommended to use environment variables to securely provide credentials or retrieve credentials from a secure vault or HSM (Hardware Security Module).",
+     "metadata": {
+      "interfile": true,
+      "cwe": [
+       "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "references": [
+       "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+      ],
+      "owasp": [
+       "A07:2021 - Identification and Authentication Failures",
+       "A07:2025 - Authentication Failures"
+      ],
+      "asvs": {
+       "section": "V3: Session Management Verification Requirements",
+       "control_id": "3.5.2 Static API keys or secret",
+       "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x12-V3-Session-management.md#v35-token-based-session-management",
+       "version": "4"
+      },
+      "category": "security",
+      "technology": [
+       "jose",
+       "jwt",
+       "secrets"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "likelihood": "HIGH",
+      "impact": "MEDIUM",
+      "confidence": "HIGH"
+     },
+     "severity": "WARNING",
+     "fingerprint": "requires login",
+     "lines": "requires login",
+     "validation_state": "NO_VALIDATOR",
+     "engine_kind": "OSS"
+    }
+   }
+  ],
+  "errors": [],
+  "paths": {
+   "scanned": [
+    "hit.py",
+    "hit.ts"
+   ]
+  },
+  "time": {
+   "rules": [],
+   "rules_parse_time": 0.0,
+   "profiling_times": {},
+   "parsing_time": {
+    "total_time": 0.014998674392700195,
+    "per_file_time": {
+     "mean": 0.0018748342990875244,
+     "std_dev": 1.0794676795988778e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "scanning_time": {
+    "total_time": 0.036086320877075195,
+    "per_file_time": {
+     "mean": 0.018043160438537598,
+     "std_dev": 4.933560036590734e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "matching_time": {
+    "total_time": 0.01708197593688965,
+    "per_file_and_rule_time": {
+     "mean": 0.0021352469921112065,
+     "std_dev": 1.912038442863917e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_files": []
+   },
+   "tainting_time": {
+    "total_time": 0.0010001659393310547,
+    "per_def_and_rule_time": {
+     "mean": 0.00010001659393310547,
+     "std_dev": 9.00298715578174e-08
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_defs": []
+   },
+   "fixpoint_timeouts": [],
+   "prefiltering": {
+    "project_level_time": 0.0,
+    "file_level_time": 0.0,
+    "rules_with_project_prefilters_ratio": 0.0,
+    "rules_with_file_prefilters_ratio": 0.96875,
+    "rules_selected_ratio": 0.25,
+    "rules_matched_ratio": 0.25
+   },
+   "targets": [],
+   "total_bytes": 0,
+   "max_memory_bytes": 160447424
+  },
+  "engine_requested": "OSS",
+  "skipped_rules": [],
+  "profiling_results": []
+ },
+ "audit": {
+  "top_level_keys": [
+   "engine_requested",
+   "errors",
+   "paths",
+   "profiling_results",
+   "results",
+   "skipped_rules",
+   "time",
+   "version"
+  ],
+  "has_paths": true,
+  "paths_keys": [
+   "scanned"
+  ],
+  "paths_scanned_count": 2,
+  "paths_scanned_head": [
+   "hit.py",
+   "hit.ts"
+  ],
+  "paths_skipped_count": 0,
+  "n_results": 5,
+  "result_keys": [
+   "check_id",
+   "end",
+   "extra",
+   "path",
+   "start"
+  ],
+  "result_path": "hit.py",
+  "result_check_id": "hardcoded-token",
+  "has_start_line": true,
+  "start": {
+   "line": 7,
+   "col": 12,
+   "offset": 73
+  },
+  "end": {
+   "line": 11,
+   "col": 6,
+   "offset": 230
+  },
+  "extra_keys": [
+   "engine_kind",
+   "fingerprint",
+   "lines",
+   "message",
+   "metadata",
+   "severity",
+   "validation_state"
+  ],
+  "extra_severity": "WARNING",
+  "extra_metadata_keys": [
+   "category",
+   "confidence",
+   "cwe",
+   "cwe2021-top25",
+   "cwe2022-top25",
+   "impact",
+   "likelihood",
+   "owasp",
+   "references",
+   "subcategory",
+   "technology"
+  ],
+  "extra_metadata_cwe": [
+   "CWE-798: Use of Hard-coded Credentials"
+  ],
+  "extra_metadata_cwe_type": "list",
+  "extra_message_present": true,
+  "n_errors": 0,
+  "rule_ids": [
+   "hardcoded-jwt-secret",
+   "hardcoded-password-default-argument",
+   "hardcoded-token",
+   "puppeteer-evaluate-code-injection",
+   "ssrf-requests"
+  ]
+ },
+ "stdout_bytes": 6669
+}

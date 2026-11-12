@@ -1,0 +1,34 @@
+[
+ {
+  "ms": 7260.3,
+  "rc": 0,
+  "findings": 0,
+  "out_bytes": 1849,
+  "err_tail": "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  ts            92       1          Custom     101\n\n\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Scan Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nRan 92 rules on 1 file: 0 findings.",
+  "label": "osemgrep-ts-256k",
+  "phase": "run",
+  "engine": "osemgrep",
+  "engine_version": "1.184.0",
+  "rules": "ts_all.yaml",
+  "rules_sha256": "0d16ce08dc19a1a7c5ad6285a6fbf60dcac16416168656482472f5f5aba6dfe9",
+  "rules_declared": 95,
+  "rules_effective": 92,
+  "sample": "sample.ts"
+ },
+ {
+  "ms": 6616.4,
+  "rc": 0,
+  "findings": 0,
+  "out_bytes": 1852,
+  "err_tail": "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  ts            92       1          Custom     101\n\n\n\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 Scan Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\nRan 92 rules on 1 file: 0 findings.",
+  "label": "osemgrep-ts-256k",
+  "phase": "run",
+  "engine": "osemgrep",
+  "engine_version": "1.184.0",
+  "rules": "ts_all.yaml",
+  "rules_sha256": "0d16ce08dc19a1a7c5ad6285a6fbf60dcac16416168656482472f5f5aba6dfe9",
+  "rules_declared": 95,
+  "rules_effective": 92,
+  "sample": "sample.ts"
+ }
+]

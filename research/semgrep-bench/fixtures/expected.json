@@ -1,0 +1,15 @@
+{
+  "hit_criterion": "results 条数（不是文件数、不是去重后的规则数）",
+  "rules": {
+    "py": "snapshot/py_all.yaml",
+    "ts": "snapshot/ts_all.yaml"
+  },
+  "expected": {
+    "target.py": 4,
+    "target.ts": 1,
+    "hit.py": 3
+  },
+  "probe": "fixture_probe.py",
+  "verified_with": "semgrep-core 1.184.0 (ec0383d093-dirty), ruleset commit 16b9e6d45f10649f6a531ec4838ed9924372c3bc",
+  "detail": "research/semgrep-bench/rules_rebuild.json#fixtures"
+}

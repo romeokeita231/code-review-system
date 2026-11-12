@@ -1,0 +1,154 @@
+{
+ "py": {
+  "root": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\cr-semgrep-venv\\Lib\\site-packages\\semgrep",
+  "exts": [
+   ".py"
+  ],
+  "pool_small": 58,
+  "pool_large": 1,
+  "bands": {
+   "small_5_50KiB": {
+    "requested_n": 10,
+    "available": 58,
+    "n": 10,
+    "p50_ms": 244.6,
+    "p95_ms": 279.1,
+    "min_ms": 219.4,
+    "max_ms": 283.8,
+    "pearson_bytes_ms": 0.652,
+    "spearman_bytes_ms": 0.491,
+    "total_findings": 0,
+    "files_with_findings": 0,
+    "hits_per_100KiB": 0.0,
+    "files": [
+     {
+      "relpath": "app\\scan_config.py",
+      "bytes": 9822,
+      "sha256": "6cf4cbd3647e176fad859f28dd2ec796302cd3200aaed489eecc463525166865",
+      "analyzer": "python",
+      "ms": 273.3,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "commands\\login.py",
+      "bytes": 5740,
+      "sha256": "1ec46a3a02f54a7454844bb362fc303916c1003f2d2764f543472a72fa02b35d",
+      "analyzer": "python",
+      "ms": 253.1,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "constants.py",
+      "bytes": 5460,
+      "sha256": "ae489af890f88da9dee294e9610230ba5d6430368c2888e632f2386b47995543",
+      "analyzer": "python",
+      "ms": 226.1,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "env.py",
+      "bytes": 6962,
+      "sha256": "779c72fa5e85729232a750768256526e55b5a8b623bbc09947bb570d2363ff70",
+      "analyzer": "python",
+      "ms": 225.7,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "formatter\\text.py",
+      "bytes": 40606,
+      "sha256": "299e690defc7b09258c09f17227e380001c8720499eb48d4516b4ad7c782bc81",
+      "analyzer": "python",
+      "ms": 283.8,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "mcp\\hooks\\stop.py",
+      "bytes": 12559,
+      "sha256": "8fc935055e52432ee4e1a6315339011b255221a706ad20fadad7413f8dd7bb37",
+      "analyzer": "python",
+      "ms": 233.8,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "mcp\\utilities\\utils.py",
+      "bytes": 15469,
+      "sha256": "c6545958f36c26b6473022b5f3a186947406c732f4b6161cf32fdefdab7c6a12",
+      "analyzer": "python",
+      "ms": 240.1,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "rpc.py",
+      "bytes": 24392,
+      "sha256": "0c40f72e0eb7ea1077d49b54fafd4a4361e90b9d107f05dd8f29548009ed6a68",
+      "analyzer": "python",
+      "ms": 249.2,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "semgrep_interfaces\\generate.py",
+      "bytes": 24708,
+      "sha256": "0e834637b7c8513fb5d484d51b6afb821213d048b257becfb89447590c069015",
+      "analyzer": "python",
+      "ms": 258.5,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     },
+     {
+      "relpath": "symbol_analysis.py",
+      "bytes": 10946,
+      "sha256": "c303a1dd89404a2fcb4d4c7fd958531aa5a091e78f7a7f382c7d8ca98707799c",
+      "analyzer": "python",
+      "ms": 219.4,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     }
+    ]
+   },
+   "large_gt_100KiB": {
+    "requested_n": 10,
+    "available": 1,
+    "n": 1,
+    "p50_ms": 5120.9,
+    "p95_ms": 5120.9,
+    "min_ms": 5120.9,
+    "max_ms": 5120.9,
+    "pearson_bytes_ms": null,
+    "spearman_bytes_ms": null,
+    "total_findings": 0,
+    "files_with_findings": 0,
+    "hits_per_100KiB": 0.0,
+    "files": [
+     {
+      "relpath": "semgrep_interfaces\\semgrep_output_v1.py",
+      "bytes": 504814,
+      "sha256": "98dde83f57399a4da59a87fa575561a25742c67d803304701c27991737d29c33",
+      "analyzer": "python",
+      "ms": 5120.9,
+      "rc": 0,
+      "results": 0,
+      "errors": 0
+     }
+    ]
+   }
+  }
+ }
+}

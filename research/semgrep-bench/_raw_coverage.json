@@ -1,0 +1,3667 @@
+[
+ {
+  "rule_id": "formatted-string-bashoperator",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\airflow\\security\\audit\\formatted-string-bashoperator.yaml",
+  "sample": "python\\airflow\\security\\audit\\formatted-string-bashoperator.py",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-create-exec",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-create-exec.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-asyncio-create-exec.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-exec",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-exec.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-asyncio-exec.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-shell",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-shell.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-asyncio-shell.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-spawn-process",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-spawn-process.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-spawn-process.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-subprocess-use",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-subprocess-use.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-subprocess-use.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-system-call",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\dangerous-system-call.yaml",
+  "sample": "python\\aws-lambda\\security\\dangerous-system-call.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "mysql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\mysql-sqli.yaml",
+  "sample": "python\\aws-lambda\\security\\mysql-sqli.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "psycopg-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\psycopg-sqli.yaml",
+  "sample": "python\\aws-lambda\\security\\psycopg-sqli.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pymssql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\pymssql-sqli.yaml",
+  "sample": "python\\aws-lambda\\security\\pymssql-sqli.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pymysql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\pymysql-sqli.yaml",
+  "sample": "python\\aws-lambda\\security\\pymysql-sqli.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sqlalchemy-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\sqlalchemy-sqli.yaml",
+  "sample": "python\\aws-lambda\\security\\sqlalchemy-sqli.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-html-response",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\tainted-html-response.yaml",
+  "sample": "python\\aws-lambda\\security\\tainted-html-response.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-html-string",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\aws-lambda\\security\\tainted-html-string.yaml",
+  "sample": "python\\aws-lambda\\security\\tainted-html-string.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-sql-string",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\aws-lambda\\security\\tainted-sql-string.yaml",
+  "sample": "python\\aws-lambda\\security\\tainted-sql-string.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-token",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\boto3\\security\\hardcoded-token.yaml",
+  "sample": "python\\boto3\\security\\hardcoded-token.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "avoid-mark-safe",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\avoid-mark-safe.yaml",
+  "sample": "python\\django\\security\\audit\\avoid-mark-safe.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "custom-expression-as-sql",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\custom-expression-as-sql.yaml",
+  "sample": "python\\django\\security\\audit\\custom-expression-as-sql.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "extends-custom-expression",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\extends-custom-expression.yaml",
+  "sample": "python\\django\\security\\audit\\extends-custom-expression.py",
+  "fired": true,
+  "hits": 9,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "avoid-query-set-extra",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\query-set-extra.yaml",
+  "sample": "python\\django\\security\\audit\\query-set-extra.py",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "avoid-raw-sql",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\raw-query.yaml",
+  "sample": "python\\django\\security\\audit\\raw-query.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "class-extends-safestring",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\class-extends-safestring.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\class-extends-safestring.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "context-autoescape-off",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\context-autoescape-off.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\context-autoescape-off.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "direct-use-of-httpresponse",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\direct-use-of-httpresponse.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\direct-use-of-httpresponse.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "filter-with-is-safe",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\filter-with-is-safe.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\filter-with-is-safe.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "formathtml-fstring-parameter",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\formathtml-fstring-parameter.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\formathtml-fstring-parameter.py",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "global-autoescape-off",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\global-autoescape-off.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\global-autoescape-off.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "html-magic-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\html-magic-method.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\html-magic-method.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "html-safe",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\audit\\xss\\html-safe.yaml",
+  "sample": "python\\django\\security\\audit\\xss\\html-safe.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "raw-html-format",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\raw-html-format.yaml",
+  "sample": "python\\django\\security\\injection\\raw-html-format.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "reflected-data-httpresponse",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\reflected-data-httpresponse.yaml",
+  "sample": "python\\django\\security\\injection\\reflected-data-httpresponse.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "reflected-data-httpresponsebadrequest",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\reflected-data-httpresponsebadrequest.yaml",
+  "sample": "python\\django\\security\\injection\\reflected-data-httpresponsebadrequest.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "request-data-fileresponse",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\request-data-fileresponse.yaml",
+  "sample": "python\\django\\security\\injection\\request-data-fileresponse.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-url-host",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\tainted-url-host.yaml",
+  "sample": "python\\django\\security\\injection\\tainted-url-host.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "command-injection-os-system",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\django\\security\\injection\\command\\command-injection-os-system.yaml",
+  "sample": "python\\django\\security\\injection\\command\\command-injection-os-system.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "subprocess-injection",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\django\\security\\injection\\command\\subprocess-injection.yaml",
+  "sample": "python\\django\\security\\injection\\command\\subprocess-injection.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "path-traversal-file-name",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-file-name.yaml",
+  "sample": "python\\django\\security\\injection\\path-traversal\\path-traversal-file-name.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "path-traversal-join",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-join.yaml",
+  "sample": "python\\django\\security\\injection\\path-traversal\\path-traversal-join.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "path-traversal-open",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-open.yaml",
+  "sample": "python\\django\\security\\injection\\path-traversal\\path-traversal-open.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sql-injection-using-extra-where",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\sql\\sql-injection-extra.yaml",
+  "sample": "python\\django\\security\\injection\\sql\\sql-injection-extra.py",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sql-injection-using-rawsql",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\sql\\sql-injection-rawsql.yaml",
+  "sample": "python\\django\\security\\injection\\sql\\sql-injection-rawsql.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sql-injection-db-cursor-execute",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\sql\\sql-injection-using-db-cursor-execute.yaml",
+  "sample": "python\\django\\security\\injection\\sql\\sql-injection-using-db-cursor-execute.py",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sql-injection-using-raw",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\django\\security\\injection\\sql\\sql-injection-using-raw.yaml",
+  "sample": "python\\django\\security\\injection\\sql\\sql-injection-using-raw.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "ssrf-injection-requests",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\django\\security\\injection\\ssrf\\ssrf-injection-requests.yaml",
+  "sample": "python\\django\\security\\injection\\ssrf\\ssrf-injection-requests.py",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "ssrf-injection-urllib",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\django\\security\\injection\\ssrf\\ssrf-injection-urllib.yaml",
+  "sample": "python\\django\\security\\injection\\ssrf\\ssrf-injection-urllib.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "unescaped-template-extension",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\unescaped-template-extension.yaml",
+  "sample": "python\\flask\\security\\unescaped-template-extension.py",
+  "fired": true,
+  "hits": 13,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "response-contains-unsanitized-input",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\unsanitized-input.yaml",
+  "sample": "python\\flask\\security\\unsanitized-input.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "directly-returned-format-string",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\audit\\directly-returned-format-string.yaml",
+  "sample": "python\\flask\\security\\audit\\directly-returned-format-string.py",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "make-response-with-unknown-content",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\audit\\xss\\make-response-with-unknown-content.yaml",
+  "sample": "python\\flask\\security\\audit\\xss\\make-response-with-unknown-content.py",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "os-system-injection",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\flask\\security\\injection\\os-system-injection.yaml",
+  "sample": "python\\flask\\security\\injection\\os-system-injection.py",
+  "fired": true,
+  "hits": 17,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "path-traversal-open",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\flask\\security\\injection\\path-traversal-open.yaml",
+  "sample": "python\\flask\\security\\injection\\path-traversal-open.py",
+  "fired": true,
+  "hits": 12,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "raw-html-format",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\injection\\raw-html-concat.yaml",
+  "sample": "python\\flask\\security\\injection\\raw-html-concat.py",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 0,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "ssrf-requests",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\flask\\security\\injection\\ssrf-requests.yaml",
+  "sample": "python\\flask\\security\\injection\\ssrf-requests.py",
+  "fired": true,
+  "hits": 9,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "subprocess-injection",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\flask\\security\\injection\\subprocess-injection.yaml",
+  "sample": "python\\flask\\security\\injection\\subprocess-injection.py",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-url-host",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\injection\\tainted-url-host.yaml",
+  "sample": "python\\flask\\security\\injection\\tainted-url-host.py",
+  "fired": true,
+  "hits": 14,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "direct-use-of-jinja2",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\xss\\audit\\direct-use-of-jinja2.yaml",
+  "sample": "python\\flask\\security\\xss\\audit\\direct-use-of-jinja2.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "explicit-unescape-with-markup",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\flask\\security\\xss\\audit\\explicit-unescape-with-markup.yaml",
+  "sample": "python\\flask\\security\\xss\\audit\\explicit-unescape-with-markup.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-os-exec",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\dangerous-os-exec.yaml",
+  "sample": "python\\lang\\security\\dangerous-os-exec.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-spawn-process",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\dangerous-spawn-process.yaml",
+  "sample": "python\\lang\\security\\dangerous-spawn-process.py",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-subprocess-use",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\dangerous-subprocess-use.yaml",
+  "sample": "python\\lang\\security\\dangerous-subprocess-use.py",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-system-call",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\dangerous-system-call.yaml",
+  "sample": "python\\lang\\security\\dangerous-system-call.py",
+  "fired": true,
+  "hits": 25,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-create-exec-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-audit.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-create-exec-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-tainted-env-args.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-exec-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-exec-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-exec-audit.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-exec-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-exec-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-exec-tainted-env-args.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-shell-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-shell-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-shell-audit.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-asyncio-shell-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-shell-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-asyncio-shell-tainted-env-args.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-os-exec-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-os-exec-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-os-exec-audit.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-os-exec-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-os-exec-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-os-exec-tainted-env-args.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-spawn-process-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-spawn-process-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-spawn-process-audit.py",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-spawn-process-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-spawn-process-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-spawn-process-tainted-env-args.py",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-subprocess-use-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-subprocess-use-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-subprocess-use-audit.py",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-subprocess-use-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-subprocess-use-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-subprocess-use-tainted-env-args.py",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-system-call-audit",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-system-call-audit.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-system-call-audit.py",
+  "fired": true,
+  "hits": 13,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-system-call-tainted-env-args",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\dangerous-system-call-tainted-env-args.yaml",
+  "sample": "python\\lang\\security\\audit\\dangerous-system-call-tainted-env-args.py",
+  "fired": true,
+  "hits": 30,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "formatted-sql-query",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\formatted-sql-query.yaml",
+  "sample": "python\\lang\\security\\audit\\formatted-sql-query.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-password-default-argument",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\hardcoded-password-default-argument.yaml",
+  "sample": "python\\lang\\security\\audit\\hardcoded-password-default-argument.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "mako-templates-detected",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "INFO",
+  "source_file": "python\\lang\\security\\audit\\mako-templates-detected.yaml",
+  "sample": "python\\lang\\security\\audit\\mako-templates-detected.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "subprocess-list-passed-as-string",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\subprocess-list-passed-as-string.yaml",
+  "sample": "python\\lang\\security\\audit\\subprocess-list-passed-as-string.py",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "subprocess-shell-true",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\subprocess-shell-true.yaml",
+  "sample": "python\\lang\\security\\audit\\subprocess-shell-true.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "paramiko-exec-command",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\lang\\security\\audit\\paramiko\\paramiko-exec-command.yaml",
+  "sample": "python\\lang\\security\\audit\\paramiko\\paramiko-exec-command.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "aiopg-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\sqli\\aiopg-sqli.yaml",
+  "sample": "python\\lang\\security\\audit\\sqli\\aiopg-sqli.py",
+  "fired": true,
+  "hits": 9,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "asyncpg-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\sqli\\asyncpg-sqli.yaml",
+  "sample": "python\\lang\\security\\audit\\sqli\\asyncpg-sqli.py",
+  "fired": true,
+  "hits": 11,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pg8000-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\sqli\\pg8000-sqli.yaml",
+  "sample": "python\\lang\\security\\audit\\sqli\\pg8000-sqli.py",
+  "fired": true,
+  "hits": 9,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "psycopg-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\lang\\security\\audit\\sqli\\psycopg-sqli.yaml",
+  "sample": "python\\lang\\security\\audit\\sqli\\psycopg-sqli.py",
+  "fired": true,
+  "hits": 9,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pyramid-direct-use-of-response",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\pyramid\\security\\direct-use-of-response.yaml",
+  "sample": "python\\pyramid\\security\\direct-use-of-response.py",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pyramid-sqlalchemy-sql-injection",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\pyramid\\security\\sqlalchemy-sql-injection.yaml",
+  "sample": "python\\pyramid\\security\\sqlalchemy-sql-injection.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "string-concat",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\sh\\security\\string-concat.yaml",
+  "sample": "python\\sh\\security\\string-concat.py",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sqlalchemy-execute-raw-query",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "python\\sqlalchemy\\security\\sqlalchemy-execute-raw-query.yaml",
+  "sample": "python\\sqlalchemy\\security\\sqlalchemy-execute-raw-query.py",
+  "fired": true,
+  "hits": 28,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sqlalchemy-sql-injection",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "python\\sqlalchemy\\security\\sqlalchemy-sql-injection.yaml",
+  "sample": "python\\sqlalchemy\\security\\sqlalchemy-sql-injection.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "avoid-sqlalchemy-text",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "python"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "python\\sqlalchemy\\security\\audit\\avoid-sqlalchemy-text.yaml",
+  "sample": "python\\sqlalchemy\\security\\audit\\avoid-sqlalchemy-text.py",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-element-methods",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "INFO",
+  "source_file": "javascript\\angular\\security\\detect-angular-element-methods.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-element-methods.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-element-taint",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-element-taint.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-element-taint.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-open-redirect",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\angular\\security\\detect-angular-open-redirect.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-open-redirect.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-resource-loading",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-resource-loading.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-resource-loading.js",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-sce-disabled",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\angular\\security\\detect-angular-sce-disabled.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-sce-disabled.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-css-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-css.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-css.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-html-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-html-method.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-html-method.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-js-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-js-method.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-js-method.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-method.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-method.js",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-resourceurl-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-resourceurl-method.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-resourceurl-method.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-trust-as-url-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-angular-trust-as-url-method.yaml",
+  "sample": "javascript\\angular\\security\\detect-angular-trust-as-url-method.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-angular-translateprovider-translations-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\angular\\security\\detect-third-party-angular-translate.yaml",
+  "sample": "javascript\\angular\\security\\detect-third-party-angular-translate.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "apollo-axios-ssrf",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\apollo\\security\\apollo-axios-ssrf.yaml",
+  "sample": "javascript\\apollo\\security\\apollo-axios-ssrf.jsx",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-replaceall-sanitization",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "INFO",
+  "source_file": "javascript\\audit\\detect-replaceall-sanitization.yaml",
+  "sample": "javascript\\audit\\detect-replaceall-sanitization.ts",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-child-process",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\aws-lambda\\security\\detect-child-process.yaml",
+  "sample": "javascript\\aws-lambda\\security\\detect-child-process.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "knex-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\knex-sqli.yaml",
+  "sample": "javascript\\aws-lambda\\security\\knex-sqli.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "mysql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\mysql-sqli.yaml",
+  "sample": "javascript\\aws-lambda\\security\\mysql-sqli.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "pg-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\pg-sqli.yaml",
+  "sample": "javascript\\aws-lambda\\security\\pg-sqli.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sequelize-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\sequelize-sqli.yaml",
+  "sample": "javascript\\aws-lambda\\security\\sequelize-sqli.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-html-response",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\tainted-html-response.yaml",
+  "sample": "javascript\\aws-lambda\\security\\tainted-html-response.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-html-string",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\aws-lambda\\security\\tainted-html-string.yaml",
+  "sample": "javascript\\aws-lambda\\security\\tainted-html-string.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-sql-string",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\aws-lambda\\security\\tainted-sql-string.yaml",
+  "sample": "javascript\\aws-lambda\\security\\tainted-sql-string.js",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "vm-runincontext-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\aws-lambda\\security\\vm-runincontext-injection.yaml",
+  "sample": "javascript\\aws-lambda\\security\\vm-runincontext-injection.js",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tofastproperties-code-execution",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\bluebird\\security\\audit\\tofastproperties-code-execution.yaml",
+  "sample": "javascript\\bluebird\\security\\audit\\tofastproperties-code-execution.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dom-based-xss",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\browser\\security\\dom-based-xss.yaml",
+  "sample": "javascript\\browser\\security\\dom-based-xss.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "insecure-document-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\browser\\security\\insecure-document-method.yaml",
+  "sample": "javascript\\browser\\security\\insecure-document-method.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "insecure-innerhtml",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\browser\\security\\insecure-innerhtml.yaml",
+  "sample": "javascript\\browser\\security\\insecure-innerhtml.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "raw-html-concat",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\browser\\security\\raw-html-concat.yaml",
+  "sample": "javascript\\browser\\security\\raw-html-concat.js",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "raw-html-join",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\browser\\security\\raw-html-join.yaml",
+  "sample": "javascript\\browser\\security\\raw-html-join.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "chrome-remote-interface-compilescript-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\chrome-remote-interface\\security\\audit\\chrome-remote-interface-compilescript-injection.yaml",
+  "sample": "javascript\\chrome-remote-interface\\security\\audit\\chrome-remote-interface-compilescript-injection.js",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "deno-dangerous-run",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\deno\\security\\audit\\deno-dangerous-run.yaml",
+  "sample": "javascript\\deno\\security\\audit\\deno-dangerous-run.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-jwt-hardcoded-secret",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\express-jwt-hardcoded-secret.yaml",
+  "sample": "javascript\\express\\security\\express-jwt-hardcoded-secret.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-phantom-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-phantom-injection.yaml",
+  "sample": "javascript\\express\\security\\express-phantom-injection.js",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-puppeteer-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-puppeteer-injection.yaml",
+  "sample": "javascript\\express\\security\\express-puppeteer-injection.js",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-sandbox-code-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-sandbox-injection.yaml",
+  "sample": "javascript\\express\\security\\express-sandbox-injection.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-vm-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-vm-injection.yaml",
+  "sample": "javascript\\express\\security\\express-vm-injection.js",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-vm2-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\express-vm2-injection.yaml",
+  "sample": "javascript\\express\\security\\express-vm2-injection.js",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-wkhtmltoimage-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-wkhtml-injection.yaml",
+  "sample": "javascript\\express\\security\\express-wkhtml-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-wkhtmltopdf-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\express-wkhtml-injection.yaml",
+  "sample": "javascript\\express\\security\\express-wkhtml-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-path-join-resolve-traversal",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\audit\\express-path-join-resolve-traversal.yaml",
+  "sample": "javascript\\express\\security\\audit\\express-path-join-resolve-traversal.js",
+  "fired": true,
+  "hits": 6,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-session-hardcoded-secret",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\audit\\express-session-hardcoded-secret.yaml",
+  "sample": "javascript\\express\\security\\audit\\express-session-hardcoded-secret.ts",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-ssrf",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\audit\\express-ssrf.yaml",
+  "sample": "javascript\\express\\security\\audit\\express-ssrf.ts",
+  "fired": true,
+  "hits": 16,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "direct-response-write",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\audit\\xss\\direct-response-write.yaml",
+  "sample": "javascript\\express\\security\\audit\\xss\\direct-response-write.js",
+  "fired": true,
+  "hits": 11,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "escape-function-overwrite",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\audit\\xss\\mustache\\escape-function-overwrite.yaml",
+  "sample": "javascript\\express\\security\\audit\\xss\\mustache\\escape-function-overwrite.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "raw-html-format",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\express\\security\\injection\\raw-html-format.yaml",
+  "sample": "javascript\\express\\security\\injection\\raw-html-format.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "tainted-sql-string",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\express\\security\\injection\\tainted-sql-string.yaml",
+  "sample": "javascript\\express\\security\\injection\\tainted-sql-string.js",
+  "fired": true,
+  "hits": 7,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "insecure-createnodesfrommarkup",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\fbjs\\security\\audit\\insecure-createnodesfrommarkup.yaml",
+  "sample": "javascript\\fbjs\\security\\audit\\insecure-createnodesfrommarkup.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-jwt-secret",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\jose\\security\\jwt-hardcode.yaml",
+  "sample": "javascript\\jose\\security\\jwt-hardcode.js",
+  "fired": false,
+  "hits": 0,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "jquery-insecure-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\jquery\\security\\audit\\jquery-insecure-method.yaml",
+  "sample": "javascript\\jquery\\security\\audit\\jquery-insecure-method.js",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "jquery-insecure-selector",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\jquery\\security\\audit\\jquery-insecure-selector.yaml",
+  "sample": "javascript\\jquery\\security\\audit\\jquery-insecure-selector.js",
+  "fired": true,
+  "hits": 8,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "prohibit-jquery-html",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\jquery\\security\\audit\\prohibit-jquery-html.yaml",
+  "sample": "javascript\\jquery\\security\\audit\\prohibit-jquery-html.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-jwt-secret",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\jsonwebtoken\\security\\jwt-hardcode.yaml",
+  "sample": "javascript\\jsonwebtoken\\security\\jwt-hardcode.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-child-process",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\lang\\security\\detect-child-process.yaml",
+  "sample": "javascript\\lang\\security\\detect-child-process.ts",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "spawn-git-clone",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\lang\\security\\spawn-git-clone.yaml",
+  "sample": "javascript\\lang\\security\\spawn-git-clone.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "dangerous-spawn-shell",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\lang\\security\\audit\\dangerous-spawn-shell.yaml",
+  "sample": "javascript\\lang\\security\\audit\\dangerous-spawn-shell.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "detect-non-literal-fs-filename",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\detect-non-literal-fs-filename.yaml",
+  "sample": "javascript\\lang\\security\\audit\\detect-non-literal-fs-filename.ts",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-hmac-key",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\hardcoded-hmac-key.yaml",
+  "sample": "javascript\\lang\\security\\audit\\hardcoded-hmac-key.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "spawn-shell-true",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\lang\\security\\audit\\spawn-shell-true.yaml",
+  "sample": "javascript\\lang\\security\\audit\\spawn-shell-true.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "unknown-value-with-script-tag",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\unknown-value-with-script-tag.yaml",
+  "sample": "javascript\\lang\\security\\audit\\unknown-value-with-script-tag.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "unsafe-dynamic-method",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\unsafe-dynamic-method.yaml",
+  "sample": "javascript\\lang\\security\\audit\\unsafe-dynamic-method.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "path-join-resolve-traversal",
+  "cwe": [
+   "022"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\path-traversal\\path-join-resolve-traversal.yaml",
+  "sample": "javascript\\lang\\security\\audit\\path-traversal\\path-join-resolve-traversal.ts",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "node-knex-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\sqli\\node-knex-sqli.yaml",
+  "sample": "javascript\\lang\\security\\audit\\sqli\\node-knex-sqli.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "node-mssql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\sqli\\node-mssql-sqli.yaml",
+  "sample": "javascript\\lang\\security\\audit\\sqli\\node-mssql-sqli.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "node-mysql-sqli",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\lang\\security\\audit\\sqli\\node-mysql-sqli.yaml",
+  "sample": "javascript\\lang\\security\\audit\\sqli\\node-mysql-sqli.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "monaco-hover-htmlsupport",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\monaco-editor\\security\\audit\\monaco-hover-htmlsupport.yaml",
+  "sample": "javascript\\monaco-editor\\security\\audit\\monaco-hover-htmlsupport.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "hardcoded-passport-secret",
+  "cwe": [
+   "798"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "javascript\\passport-jwt\\security\\passport-hardcode.yaml",
+  "sample": "javascript\\passport-jwt\\security\\passport-hardcode.js",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "phantom-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\phantom\\security\\audit\\phantom-injection.yaml",
+  "sample": "javascript\\phantom\\security\\audit\\phantom-injection.js",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-addinitscript-code-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-addinitscript-code-injection.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-addinitscript-code-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-evaluate-arg-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-evaluate-arg-injection.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-evaluate-arg-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-evaluate-code-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-evaluate-code-injection.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-evaluate-code-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-exposed-chrome-devtools",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-exposed-chrome-devtools.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-exposed-chrome-devtools.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-goto-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-goto-injection.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-goto-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "playwright-setcontent-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\playwright\\security\\audit\\playwright-setcontent-injection.yaml",
+  "sample": "javascript\\playwright\\security\\audit\\playwright-setcontent-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "puppeteer-evaluate-arg-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-arg-injection.yaml",
+  "sample": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-arg-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "puppeteer-evaluate-code-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-code-injection.yaml",
+  "sample": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-code-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "puppeteer-exposed-chrome-devtools",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-exposed-chrome-devtools.yaml",
+  "sample": "javascript\\puppeteer\\security\\audit\\puppeteer-exposed-chrome-devtools.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "puppeteer-goto-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-goto-injection.yaml",
+  "sample": "javascript\\puppeteer\\security\\audit\\puppeteer-goto-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "puppeteer-setcontent-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-setcontent-injection.yaml",
+  "sample": "javascript\\puppeteer\\security\\audit\\puppeteer-setcontent-injection.js",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sandbox-code-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\sandbox\\security\\audit\\sandbox-code-injection.yaml",
+  "sample": "javascript\\sandbox\\security\\audit\\sandbox-code-injection.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "express-sequelize-injection",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "javascript\\sequelize\\security\\audit\\sequelize-injection-express.yaml",
+  "sample": "javascript\\sequelize\\security\\audit\\sequelize-injection-express.ts",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sequelize-raw-query",
+  "cwe": [
+   "089"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\sequelize\\security\\audit\\sequelize-raw-query.yaml",
+  "sample": "javascript\\sequelize\\security\\audit\\sequelize-raw-query.js",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "sequelize-tls-disabled-cert-validation",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\sequelize\\security\\audit\\sequelize-tls-disabled-cert-validation.yaml",
+  "sample": "javascript\\sequelize\\security\\audit\\sequelize-tls-disabled-cert-validation.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "shelljs-exec-injection",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "ERROR",
+  "source_file": "javascript\\shelljs\\security\\shelljs-exec-injection.yaml",
+  "sample": "javascript\\shelljs\\security\\shelljs-exec-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "multiargs-code-execution",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\thenify\\security\\audit\\multiargs-code-execution.yaml",
+  "sample": "javascript\\thenify\\security\\audit\\multiargs-code-execution.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "vm2-code-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\vm2\\security\\audit\\vm2-code-injection.yaml",
+  "sample": "javascript\\vm2\\security\\audit\\vm2-code-injection.js",
+  "fired": true,
+  "hits": 3,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "vm2-context-injection",
+  "cwe": [
+   "094"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\vm2\\security\\audit\\vm2-context-injection.yaml",
+  "sample": "javascript\\vm2\\security\\audit\\vm2-context-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "wkhtmltoimage-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\wkhtmltoimage\\security\\audit\\wkhtmltoimage-injection.yaml",
+  "sample": "javascript\\wkhtmltoimage\\security\\audit\\wkhtmltoimage-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "wkhtmltopdf-injection",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "javascript",
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "javascript\\wkhtmltopdf\\security\\audit\\wkhtmltopdf-injection.yaml",
+  "sample": "javascript\\wkhtmltopdf\\security\\audit\\wkhtmltopdf-injection.js",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "angular-bypasssecuritytrust",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "typescript\\angular\\security\\audit\\angular-domsanitizer.yaml",
+  "sample": "typescript\\angular\\security\\audit\\angular-domsanitizer.ts",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "mcp-command-injection-typescript",
+  "cwe": [
+   "078"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "typescript\\mcp\\security\\mcp-command-injection-typescript.yaml",
+  "sample": "typescript\\mcp\\security\\mcp-command-injection-typescript.ts",
+  "fired": true,
+  "hits": 5,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "mcp-ssrf-typescript",
+  "cwe": [
+   "918"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "ERROR",
+  "source_file": "typescript\\mcp\\security\\mcp-ssrf-typescript.yaml",
+  "sample": "typescript\\mcp\\security\\mcp-ssrf-typescript.ts",
+  "fired": true,
+  "hits": 4,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "nestjs-header-xss-disabled",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "typescript\\nestjs\\security\\audit\\nestjs-header-xss-disabled.yaml",
+  "sample": "typescript\\nestjs\\security\\audit\\nestjs-header-xss-disabled.ts",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "react-markdown-insecure-html",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": false,
+  "severity": "WARNING",
+  "source_file": "typescript\\react\\security\\react-markdown-insecure-html.yaml",
+  "sample": "typescript\\react\\security\\react-markdown-insecure-html.tsx",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "react-dangerouslysetinnerhtml",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "typescript\\react\\security\\audit\\react-dangerouslysetinnerhtml.yaml",
+  "sample": "typescript\\react\\security\\audit\\react-dangerouslysetinnerhtml.tsx",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "react-href-var",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "typescript\\react\\security\\audit\\react-href-var.yaml",
+  "sample": "typescript\\react\\security\\audit\\react-href-var.tsx",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "react-unsanitized-method",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "typescript\\react\\security\\audit\\react-unsanitized-method.yaml",
+  "sample": "typescript\\react\\security\\audit\\react-unsanitized-method.tsx",
+  "fired": true,
+  "hits": 2,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ },
+ {
+  "rule_id": "react-unsanitized-property",
+  "cwe": [
+   "079"
+  ],
+  "languages": [
+   "typescript",
+   "javascript"
+  ],
+  "is_taint": true,
+  "severity": "WARNING",
+  "source_file": "typescript\\react\\security\\audit\\react-unsanitized-property.yaml",
+  "sample": "typescript\\react\\security\\audit\\react-unsanitized-property.tsx",
+  "fired": true,
+  "hits": 1,
+  "rc": 0,
+  "paths_scanned": 1,
+  "errors": 0,
+  "err_tail": ""
+ }
+]

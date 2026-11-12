@@ -1,0 +1,336 @@
+{
+ "rc": 0,
+ "ms": 290.7,
+ "err_tail": "",
+ "doc": {
+  "version": "1.184.0",
+  "results": [
+   {
+    "check_id": "puppeteer-evaluate-code-injection",
+    "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_767526\\target.ts",
+    "start": {
+     "line": 7,
+     "col": 10,
+     "offset": 160
+    },
+    "end": {
+     "line": 7,
+     "col": 30,
+     "offset": 180
+    },
+    "extra": {
+     "metavars": {
+      "$PAGE": {
+       "start": {
+        "line": 7,
+        "col": 10,
+        "offset": 160
+       },
+       "end": {
+        "line": 7,
+        "col": 14,
+        "offset": 164
+       },
+       "abstract_content": "page"
+      },
+      "$INPUT": {
+       "start": {
+        "line": 7,
+        "col": 24,
+        "offset": 174
+       },
+       "end": {
+        "line": 7,
+        "col": 29,
+        "offset": 179
+       },
+       "abstract_content": "input"
+      }
+     },
+     "engine_kind": "OSS",
+     "is_ignored": false,
+     "message": "If unverified user data can reach the `evaluate` method it can result in Server-Side Request Forgery vulnerabilities",
+     "metadata": {
+      "owasp": [
+       "A10:2021 - Server-Side Request Forgery (SSRF)",
+       "A01:2025 - Broken Access Control"
+      ],
+      "cwe": [
+       "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "category": "security",
+      "technology": [
+       "puppeteer"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "audit"
+      ],
+      "likelihood": "LOW",
+      "impact": "LOW",
+      "confidence": "LOW",
+      "references": [
+       "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29"
+      ]
+     },
+     "severity": "WARNING",
+     "validation_state": "NO_VALIDATOR"
+    }
+   }
+  ],
+  "errors": [],
+  "paths": {
+   "scanned": [
+    "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_767526\\target.ts"
+   ]
+  },
+  "time": {
+   "rules": [],
+   "rules_parse_time": 0.0387568473815918,
+   "profiling_times": {},
+   "parsing_time": {
+    "total_time": 0.017757654190063477,
+    "per_file_time": {
+     "mean": 0.008878827095031738,
+     "std_dev": 7.883357058346974e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "scanning_time": {
+    "total_time": 0.021748065948486328,
+    "per_file_time": {
+     "mean": 0.021748065948486328,
+     "std_dev": 0.0
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "matching_time": {
+    "total_time": 0.0029878616333007812,
+    "per_file_and_rule_time": {
+     "mean": 0.0014939308166503906,
+     "std_dev": 2.231829284937703e-06
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_files": []
+   },
+   "tainting_time": {
+    "total_time": 0.0,
+    "per_def_and_rule_time": {
+     "mean": 0.0,
+     "std_dev": 0.0
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_defs": []
+   },
+   "fixpoint_timeouts": [],
+   "prefiltering": {
+    "project_level_time": 0.0,
+    "file_level_time": 0.0,
+    "rules_with_project_prefilters_ratio": 0.0,
+    "rules_with_file_prefilters_ratio": 1.0,
+    "rules_selected_ratio": 0.08,
+    "rules_matched_ratio": 0.08
+   },
+   "targets": [],
+   "total_bytes": 0,
+   "max_memory_bytes": 136033984
+  },
+  "rules_by_engine": [
+   [
+    "chrome-remote-interface-compilescript-injection",
+    "OSS"
+   ],
+   [
+    "express-jwt-hardcoded-secret",
+    "OSS"
+   ],
+   [
+    "express-phantom-injection",
+    "OSS"
+   ],
+   [
+    "express-puppeteer-injection",
+    "OSS"
+   ],
+   [
+    "express-wkhtmltoimage-injection",
+    "OSS"
+   ],
+   [
+    "express-wkhtmltopdf-injection",
+    "OSS"
+   ],
+   [
+    "express-session-hardcoded-secret",
+    "OSS"
+   ],
+   [
+    "express-ssrf",
+    "OSS"
+   ],
+   [
+    "hardcoded-jwt-secret",
+    "OSS"
+   ],
+   [
+    "hardcoded-jwt-secret",
+    "OSS"
+   ],
+   [
+    "hardcoded-hmac-key",
+    "OSS"
+   ],
+   [
+    "hardcoded-passport-secret",
+    "OSS"
+   ],
+   [
+    "phantom-injection",
+    "OSS"
+   ],
+   [
+    "playwright-addinitscript-code-injection",
+    "OSS"
+   ],
+   [
+    "playwright-evaluate-arg-injection",
+    "OSS"
+   ],
+   [
+    "playwright-evaluate-code-injection",
+    "OSS"
+   ],
+   [
+    "playwright-goto-injection",
+    "OSS"
+   ],
+   [
+    "playwright-setcontent-injection",
+    "OSS"
+   ],
+   [
+    "puppeteer-evaluate-arg-injection",
+    "OSS"
+   ],
+   [
+    "puppeteer-evaluate-code-injection",
+    "OSS"
+   ],
+   [
+    "puppeteer-goto-injection",
+    "OSS"
+   ],
+   [
+    "puppeteer-setcontent-injection",
+    "OSS"
+   ],
+   [
+    "wkhtmltoimage-injection",
+    "OSS"
+   ],
+   [
+    "wkhtmltopdf-injection",
+    "OSS"
+   ],
+   [
+    "mcp-ssrf-typescript",
+    "OSS"
+   ]
+  ],
+  "engine_requested": "OSS",
+  "interfile_languages_used": [],
+  "skipped_rules": [],
+  "profiling_results": []
+ },
+ "audit": {
+  "top_level_keys": [
+   "engine_requested",
+   "errors",
+   "interfile_languages_used",
+   "paths",
+   "profiling_results",
+   "results",
+   "rules_by_engine",
+   "skipped_rules",
+   "time",
+   "version"
+  ],
+  "has_paths": true,
+  "paths_keys": [
+   "scanned"
+  ],
+  "paths_scanned_count": 1,
+  "paths_scanned_head": [
+   "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_767526\\target.ts"
+  ],
+  "paths_skipped_count": 0,
+  "n_results": 1,
+  "result_keys": [
+   "check_id",
+   "end",
+   "extra",
+   "path",
+   "start"
+  ],
+  "result_path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_767526\\target.ts",
+  "result_check_id": "puppeteer-evaluate-code-injection",
+  "has_start_line": true,
+  "start": {
+   "line": 7,
+   "col": 10,
+   "offset": 160
+  },
+  "end": {
+   "line": 7,
+   "col": 30,
+   "offset": 180
+  },
+  "extra_keys": [
+   "engine_kind",
+   "is_ignored",
+   "message",
+   "metadata",
+   "metavars",
+   "severity",
+   "validation_state"
+  ],
+  "extra_severity": "WARNING",
+  "extra_metadata_keys": [
+   "category",
+   "confidence",
+   "cwe",
+   "cwe2021-top25",
+   "cwe2022-top25",
+   "impact",
+   "likelihood",
+   "owasp",
+   "references",
+   "subcategory",
+   "technology"
+  ],
+  "extra_metadata_cwe": [
+   "CWE-918: Server-Side Request Forgery (SSRF)"
+  ],
+  "extra_metadata_cwe_type": "list",
+  "extra_message_present": true,
+  "n_errors": 0,
+  "rule_ids": [
+   "puppeteer-evaluate-code-injection"
+  ]
+ }
+}

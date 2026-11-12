@@ -1,0 +1,283 @@
+{
+  "rules_repo": "C:\\Users\\romeo_keta\\AppData\\Local\\Temp\\semgrep-rules",
+  "rules_repo_remote": "https://gh-proxy.com/https://github.com/semgrep/semgrep-rules.git",
+  "rules_repo_commit": "16b9e6d45f10649f6a531ec4838ed9924372c3bc",
+  "rules_repo_commit_date": "2026-10-21T17:01:43-04:00",
+  "rules_repo_dirty": false,
+  "lang_dirs": [
+    "python",
+    "javascript",
+    "typescript"
+  ],
+  "target_languages": [
+    "javascript",
+    "jsx",
+    "python",
+    "tsx",
+    "typescript"
+  ],
+  "cwe_filter": [
+    "022",
+    "078",
+    "079",
+    "089",
+    "094",
+    "798",
+    "918"
+  ],
+  "cwe_normalization": "int(CWE-<n>) -> zfill(3)",
+  "rule_files_scanned": 542,
+  "rules_kept": 188,
+  "rules_unique_effective_ids": 188,
+  "duplicate_upstream_ids": {
+    "dangerous-spawn-process": 2,
+    "dangerous-subprocess-use": 2,
+    "dangerous-system-call": 2,
+    "mysql-sqli": 2,
+    "psycopg-sqli": 2,
+    "tainted-html-response": 2,
+    "tainted-html-string": 2,
+    "tainted-sql-string": 3,
+    "raw-html-format": 3,
+    "tainted-url-host": 2,
+    "subprocess-injection": 2,
+    "path-traversal-open": 2,
+    "detect-child-process": 2,
+    "hardcoded-jwt-secret": 2
+  },
+  "id_renames": [
+    {
+      "upstream_id": "dangerous-spawn-process",
+      "effective_id": "dangerous-spawn-process.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\dangerous-spawn-process.yaml"
+    },
+    {
+      "upstream_id": "dangerous-subprocess-use",
+      "effective_id": "dangerous-subprocess-use.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\dangerous-subprocess-use.yaml"
+    },
+    {
+      "upstream_id": "dangerous-system-call",
+      "effective_id": "dangerous-system-call.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\dangerous-system-call.yaml"
+    },
+    {
+      "upstream_id": "mysql-sqli",
+      "effective_id": "mysql-sqli.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\mysql-sqli.yaml"
+    },
+    {
+      "upstream_id": "psycopg-sqli",
+      "effective_id": "psycopg-sqli.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\psycopg-sqli.yaml"
+    },
+    {
+      "upstream_id": "tainted-html-response",
+      "effective_id": "tainted-html-response.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\tainted-html-response.yaml"
+    },
+    {
+      "upstream_id": "tainted-html-string",
+      "effective_id": "tainted-html-string.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\tainted-html-string.yaml"
+    },
+    {
+      "upstream_id": "tainted-sql-string",
+      "effective_id": "tainted-sql-string.aws-lambda",
+      "source_file": "python\\aws-lambda\\security\\tainted-sql-string.yaml"
+    },
+    {
+      "upstream_id": "raw-html-format",
+      "effective_id": "raw-html-format.django",
+      "source_file": "python\\django\\security\\injection\\raw-html-format.yaml"
+    },
+    {
+      "upstream_id": "tainted-url-host",
+      "effective_id": "tainted-url-host.django",
+      "source_file": "python\\django\\security\\injection\\tainted-url-host.yaml"
+    },
+    {
+      "upstream_id": "subprocess-injection",
+      "effective_id": "subprocess-injection.django",
+      "source_file": "python\\django\\security\\injection\\command\\subprocess-injection.yaml"
+    },
+    {
+      "upstream_id": "path-traversal-open",
+      "effective_id": "path-traversal-open.django",
+      "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-open.yaml"
+    },
+    {
+      "upstream_id": "path-traversal-open",
+      "effective_id": "path-traversal-open.flask",
+      "source_file": "python\\flask\\security\\injection\\path-traversal-open.yaml"
+    },
+    {
+      "upstream_id": "raw-html-format",
+      "effective_id": "raw-html-format.flask",
+      "source_file": "python\\flask\\security\\injection\\raw-html-concat.yaml"
+    },
+    {
+      "upstream_id": "subprocess-injection",
+      "effective_id": "subprocess-injection.flask",
+      "source_file": "python\\flask\\security\\injection\\subprocess-injection.yaml"
+    },
+    {
+      "upstream_id": "tainted-url-host",
+      "effective_id": "tainted-url-host.flask",
+      "source_file": "python\\flask\\security\\injection\\tainted-url-host.yaml"
+    },
+    {
+      "upstream_id": "dangerous-spawn-process",
+      "effective_id": "dangerous-spawn-process.lang",
+      "source_file": "python\\lang\\security\\dangerous-spawn-process.yaml"
+    },
+    {
+      "upstream_id": "dangerous-subprocess-use",
+      "effective_id": "dangerous-subprocess-use.lang",
+      "source_file": "python\\lang\\security\\dangerous-subprocess-use.yaml"
+    },
+    {
+      "upstream_id": "dangerous-system-call",
+      "effective_id": "dangerous-system-call.lang",
+      "source_file": "python\\lang\\security\\dangerous-system-call.yaml"
+    },
+    {
+      "upstream_id": "psycopg-sqli",
+      "effective_id": "psycopg-sqli.lang",
+      "source_file": "python\\lang\\security\\audit\\sqli\\psycopg-sqli.yaml"
+    },
+    {
+      "upstream_id": "detect-child-process",
+      "effective_id": "detect-child-process.aws-lambda",
+      "source_file": "javascript\\aws-lambda\\security\\detect-child-process.yaml"
+    },
+    {
+      "upstream_id": "mysql-sqli",
+      "effective_id": "mysql-sqli.javascript-aws-lambda",
+      "source_file": "javascript\\aws-lambda\\security\\mysql-sqli.yaml"
+    },
+    {
+      "upstream_id": "tainted-html-response",
+      "effective_id": "tainted-html-response.javascript-aws-lambda",
+      "source_file": "javascript\\aws-lambda\\security\\tainted-html-response.yaml"
+    },
+    {
+      "upstream_id": "tainted-html-string",
+      "effective_id": "tainted-html-string.javascript-aws-lambda",
+      "source_file": "javascript\\aws-lambda\\security\\tainted-html-string.yaml"
+    },
+    {
+      "upstream_id": "tainted-sql-string",
+      "effective_id": "tainted-sql-string.javascript-aws-lambda",
+      "source_file": "javascript\\aws-lambda\\security\\tainted-sql-string.yaml"
+    },
+    {
+      "upstream_id": "raw-html-format",
+      "effective_id": "raw-html-format.express",
+      "source_file": "javascript\\express\\security\\injection\\raw-html-format.yaml"
+    },
+    {
+      "upstream_id": "tainted-sql-string",
+      "effective_id": "tainted-sql-string.express",
+      "source_file": "javascript\\express\\security\\injection\\tainted-sql-string.yaml"
+    },
+    {
+      "upstream_id": "hardcoded-jwt-secret",
+      "effective_id": "hardcoded-jwt-secret.jose",
+      "source_file": "javascript\\jose\\security\\jwt-hardcode.yaml"
+    },
+    {
+      "upstream_id": "hardcoded-jwt-secret",
+      "effective_id": "hardcoded-jwt-secret.jsonwebtoken",
+      "source_file": "javascript\\jsonwebtoken\\security\\jwt-hardcode.yaml"
+    },
+    {
+      "upstream_id": "detect-child-process",
+      "effective_id": "detect-child-process.lang",
+      "source_file": "javascript\\lang\\security\\detect-child-process.yaml"
+    }
+  ],
+  "id_rename_scheme": "<upstream_id>.<first non-generic dir under language root>",
+  "rules_by_language": {
+    "python": {
+      "rules": 91,
+      "taint": 37
+    },
+    "javascript": {
+      "rules": 95,
+      "taint": 44
+    },
+    "typescript": {
+      "rules": 95,
+      "taint": 45
+    }
+  },
+  "rules_by_cwe": {
+    "022": 8,
+    "078": 41,
+    "079": 59,
+    "089": 34,
+    "094": 13,
+    "798": 8,
+    "918": 25
+  },
+  "artifacts": {
+    "rules.yaml": {
+      "sha256": "7caf50f01b2ebb7a5e9b95085173f015015133c34926fa694c69df15e6994fdf",
+      "bytes": 486251,
+      "rules": 188
+    },
+    "py_all.yaml": {
+      "sha256": "d9607eb088f330e8eda861c9bb06989bd7828bb67fc6c0f21edd3e79fb4a168e",
+      "bytes": 289092,
+      "rules": 91
+    },
+    "py_taint.yaml": {
+      "sha256": "2644ff0ccfc6b2cfbf89363f75d0e2f3eb7e687e2030367de401cdeaaec2d219",
+      "bytes": 102072,
+      "rules": 37
+    },
+    "py_nontaint.yaml": {
+      "sha256": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c",
+      "bytes": 187028,
+      "rules": 54
+    },
+    "js_all.yaml": {
+      "sha256": "22361a8f77eb3be53fe501cb6c5c074ca4573c0affdaf6fec08439f12b94ee22",
+      "bytes": 192226,
+      "rules": 95
+    },
+    "ts_all.yaml": {
+      "sha256": "15b3066b90f55f17a1f7357deeac4d009a871b3b33169bb5a426643ecb5d4878",
+      "bytes": 194750,
+      "rules": 95
+    },
+    "ts_dedup.yaml": {
+      "sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+      "bytes": 187654,
+      "rules": 92
+    },
+    "py_block.yaml": {
+      "sha256": "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+      "bytes": 278490,
+      "rules": 85
+    }
+  },
+  "block_subset": {
+    "definition": "python rules whose own upstream test file yields >=1 result",
+    "source": "py_block_ids.json",
+    "rules": 85
+  },
+  "rules_yaml_sha256": "7caf50f01b2ebb7a5e9b95085173f015015133c34926fa694c69df15e6994fdf",
+  "rules_yaml_bytes": 486251,
+  "builder": "research/semgrep-bench/build_snapshot.py",
+  "s_max": {
+    "definition": "S_max(lang) = 2 x max(该语言实测大档文件字节数)；尺寸门，与时间侧 2 s 单调用上限不共用推导",
+    "python": {
+      "source_max_file_bytes": 371594,
+      "source_file": "descriptor_pb2.py",
+      "s_max_bytes": 743188
+    },
+    "typescript": null
+  }
+}

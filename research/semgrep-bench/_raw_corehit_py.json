@@ -1,0 +1,68 @@
+[
+ {
+  "phase": "warmup",
+  "i": 0,
+  "ms": 310.9,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9012,
+  "label": "core-hit-py",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 1,
+  "ms": 290.8,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9000,
+  "label": "core-hit-py",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 2,
+  "ms": 291.4,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9007,
+  "label": "core-hit-py",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 3,
+  "ms": 255.5,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9010,
+  "label": "core-hit-py",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 4,
+  "ms": 241.9,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9010,
+  "label": "core-hit-py",
+  "err_head": ""
+ },
+ {
+  "phase": "run",
+  "i": 5,
+  "ms": 261.9,
+  "rc": 0,
+  "results": 4,
+  "errors": 0,
+  "out_bytes": 9012,
+  "label": "core-hit-py",
+  "err_head": ""
+ }
+]

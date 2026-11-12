@@ -1,0 +1,500 @@
+{
+  "ticket": "#25 新 rules_sha256 下预算与判据重认证",
+  "supersedes": {
+    "artifact": "research/semgrep-bench/rules_rebuild.json",
+    "old_rules_sha256": "a8629a07c6cea67438dc70db3583a52b3279c869882d5a144146e8476571c4e9",
+    "reason": "rules.yaml 因 #24 改名重建，sha 变更；#21 三条判据与 #23 成本/覆盖数字须按新 sha 重认"
+  },
+  "ruleset": {
+    "upstream_commit": "16b9e6d45f10649f6a531ec4838ed9924372c3bc",
+    "rules_yaml_sha256": "7caf50f01b2ebb7a5e9b95085173f015015133c34926fa694c69df15e6994fdf",
+    "rules_yaml_bytes": 486251,
+    "rows": 188,
+    "unique_effective_ids": 188,
+    "renamed_bodies": 30,
+    "py_block_yaml_sha256": "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+    "ts_all_yaml_sha256": "15b3066b90f55f17a1f7357deeac4d009a871b3b33169bb5a426643ecb5d4878",
+    "ts_dedup_yaml_sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+    "py_all_yaml_sha256": "d9607eb088f330e8eda861c9bb06989bd7828bb67fc6c0f21edd3e79fb4a168e"
+  },
+  "engines": {
+    "semgrep_core": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+    "pysemgrep": "semgrep scan (1.184.0 venv)",
+    "osemgrep": "semgrep scan --experimental (1.184.0)",
+    "host": "windows, powershell 5.1, rendered through python subprocess"
+  },
+  "criterion_i_py_block_small": {
+    "definition": "n>=10 真实 py 文件（5-50 KiB），每文件 1 次，semgrep-core，py_block.yaml",
+    "old": {
+      "sha256": "faf15c5c3bb89bc14b109a26a4830771b93b2f3b8b32c7eb41d7f905b1fd191a",
+      "n": 10,
+      "p50_ms": 338.3,
+      "p95_ms": 458.5,
+      "max_ms": 460.2,
+      "results_total": 0
+    },
+    "new": {
+      "n": 10,
+      "p50_ms": 290.0,
+      "p95_ms": 373.8,
+      "max_ms": 396.8,
+      "min_ms": 262.5,
+      "results_total": 0,
+      "failures": 0
+    },
+    "limit_ms": 1200,
+    "verdict": "pass"
+  },
+  "criterion_i_py_block_big": {
+    "definition": "n=10 真实 py 文件（103-363 KiB），每文件 1 次，semgrep-core，py_block.yaml；>100 KiB 段本无 block 门",
+    "old": {
+      "sha256": "faf15c5c3bb89bc14b109a26a4830771b93b2f3b8b32c7eb41d7f905b1fd191a",
+      "n": 10,
+      "p50_ms": 1054.5,
+      "p95_ms": 9155.1,
+      "max_ms": 12701.4,
+      "results_total": 31
+    },
+    "new": {
+      "n": 10,
+      "p50_ms": 1102.2,
+      "p95_ms": 6949.7,
+      "max_ms": 9817.6,
+      "min_ms": 364.5,
+      "results_total": 31,
+      "failures": 0
+    },
+    "note": "最慢样本 test_os.py（190304 B，30 命中）仍超 8 s 硬上限；>100 KiB fail-open 结论不变",
+    "verdict": "same_shape"
+  },
+  "criterion_ii_cwe_coverage": {
+    "definition": "每条规则用上游同目录同名测试文件作正样本，命中 = results >= 1",
+    "old": {
+      "firing_rows": 173,
+      "rules_rows": 188,
+      "py_unique_ids": 83,
+      "py_firing_unique_ids": 78,
+      "py_cwe_with_firing": [
+        "022",
+        "078",
+        "079",
+        "089",
+        "798",
+        "918"
+      ],
+      "py_firing_per_cwe": {
+        "022": {
+          "rules": 5,
+          "taint": 0,
+          "firing": 4,
+          "taint_ratio": 0.0,
+          "firing_ratio": 0.8
+        },
+        "078": {
+          "rules": 33,
+          "taint": 20,
+          "firing": 29,
+          "taint_ratio": 0.606,
+          "firing_ratio": 0.879
+        },
+        "079": {
+          "rules": 23,
+          "taint": 6,
+          "firing": 19,
+          "taint_ratio": 0.261,
+          "firing_ratio": 0.826
+        },
+        "089": {
+          "rules": 23,
+          "taint": 8,
+          "firing": 20,
+          "taint_ratio": 0.348,
+          "firing_ratio": 0.87
+        },
+        "798": {
+          "rules": 2,
+          "taint": 1,
+          "firing": 2,
+          "taint_ratio": 0.5,
+          "firing_ratio": 1.0
+        },
+        "918": {
+          "rules": 5,
+          "taint": 2,
+          "firing": 4,
+          "taint_ratio": 0.4,
+          "firing_ratio": 0.8
+        }
+      }
+    },
+    "new": {
+      "firing_rows": 188,
+      "rules_rows": 188,
+      "py_firing_count": 91,
+      "matrix": {
+        "022": {
+          "python": {
+            "rules": 5,
+            "taint": 0,
+            "firing": 5,
+            "taint_ratio": 0.0,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 3,
+            "taint": 3,
+            "firing": 3,
+            "taint_ratio": 1.0,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 3,
+            "taint": 3,
+            "firing": 3,
+            "taint_ratio": 1.0,
+            "firing_ratio": 1.0
+          }
+        },
+        "078": {
+          "python": {
+            "rules": 33,
+            "taint": 20,
+            "firing": 33,
+            "taint_ratio": 0.606,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 8,
+            "taint": 5,
+            "firing": 8,
+            "taint_ratio": 0.625,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 8,
+            "taint": 5,
+            "firing": 8,
+            "taint_ratio": 0.625,
+            "firing_ratio": 1.0
+          }
+        },
+        "079": {
+          "python": {
+            "rules": 23,
+            "taint": 6,
+            "firing": 23,
+            "taint_ratio": 0.261,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 34,
+            "taint": 12,
+            "firing": 34,
+            "taint_ratio": 0.353,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 35,
+            "taint": 13,
+            "firing": 35,
+            "taint_ratio": 0.371,
+            "firing_ratio": 1.0
+          }
+        },
+        "089": {
+          "python": {
+            "rules": 23,
+            "taint": 8,
+            "firing": 23,
+            "taint_ratio": 0.348,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 11,
+            "taint": 10,
+            "firing": 11,
+            "taint_ratio": 0.909,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 11,
+            "taint": 10,
+            "firing": 11,
+            "taint_ratio": 0.909,
+            "firing_ratio": 1.0
+          }
+        },
+        "094": {
+          "javascript": {
+            "rules": 13,
+            "taint": 5,
+            "firing": 13,
+            "taint_ratio": 0.385,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 13,
+            "taint": 5,
+            "firing": 13,
+            "taint_ratio": 0.385,
+            "firing_ratio": 1.0
+          }
+        },
+        "798": {
+          "python": {
+            "rules": 2,
+            "taint": 1,
+            "firing": 2,
+            "taint_ratio": 0.5,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 6,
+            "taint": 2,
+            "firing": 6,
+            "taint_ratio": 0.333,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 6,
+            "taint": 2,
+            "firing": 6,
+            "taint_ratio": 0.333,
+            "firing_ratio": 1.0
+          }
+        },
+        "918": {
+          "python": {
+            "rules": 5,
+            "taint": 2,
+            "firing": 5,
+            "taint_ratio": 0.4,
+            "firing_ratio": 1.0
+          },
+          "javascript": {
+            "rules": 20,
+            "taint": 7,
+            "firing": 20,
+            "taint_ratio": 0.35,
+            "firing_ratio": 1.0
+          },
+          "typescript": {
+            "rules": 19,
+            "taint": 7,
+            "firing": 19,
+            "taint_ratio": 0.368,
+            "firing_ratio": 1.0
+          }
+        }
+      },
+      "not_firing": []
+    },
+    "py_cwe_with_firing": 6,
+    "py_cwe_missing": [
+      "094"
+    ],
+    "verdict": "pass",
+    "artifact_note": "旧 173/188 中 15 条 no_hit 全部是重名 id 行：coverage_matrix.py 用 {id: body} 取规则体，同 id 只留最后一个 body，等于拿错 body 去测自己测试文件；改名后 id 唯一，188/188 命中。6/7 类不变，094 仍是 python 零规则。"
+  },
+  "py_block_composition": {
+    "rows": 85,
+    "unique_effective_ids": 85,
+    "taint_rows": 31,
+    "firing_rows": 85,
+    "old": {
+      "rows": 85,
+      "unique_ids": 78
+    },
+    "fixture_distinct_rules": 3,
+    "note": "#25 票面「实响 6 条 / 其中 taint 3 条」无法复现；6 与 3 分别来自 33 条时代（py block 子集 6 条、3 条 taint）的旧口径，与 85 条规则集不同源。"
+  },
+  "criterion_iii_payload": {
+    "fixtures": {
+      "hit.py": 3,
+      "target.py": 4,
+      "target.ts": 1
+    },
+    "fields": [
+      "check_id",
+      "extra.severity",
+      "extra.metadata.cwe",
+      "start/end line",
+      "path"
+    ],
+    "paths_scanned_len_eq_1": true,
+    "paths_scanned_is_absolute": true,
+    "errors_zero": true,
+    "verdict": "pass"
+  },
+  "ts_rule_count": {
+    "question": "ts_all 实际执行规则数，core 与 osemgrep 分开报；92 的来源",
+    "method": "core 取 json 的 rules_by_engine 长度；CLI 取 stderr 'Ran N rules'；target = fixtures/target.ts（或 target.py 对照）",
+    "rows": [
+      {
+        "config": "ts_all.yaml (95 rows, 95 unique ids)",
+        "target": "target.ts",
+        "core_rules": 95,
+        "core_skipped": 0,
+        "pysemgrep_ran": 95,
+        "osemgrep_ran": 95,
+        "results": 1
+      },
+      {
+        "config": "ts_all.yaml",
+        "target": "target.py",
+        "core_rules": null,
+        "pysemgrep_ran": 95,
+        "osemgrep_ran": 95,
+        "files_scanned": 0,
+        "results": 0
+      },
+      {
+        "config": "ts_dedup.yaml (92 rows)",
+        "target": "target.ts",
+        "core_rules": 92,
+        "core_skipped": 0,
+        "pysemgrep_ran": 92,
+        "osemgrep_ran": 92,
+        "results": 0
+      },
+      {
+        "config": "rules.yaml (188 rows)",
+        "target": "target.ts",
+        "core_rules": 95,
+        "pysemgrep_ran": 97,
+        "osemgrep_ran": 188,
+        "results": 1
+      },
+      {
+        "config": "py_all.yaml (91 rows)",
+        "target": "target.py",
+        "core_rules": 91,
+        "pysemgrep_ran": 91,
+        "osemgrep_ran": 91,
+        "results": 4
+      }
+    ],
+    "origin_of_92": "旧 ts_all 95 行里有 3 个 upstream id 重名（4 个 body），CLI/core 按 id 去重后 92；改名后 95 行 id 全唯一，两引擎都报 95。92 是去重数，不是「目标适用规则数」。",
+    "ran_semantics": "Ran N 不是单一语义：osemgrep 报声明数（188）；pysemgrep 报去重后且语言家族匹配的规则数（js∪ts=97）；core 的 rules_by_engine 是严格按 analyzer 过滤后的执行数（typescript=95）。单语言子集上三者同为 95，不可据此推断「同语言全部执行」。"
+  },
+  "ts_256k": {
+    "sample": "synthetic 261843 B, 811 sinks",
+    "ts_dedup_92": {
+      "ms": 4151.5,
+      "results": 0
+    },
+    "ts_all_95": {
+      "ms": 23516.8,
+      "results": 811
+    },
+    "old_record": {
+      "ts_dedup_92_ms": 6596.4,
+      "ts_all_95_ms": 53200.0
+    },
+    "impact": "改名后生效集是 95，TS 256 KiB 成本取 95 条量级（本次 23.5 s，旧记录 53.2 s）；6.6 s 是 92 条去重集，已失效。ts >100 KiB 本就 fail-open、不进预算表，结论不变；但 #23 §5 的 6.6 s 不能再引用。"
+  },
+  "evidence": [
+    "_raw_py_block_small_resha.json",
+    "_raw_py_block_big_resha.json",
+    "_raw_coverage_resha.json",
+    "_raw_fixture_probe_resha.json",
+    "_raw_ts_tsall_256k_resha.json",
+    "_raw_ts_tsdedup_256k_resha.json"
+  ],
+  "verdict": "py block 保留；三条判据在新 sha 下全过；(ii) 的旧读数作废并上调为 188/188；ts 的 92 口径确认为 id 去重数，改名后 95 生效，256 KiB 成本上界改用 95 条量级。 M1/M2 补测：py_nontaint 小/大档与 ts 小档均在 1.2 s 内，命中数与旧值一致。",
+  "ruleset_fingerprints": {
+    "ruleset": "7caf50f01b2ebb7a5e9b95085173f015015133c34926fa694c69df15e6994fdf",
+    "py_all": "d9607eb088f330e8eda861c9bb06989bd7828bb67fc6c0f21edd3e79fb4a168e",
+    "py_block": "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+    "py_nontaint": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c",
+    "ts_all": "15b3066b90f55f17a1f7357deeac4d009a871b3b33169bb5a426643ecb5d4878",
+    "ts_dedup": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+    "note": "denylist 与失效判定使用本次实际加载子集的指纹，不传总表指纹；子集身份必须单独成列 subset_id，禁止只记指纹。"
+  },
+  "criterion_i_py_nontaint_small": {
+    "definition": "同 py block 小档同一批 10 个真实文件（5.5-39.7 KiB），py_nontaint.yaml",
+    "old": {
+      "sha256": "618ff267",
+      "n": 10,
+      "p50_ms": 292.1,
+      "p95_ms": 355.4,
+      "max_ms": 365.7,
+      "results_total": 0
+    },
+    "new": {
+      "n": 10,
+      "p50_ms": 317.1,
+      "p95_ms": 336.2,
+      "max_ms": 337.0,
+      "min_ms": 279.5,
+      "results_total": 0,
+      "failures": 0,
+      "rules_count": 54,
+      "rules_sha256": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c"
+    },
+    "limit_ms": 1200,
+    "verdict": "pass",
+    "note": "命中数 0 与旧值一致；执行体逐字相同（改名只动 3 行），max 337.0 对 365.7 属同量级波动。"
+  },
+  "criterion_i_py_nontaint_big": {
+    "definition": "同 py block 大档同一批 10 个真实文件（103-363 KiB）",
+    "old": {
+      "sha256": "618ff267",
+      "n": 10,
+      "p50_ms": 473.0,
+      "p95_ms": 1063.0,
+      "max_ms": 1376.1,
+      "results_total": 31
+    },
+    "new": {
+      "n": 10,
+      "p50_ms": 540.9,
+      "p95_ms": 1152.6,
+      "max_ms": 1459.6,
+      "min_ms": 325.2,
+      "results_total": 31,
+      "failures": 0,
+      "rules_count": 54,
+      "rules_sha256": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c"
+    },
+    "note": "max 1459.6 对 1376.1（+6%）、命中 31 不变；该档仍 <S_max 段，可跑但不能 block 未认证规则。",
+    "verdict": "same_shape"
+  },
+  "ts_small_core": {
+    "definition": "n=10 真实 .ts 文件（5.5-8.7 KiB），semgrep-core，ts_all.yaml（改名后生效集 95 条）",
+    "old": {
+      "sha256": "f1691438",
+      "rules": 92,
+      "n": 10,
+      "p50_ms": 369.9,
+      "p95_ms": 430.3,
+      "max_ms": 451.5,
+      "results_total": 18
+    },
+    "new": {
+      "n": 10,
+      "p50_ms": 389.0,
+      "p95_ms": 442.1,
+      "max_ms": 455.5,
+      "min_ms": 376.7,
+      "results_total": 18,
+      "failures": 0,
+      "rules_count": 95,
+      "rules_sha256": "15b3066b90f55f17a1f7357deeac4d009a871b3b33169bb5a426643ecb5d4878"
+    },
+    "limit_ms": 1200,
+    "verdict": "pass",
+    "note": "复活的高密度 taint body 在 5-9 KiB 真实文件上未增加命中（18 = 18），成本 +0.9%（max 455.5 对 451.5）；合成 256 KiB 上的 5.7x 长尾不进入小档。"
+  },
+  "s_max": {
+    "definition": "S_max(lang) = 2 x max(该语言实测大档文件字节数)，纯尺寸门；时间侧另设 2 s 单调用上限，两者不得共用推导",
+    "python": {
+      "source_max_file_bytes": 371594,
+      "source_file": "descriptor_pb2.py",
+      "s_max_bytes": 743188,
+      "s_max_kib": 725.8
+    },
+    "typescript": null,
+    "note": "ts >100 KiB 直接 fail-open，无 S_max；py 100 KiB-S_max 段只跑 nontaint 且仅已认证规则可 block。"
+  }
+}

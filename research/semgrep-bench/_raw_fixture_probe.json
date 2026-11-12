@@ -1,0 +1,64 @@
+{
+  "rules": {},
+  "fixtures": [
+    {
+      "fixture": "hit.py",
+      "rules": "py_all.yaml",
+      "bytes": 100,
+      "expected_results": 3,
+      "check_ids": [
+        "dangerous-subprocess-use-audit",
+        "dangerous-system-call-audit",
+        "subprocess-shell-true"
+      ],
+      "rc": 0,
+      "errors": 0,
+      "paths_scanned": [
+        "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\hit.py"
+      ],
+      "paths_scanned_is_absolute_fpath": true
+    },
+    {
+      "fixture": "target.py",
+      "rules": "py_all.yaml",
+      "bytes": 116,
+      "expected_results": 4,
+      "check_ids": [
+        "dangerous-subprocess-use-audit",
+        "subprocess-shell-true"
+      ],
+      "rc": 0,
+      "errors": 0,
+      "paths_scanned": [
+        "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\target.py"
+      ],
+      "paths_scanned_is_absolute_fpath": true
+    },
+    {
+      "fixture": "target.ts",
+      "rules": "ts_all.yaml",
+      "bytes": 89,
+      "expected_results": 1,
+      "check_ids": [
+        "detect-child-process"
+      ],
+      "rc": 0,
+      "errors": 0,
+      "paths_scanned": [
+        "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\target.ts"
+      ],
+      "paths_scanned_is_absolute_fpath": true
+    }
+  ],
+  "ignore_probe": {
+    "cwd": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures",
+    "semgrepignore": "target.py",
+    "target": "target.py",
+    "results_with_ignore": 4,
+    "paths_scanned_with_ignore": [
+      "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\target.py"
+    ],
+    "ignore_applied": false,
+    "rc": 0
+  }
+}

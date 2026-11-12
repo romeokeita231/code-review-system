@@ -1,0 +1,348 @@
+[
+ {
+  "case": "py_hit",
+  "file": "hit.py",
+  "language_id": "python",
+  "bytes": 489,
+  "git_repo": true,
+  "init_ms": 537.9,
+  "init_ok": true,
+  "publishes": [
+   {
+    "t": 1794291739.8,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   },
+   {
+    "t": 1794291740.13,
+    "n": 3,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [
+     "code",
+     "message",
+     "range",
+     "severity",
+     "source"
+    ],
+    "diags": [
+     {
+      "code": "......snapshot.hardcoded-token",
+      "message": "A hard-coded credential was detected. It is not recommended to store credentials in source-code, as this risks secrets being leaked and used by either an internal or external malicious adversary. It is recommended to use environment variables to securely provide credentials or retrieve credentials from a secure vault or HSM (Hardware Security Module).",
+      "range": {
+       "end": {
+        "character": 5,
+        "line": 10
+       },
+       "start": {
+        "character": 11,
+        "line": 6
+       }
+      },
+      "severity": 2,
+      "source": "Semgrep"
+     },
+     {
+      "code": "......snapshot.hardcoded-password-default-argument",
+      "message": "Hardcoded password is used as a default argument to 'connect'. This could be dangerous if a real password is not supplied.",
+      "range": {
+       "end": {
+        "character": 15,
+        "line": 14
+       },
+       "start": {
+        "character": 0,
+        "line": 13
+       }
+      },
+      "severity": 2,
+      "source": "Semgrep"
+     },
+     {
+      "code": "......snapshot.ssrf-requests",
+      "message": "Data from request object is passed to a new server-side request. This could lead to a server-side request forgery (SSRF). To mitigate, ensure that schemes and hosts are validated against an allowlist, do not forward the response to the user, and ensure proper authentication and transport-layer security in the proxied request.",
+      "range": {
+       "end": {
+        "character": 54,
+        "line": 18
+       },
+       "start": {
+        "character": 11,
+        "line": 18
+       }
+      },
+      "severity": 1,
+      "source": "Semgrep"
+     }
+    ]
+   }
+  ],
+  "didopen_wall_ms": 20014.5,
+  "first_publish_ms": 222.6,
+  "n_publish_messages": 2,
+  "n_nonempty_publishes": 1,
+  "final_diag_count": 3,
+  "outcome": "diagnostics_nonempty",
+  "diag_rule_ids": [
+   "......snapshot.hardcoded-token",
+   "......snapshot.hardcoded-password-default-argument",
+   "......snapshot.ssrf-requests"
+  ],
+  "diag_full_first": {
+   "code": "......snapshot.hardcoded-token",
+   "message": "A hard-coded credential was detected. It is not recommended to store credentials in source-code, as this risks secrets being leaked and used by either an internal or external malicious adversary. It is recommended to use environment variables to securely provide credentials or retrieve credentials from a secure vault or HSM (Hardware Security Module).",
+   "range": {
+    "end": {
+     "character": 5,
+     "line": 10
+    },
+    "start": {
+     "character": 11,
+     "line": 6
+    }
+   },
+   "severity": 2,
+   "source": "Semgrep"
+  },
+  "did_save_publishes": 1,
+  "did_save_ms": 8010.6,
+  "alive": true,
+  "stderr_tail": [
+   "Scanned single file",
+   "┌─────────────┐",
+   "│ Scan Status │",
+   "└─────────────┘",
+   "Scanning 1 file tracked by git with 31 Code rules:",
+   "Language   Rules   Files          Origin   Rules",
+   "──────────────────────────        ────────────────",
+   "python         6       1          Custom       6",
+   "Semgrep errors:",
+   "Semgrep skipped 0 rules",
+   "Scanned 1 files",
+   "Found 3 matches"
+  ]
+ },
+ {
+  "case": "py_nohit",
+  "file": "nohit.py",
+  "language_id": "python",
+  "bytes": 47,
+  "git_repo": true,
+  "init_ms": 549.4,
+  "init_ok": true,
+  "publishes": [
+   {
+    "t": 1794291768.59,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   },
+   {
+    "t": 1794291768.79,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   }
+  ],
+  "didopen_wall_ms": 20003.0,
+  "first_publish_ms": 207.3,
+  "n_publish_messages": 2,
+  "n_nonempty_publishes": 0,
+  "final_diag_count": 0,
+  "outcome": "diagnostics_empty",
+  "did_save_publishes": 1,
+  "did_save_ms": 8003.3,
+  "alive": true,
+  "stderr_tail": [
+   "Scanned single file",
+   "┌─────────────┐",
+   "│ Scan Status │",
+   "└─────────────┘",
+   "Scanning 1 file tracked by git with 31 Code rules:",
+   "Language   Rules   Files          Origin   Rules",
+   "──────────────────────────        ────────────────",
+   "python         6       1          Custom       6",
+   "Semgrep errors:",
+   "Semgrep skipped 0 rules",
+   "Scanned 1 files",
+   "Found 0 matches"
+  ]
+ },
+ {
+  "case": "py_syntax",
+  "file": "syntax_error.py",
+  "language_id": "python",
+  "bytes": 26,
+  "git_repo": true,
+  "init_ms": 530.6,
+  "init_ok": true,
+  "publishes": [
+   {
+    "t": 1794291797.36,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   },
+   {
+    "t": 1794291797.54,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   }
+  ],
+  "didopen_wall_ms": 20008.8,
+  "first_publish_ms": 190.7,
+  "n_publish_messages": 2,
+  "n_nonempty_publishes": 0,
+  "final_diag_count": 0,
+  "outcome": "diagnostics_empty",
+  "did_save_publishes": 1,
+  "did_save_ms": 8008.8,
+  "alive": true,
+  "stderr_tail": [
+   "Scanned single file",
+   "┌─────────────┐",
+   "│ Scan Status │",
+   "└─────────────┘",
+   "Scanning 1 file tracked by git with 31 Code rules:",
+   "Language   Rules   Files          Origin   Rules",
+   "──────────────────────────        ────────────────",
+   "python         6       1          Custom       6",
+   "Semgrep errors:",
+   "Semgrep skipped 0 rules",
+   "Scanned 1 files",
+   "Found 0 matches"
+  ]
+ },
+ {
+  "case": "rb_unsupported",
+  "file": "hit.rb",
+  "language_id": "ruby",
+  "bytes": 91,
+  "git_repo": true,
+  "init_ms": 551.2,
+  "init_ok": true,
+  "publishes": [
+   {
+    "t": 1794291826.18,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   },
+   {
+    "t": 1794291826.33,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   }
+  ],
+  "didopen_wall_ms": 20019.6,
+  "first_publish_ms": 209.8,
+  "n_publish_messages": 2,
+  "n_nonempty_publishes": 0,
+  "final_diag_count": 0,
+  "outcome": "diagnostics_empty",
+  "did_save_publishes": 1,
+  "did_save_ms": 8008.1,
+  "alive": true,
+  "stderr_tail": [
+   "Scanning single file",
+   "Scanned single file",
+   "┌─────────────┐",
+   "│ Scan Status │",
+   "└─────────────┘",
+   "Scanning 1 file tracked by git with 31 Code rules:",
+   "Language   Rules   Files          Origin   Rules",
+   "──────────────────────────        ────────────────",
+   "Semgrep errors:",
+   "Semgrep skipped 0 rules",
+   "Scanned 0 files",
+   "Found 0 matches"
+  ]
+ },
+ {
+  "case": "xyz_unknown",
+  "file": "hit.xyz",
+  "language_id": "plaintext",
+  "bytes": 52,
+  "git_repo": true,
+  "init_ms": 550.7,
+  "init_ok": true,
+  "publishes": [
+   {
+    "t": 1794291855.01,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   },
+   {
+    "t": 1794291855.18,
+    "n": 0,
+    "params_keys": [
+     "diagnostics",
+     "uri"
+    ],
+    "diag_keys": [],
+    "diags": []
+   }
+  ],
+  "didopen_wall_ms": 20006.8,
+  "first_publish_ms": 219.5,
+  "n_publish_messages": 2,
+  "n_nonempty_publishes": 0,
+  "final_diag_count": 0,
+  "outcome": "diagnostics_empty",
+  "did_save_publishes": 1,
+  "did_save_ms": 8025.4,
+  "alive": true,
+  "stderr_tail": [
+   "Scanning single file",
+   "Scanned single file",
+   "┌─────────────┐",
+   "│ Scan Status │",
+   "└─────────────┘",
+   "Scanning 1 file tracked by git with 31 Code rules:",
+   "Language   Rules   Files          Origin   Rules",
+   "──────────────────────────        ────────────────",
+   "Semgrep errors:",
+   "Semgrep skipped 0 rules",
+   "Scanned 0 files",
+   "Found 0 matches"
+  ]
+ }
+]

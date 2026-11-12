@@ -1,0 +1,19 @@
+[
+ {
+  "label": "ts-core-256k-tsdedup-resha",
+  "sample": "sample.ts",
+  "sample_path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\prereq_samples\\sample.ts",
+  "sample_bytes": 261843,
+  "i": 0,
+  "ms": 4151.5,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1,
+  "engine": "semgrep-core",
+  "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+  "rules_sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+  "rules_count": 92,
+  "err_tail": ""
+ }
+]

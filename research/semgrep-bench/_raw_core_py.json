@@ -1,0 +1,615 @@
+{
+ "rc": 0,
+ "ms": 354.9,
+ "err_tail": "",
+ "doc": {
+  "version": "1.184.0",
+  "results": [
+   {
+    "check_id": "hardcoded-token",
+    "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+    "start": {
+     "line": 7,
+     "col": 12,
+     "offset": 73
+    },
+    "end": {
+     "line": 11,
+     "col": 6,
+     "offset": 230
+    },
+    "extra": {
+     "metavars": {
+      "$1": {
+       "start": {
+        "line": 1,
+        "col": 1,
+        "offset": 0
+       },
+       "end": {
+        "line": 1,
+        "col": 22,
+        "offset": 21
+       },
+       "abstract_content": "aws_secret_access_key"
+      },
+      "$BOTO": {
+       "start": {
+        "line": 7,
+        "col": 12,
+        "offset": 73
+       },
+       "end": {
+        "line": 7,
+        "col": 17,
+        "offset": 78
+       },
+       "abstract_content": "boto3"
+      },
+      "$W": {
+       "start": {
+        "line": 7,
+        "col": 18,
+        "offset": 79
+       },
+       "end": {
+        "line": 7,
+        "col": 24,
+        "offset": 85
+       },
+       "abstract_content": "client"
+      },
+      "$TOKEN": {
+       "start": {
+        "line": 10,
+        "col": 9,
+        "offset": 159
+       },
+       "end": {
+        "line": 10,
+        "col": 30,
+        "offset": 180
+       },
+       "abstract_content": "aws_secret_access_key"
+      },
+      "$VALUE": {
+       "start": {
+        "line": 10,
+        "col": 32,
+        "offset": 182
+       },
+       "end": {
+        "line": 10,
+        "col": 72,
+        "offset": 222
+       },
+       "abstract_content": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      }
+     },
+     "engine_kind": "OSS",
+     "is_ignored": false,
+     "message": "A hard-coded credential was detected. It is not recommended to store credentials in source-code, as this risks secrets being leaked and used by either an internal or external malicious adversary. It is recommended to use environment variables to securely provide credentials or retrieve credentials from a secure vault or HSM (Hardware Security Module).",
+     "metadata": {
+      "cwe": [
+       "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "references": [
+       "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+       "https://bento.dev/checks/boto3/hardcoded-access-token/",
+       "https://aws.amazon.com/blogs/security/what-to-do-if-you-inadvertently-expose-an-aws-access-key/"
+      ],
+      "owasp": [
+       "A07:2021 - Identification and Authentication Failures",
+       "A07:2025 - Authentication Failures"
+      ],
+      "category": "security",
+      "technology": [
+       "boto3",
+       "secrets"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "likelihood": "HIGH",
+      "impact": "MEDIUM",
+      "confidence": "MEDIUM"
+     },
+     "severity": "WARNING",
+     "dataflow_trace": {
+      "taint_source": [
+       "CliLoc",
+       [
+        {
+         "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+         "start": {
+          "line": 10,
+          "col": 31,
+          "offset": 181
+         },
+         "end": {
+          "line": 10,
+          "col": 73,
+          "offset": 223
+         }
+        },
+        "\"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\""
+       ]
+      ],
+      "intermediate_vars": [],
+      "taint_sink": [
+       "CliLoc",
+       [
+        {
+         "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+         "start": {
+          "line": 7,
+          "col": 12,
+          "offset": 73
+         },
+         "end": {
+          "line": 11,
+          "col": 6,
+          "offset": 230
+         }
+        },
+        "boto3.client(\n        \"s3\",\n        aws_access_key_id=\"AKIAIOSFODNN7EXAMPLE\",\n        aws_secret_access_key=\"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\",\n    )"
+       ]
+      ]
+     },
+     "validation_state": "NO_VALIDATOR"
+    }
+   },
+   {
+    "check_id": "hardcoded-password-default-argument",
+    "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+    "start": {
+     "line": 14,
+     "col": 1,
+     "offset": 233
+    },
+    "end": {
+     "line": 15,
+     "col": 16,
+     "offset": 299
+    },
+    "extra": {
+     "metavars": {
+      "$FUNC": {
+       "start": {
+        "line": 14,
+        "col": 5,
+        "offset": 237
+       },
+       "end": {
+        "line": 14,
+        "col": 12,
+        "offset": 244
+       },
+       "abstract_content": "connect"
+      }
+     },
+     "engine_kind": "OSS",
+     "is_ignored": false,
+     "message": "Hardcoded password is used as a default argument to 'connect'. This could be dangerous if a real password is not supplied.",
+     "metadata": {
+      "cwe": [
+       "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "category": "security",
+      "technology": [
+       "python"
+      ],
+      "owasp": [
+       "A07:2021 - Identification and Authentication Failures",
+       "A07:2025 - Authentication Failures"
+      ],
+      "references": [
+       "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "audit"
+      ],
+      "likelihood": "LOW",
+      "impact": "MEDIUM",
+      "confidence": "LOW"
+     },
+     "severity": "WARNING",
+     "validation_state": "NO_VALIDATOR"
+    }
+   },
+   {
+    "check_id": "ssrf-requests",
+    "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+    "start": {
+     "line": 19,
+     "col": 12,
+     "offset": 331
+    },
+    "end": {
+     "line": 19,
+     "col": 55,
+     "offset": 374
+    },
+    "extra": {
+     "metavars": {
+      "$FUNC": {
+       "start": {
+        "line": 19,
+        "col": 21,
+        "offset": 340
+       },
+       "end": {
+        "line": 19,
+        "col": 24,
+        "offset": 343
+       },
+       "abstract_content": "get"
+      },
+      "$W": {
+       "start": {
+        "line": 19,
+        "col": 39,
+        "offset": 358
+       },
+       "end": {
+        "line": 19,
+        "col": 43,
+        "offset": 362
+       },
+       "abstract_content": "args"
+      }
+     },
+     "engine_kind": "OSS",
+     "is_ignored": false,
+     "message": "Data from request object is passed to a new server-side request. This could lead to a server-side request forgery (SSRF). To mitigate, ensure that schemes and hosts are validated against an allowlist, do not forward the response to the user, and ensure proper authentication and transport-layer security in the proxied request.",
+     "metadata": {
+      "cwe": [
+       "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "owasp": [
+       "A10:2021 - Server-Side Request Forgery (SSRF)",
+       "A01:2025 - Broken Access Control"
+      ],
+      "references": [
+       "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+      ],
+      "category": "security",
+      "technology": [
+       "flask"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "likelihood": "MEDIUM",
+      "impact": "HIGH",
+      "confidence": "MEDIUM"
+     },
+     "severity": "ERROR",
+     "validation_state": "NO_VALIDATOR"
+    }
+   },
+   {
+    "check_id": "tainted-url-host",
+    "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+    "start": {
+     "line": 24,
+     "col": 11,
+     "offset": 456
+    },
+    "end": {
+     "line": 24,
+     "col": 28,
+     "offset": 473
+    },
+    "extra": {
+     "metavars": {
+      "$ANYTHING": {
+       "start": {
+        "line": 23,
+        "col": 26,
+        "offset": 429
+       },
+       "end": {
+        "line": 23,
+        "col": 30,
+        "offset": 433
+       },
+       "abstract_content": "args"
+      },
+      "$URLSTR": {
+       "start": {
+        "line": 24,
+        "col": 12,
+        "offset": 457
+       },
+       "end": {
+        "line": 24,
+        "col": 20,
+        "offset": 465
+       },
+       "abstract_content": "https://"
+      }
+     },
+     "engine_kind": "OSS",
+     "is_ignored": false,
+     "message": "User data flows into the host portion of this manually-constructed URL. This could allow an attacker to send data to their own server, potentially exposing sensitive data such as cookies or authorization information sent with this request. They could also probe internal servers or other resources that the server running this code can access. (This is called server-side request forgery, or SSRF.) Do not allow arbitrary hosts. Instead, create an allowlist for approved hosts, or hardcode the correct host.",
+     "metadata": {
+      "cwe": [
+       "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "owasp": [
+       "A10:2021 - Server-Side Request Forgery (SSRF)",
+       "A01:2025 - Broken Access Control"
+      ],
+      "references": [
+       "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+      ],
+      "category": "security",
+      "technology": [
+       "flask"
+      ],
+      "cwe2022-top25": true,
+      "cwe2021-top25": true,
+      "subcategory": [
+       "vuln"
+      ],
+      "impact": "MEDIUM",
+      "likelihood": "MEDIUM",
+      "confidence": "MEDIUM"
+     },
+     "severity": "WARNING",
+     "dataflow_trace": {
+      "taint_source": [
+       "CliLoc",
+       [
+        {
+         "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+         "start": {
+          "line": 23,
+          "col": 12,
+          "offset": 415
+         },
+         "end": {
+          "line": 23,
+          "col": 30,
+          "offset": 433
+         }
+        },
+        "flask.request.args"
+       ]
+      ],
+      "intermediate_vars": [
+       {
+        "location": {
+         "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+         "start": {
+          "line": 23,
+          "col": 5,
+          "offset": 408
+         },
+         "end": {
+          "line": 23,
+          "col": 9,
+          "offset": 412
+         }
+        },
+        "content": "host"
+       }
+      ],
+      "taint_sink": [
+       "CliLoc",
+       [
+        {
+         "path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+         "start": {
+          "line": 24,
+          "col": 11,
+          "offset": 456
+         },
+         "end": {
+          "line": 24,
+          "col": 28,
+          "offset": 473
+         }
+        },
+        "\"https://\" + host"
+       ]
+      ]
+     },
+     "validation_state": "NO_VALIDATOR"
+    }
+   }
+  ],
+  "errors": [],
+  "paths": {
+   "scanned": [
+    "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py"
+   ]
+  },
+  "time": {
+   "rules": [],
+   "rules_parse_time": 0.08777236938476562,
+   "profiling_times": {},
+   "parsing_time": {
+    "total_time": 0.012513875961303711,
+    "per_file_time": {
+     "mean": 0.002085645993550618,
+     "std_dev": 2.174959605206873e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "scanning_time": {
+    "total_time": 0.04941582679748535,
+    "per_file_time": {
+     "mean": 0.04941582679748535,
+     "std_dev": 0.0
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_files": []
+   },
+   "matching_time": {
+    "total_time": 0.025544166564941406,
+    "per_file_and_rule_time": {
+     "mean": 0.004257361094156901,
+     "std_dev": 6.383900263371186e-05
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_files": []
+   },
+   "tainting_time": {
+    "total_time": 0.004851341247558594,
+    "per_def_and_rule_time": {
+     "mean": 0.0003234227498372396,
+     "std_dev": 4.569946582301377e-07
+    },
+    "very_slow_stats": {
+     "time_ratio": 0.0,
+     "count_ratio": 0.0
+    },
+    "very_slow_rules_on_defs": []
+   },
+   "fixpoint_timeouts": [],
+   "prefiltering": {
+    "project_level_time": 0.0,
+    "file_level_time": 0.0,
+    "rules_with_project_prefilters_ratio": 0.0,
+    "rules_with_file_prefilters_ratio": 0.8571428571428571,
+    "rules_selected_ratio": 0.8571428571428571,
+    "rules_matched_ratio": 0.8571428571428571
+   },
+   "targets": [],
+   "total_bytes": 0,
+   "max_memory_bytes": 138557568
+  },
+  "rules_by_engine": [
+   [
+    "hardcoded-token",
+    "OSS"
+   ],
+   [
+    "tainted-url-host",
+    "OSS"
+   ],
+   [
+    "ssrf-injection-requests",
+    "OSS"
+   ],
+   [
+    "ssrf-injection-urllib",
+    "OSS"
+   ],
+   [
+    "ssrf-requests",
+    "OSS"
+   ],
+   [
+    "tainted-url-host",
+    "OSS"
+   ],
+   [
+    "hardcoded-password-default-argument",
+    "OSS"
+   ]
+  ],
+  "engine_requested": "OSS",
+  "interfile_languages_used": [],
+  "skipped_rules": [],
+  "profiling_results": []
+ },
+ "audit": {
+  "top_level_keys": [
+   "engine_requested",
+   "errors",
+   "interfile_languages_used",
+   "paths",
+   "profiling_results",
+   "results",
+   "rules_by_engine",
+   "skipped_rules",
+   "time",
+   "version"
+  ],
+  "has_paths": true,
+  "paths_keys": [
+   "scanned"
+  ],
+  "paths_scanned_count": 1,
+  "paths_scanned_head": [
+   "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py"
+  ],
+  "paths_skipped_count": 0,
+  "n_results": 4,
+  "result_keys": [
+   "check_id",
+   "end",
+   "extra",
+   "path",
+   "start"
+  ],
+  "result_path": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\_run_931071\\target.py",
+  "result_check_id": "hardcoded-token",
+  "has_start_line": true,
+  "start": {
+   "line": 7,
+   "col": 12,
+   "offset": 73
+  },
+  "end": {
+   "line": 11,
+   "col": 6,
+   "offset": 230
+  },
+  "extra_keys": [
+   "dataflow_trace",
+   "engine_kind",
+   "is_ignored",
+   "message",
+   "metadata",
+   "metavars",
+   "severity",
+   "validation_state"
+  ],
+  "extra_severity": "WARNING",
+  "extra_metadata_keys": [
+   "category",
+   "confidence",
+   "cwe",
+   "cwe2021-top25",
+   "cwe2022-top25",
+   "impact",
+   "likelihood",
+   "owasp",
+   "references",
+   "subcategory",
+   "technology"
+  ],
+  "extra_metadata_cwe": [
+   "CWE-798: Use of Hard-coded Credentials"
+  ],
+  "extra_metadata_cwe_type": "list",
+  "extra_message_present": true,
+  "n_errors": 0,
+  "rule_ids": [
+   "hardcoded-password-default-argument",
+   "hardcoded-token",
+   "ssrf-requests",
+   "tainted-url-host"
+  ]
+ }
+}

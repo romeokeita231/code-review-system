@@ -1,0 +1,46 @@
+{
+  "artifacts": {
+    "rules.yaml": {
+      "declared": 188,
+      "unique": 188,
+      "cli_rc": 0,
+      "cli_ran_rules": 188
+    },
+    "py_all.yaml": {
+      "declared": 91,
+      "unique": 91,
+      "cli_rc": 0,
+      "cli_ran_rules": 91
+    },
+    "py_taint.yaml": {
+      "declared": 37,
+      "unique": 37,
+      "cli_rc": 0,
+      "cli_ran_rules": 37
+    },
+    "py_nontaint.yaml": {
+      "declared": 54,
+      "unique": 54,
+      "cli_rc": 0,
+      "cli_ran_rules": 54
+    },
+    "js_all.yaml": {
+      "declared": 95,
+      "unique": 95,
+      "cli_rc": 0,
+      "cli_ran_rules": 95
+    },
+    "ts_all.yaml": {
+      "declared": 95,
+      "unique": 95,
+      "cli_rc": 0,
+      "cli_ran_rules": 95
+    },
+    "py_block.yaml": {
+      "declared": 85,
+      "unique": 85,
+      "cli_rc": 0,
+      "cli_ran_rules": 85
+    }
+  }
+}

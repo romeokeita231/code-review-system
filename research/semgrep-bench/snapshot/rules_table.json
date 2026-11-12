@@ -1,0 +1,3296 @@
+{
+ "rules_total": 188,
+ "is_taint_total": 82,
+ "mode_taint_total": 82,
+ "rules": [
+  {
+   "id": "formatted-string-bashoperator",
+   "source_file": "python\\airflow\\security\\audit\\formatted-string-bashoperator.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "formatted-string-bashoperator"
+  },
+  {
+   "id": "dangerous-asyncio-create-exec",
+   "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-create-exec.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-create-exec"
+  },
+  {
+   "id": "dangerous-asyncio-exec",
+   "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-exec.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-exec"
+  },
+  {
+   "id": "dangerous-asyncio-shell",
+   "source_file": "python\\aws-lambda\\security\\dangerous-asyncio-shell.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-shell"
+  },
+  {
+   "id": "dangerous-spawn-process.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\dangerous-spawn-process.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-spawn-process"
+  },
+  {
+   "id": "dangerous-subprocess-use.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\dangerous-subprocess-use.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-subprocess-use"
+  },
+  {
+   "id": "dangerous-system-call.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\dangerous-system-call.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-system-call"
+  },
+  {
+   "id": "mysql-sqli.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\mysql-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "mysql-sqli"
+  },
+  {
+   "id": "psycopg-sqli.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\psycopg-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "psycopg-sqli"
+  },
+  {
+   "id": "pymssql-sqli",
+   "source_file": "python\\aws-lambda\\security\\pymssql-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "pymssql-sqli"
+  },
+  {
+   "id": "pymysql-sqli",
+   "source_file": "python\\aws-lambda\\security\\pymysql-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "pymysql-sqli"
+  },
+  {
+   "id": "sqlalchemy-sqli",
+   "source_file": "python\\aws-lambda\\security\\sqlalchemy-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sqlalchemy-sqli"
+  },
+  {
+   "id": "tainted-html-response.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\tainted-html-response.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-html-response"
+  },
+  {
+   "id": "tainted-html-string.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\tainted-html-string.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-html-string"
+  },
+  {
+   "id": "tainted-sql-string.aws-lambda",
+   "source_file": "python\\aws-lambda\\security\\tainted-sql-string.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "tainted-sql-string"
+  },
+  {
+   "id": "hardcoded-token",
+   "source_file": "python\\boto3\\security\\hardcoded-token.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-token"
+  },
+  {
+   "id": "avoid-mark-safe",
+   "source_file": "python\\django\\security\\audit\\avoid-mark-safe.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "avoid-mark-safe"
+  },
+  {
+   "id": "custom-expression-as-sql",
+   "source_file": "python\\django\\security\\audit\\custom-expression-as-sql.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "custom-expression-as-sql"
+  },
+  {
+   "id": "extends-custom-expression",
+   "source_file": "python\\django\\security\\audit\\extends-custom-expression.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "extends-custom-expression"
+  },
+  {
+   "id": "avoid-query-set-extra",
+   "source_file": "python\\django\\security\\audit\\query-set-extra.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "avoid-query-set-extra"
+  },
+  {
+   "id": "avoid-raw-sql",
+   "source_file": "python\\django\\security\\audit\\raw-query.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "avoid-raw-sql"
+  },
+  {
+   "id": "class-extends-safestring",
+   "source_file": "python\\django\\security\\audit\\xss\\class-extends-safestring.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "class-extends-safestring"
+  },
+  {
+   "id": "context-autoescape-off",
+   "source_file": "python\\django\\security\\audit\\xss\\context-autoescape-off.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "context-autoescape-off"
+  },
+  {
+   "id": "direct-use-of-httpresponse",
+   "source_file": "python\\django\\security\\audit\\xss\\direct-use-of-httpresponse.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "direct-use-of-httpresponse"
+  },
+  {
+   "id": "filter-with-is-safe",
+   "source_file": "python\\django\\security\\audit\\xss\\filter-with-is-safe.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "filter-with-is-safe"
+  },
+  {
+   "id": "formathtml-fstring-parameter",
+   "source_file": "python\\django\\security\\audit\\xss\\formathtml-fstring-parameter.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "formathtml-fstring-parameter"
+  },
+  {
+   "id": "global-autoescape-off",
+   "source_file": "python\\django\\security\\audit\\xss\\global-autoescape-off.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "global-autoescape-off"
+  },
+  {
+   "id": "html-magic-method",
+   "source_file": "python\\django\\security\\audit\\xss\\html-magic-method.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "html-magic-method"
+  },
+  {
+   "id": "html-safe",
+   "source_file": "python\\django\\security\\audit\\xss\\html-safe.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "html-safe"
+  },
+  {
+   "id": "raw-html-format.django",
+   "source_file": "python\\django\\security\\injection\\raw-html-format.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "raw-html-format"
+  },
+  {
+   "id": "reflected-data-httpresponse",
+   "source_file": "python\\django\\security\\injection\\reflected-data-httpresponse.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "reflected-data-httpresponse"
+  },
+  {
+   "id": "reflected-data-httpresponsebadrequest",
+   "source_file": "python\\django\\security\\injection\\reflected-data-httpresponsebadrequest.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "reflected-data-httpresponsebadrequest"
+  },
+  {
+   "id": "request-data-fileresponse",
+   "source_file": "python\\django\\security\\injection\\request-data-fileresponse.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "request-data-fileresponse"
+  },
+  {
+   "id": "tainted-url-host.django",
+   "source_file": "python\\django\\security\\injection\\tainted-url-host.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-url-host"
+  },
+  {
+   "id": "command-injection-os-system",
+   "source_file": "python\\django\\security\\injection\\command\\command-injection-os-system.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "command-injection-os-system"
+  },
+  {
+   "id": "subprocess-injection.django",
+   "source_file": "python\\django\\security\\injection\\command\\subprocess-injection.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "subprocess-injection"
+  },
+  {
+   "id": "path-traversal-file-name",
+   "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-file-name.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "path-traversal-file-name"
+  },
+  {
+   "id": "path-traversal-join",
+   "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-join.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "path-traversal-join"
+  },
+  {
+   "id": "path-traversal-open.django",
+   "source_file": "python\\django\\security\\injection\\path-traversal\\path-traversal-open.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "path-traversal-open"
+  },
+  {
+   "id": "sql-injection-using-extra-where",
+   "source_file": "python\\django\\security\\injection\\sql\\sql-injection-extra.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sql-injection-using-extra-where"
+  },
+  {
+   "id": "sql-injection-using-rawsql",
+   "source_file": "python\\django\\security\\injection\\sql\\sql-injection-rawsql.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sql-injection-using-rawsql"
+  },
+  {
+   "id": "sql-injection-db-cursor-execute",
+   "source_file": "python\\django\\security\\injection\\sql\\sql-injection-using-db-cursor-execute.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sql-injection-db-cursor-execute"
+  },
+  {
+   "id": "sql-injection-using-raw",
+   "source_file": "python\\django\\security\\injection\\sql\\sql-injection-using-raw.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sql-injection-using-raw"
+  },
+  {
+   "id": "ssrf-injection-requests",
+   "source_file": "python\\django\\security\\injection\\ssrf\\ssrf-injection-requests.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "ssrf-injection-requests"
+  },
+  {
+   "id": "ssrf-injection-urllib",
+   "source_file": "python\\django\\security\\injection\\ssrf\\ssrf-injection-urllib.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "ssrf-injection-urllib"
+  },
+  {
+   "id": "unescaped-template-extension",
+   "source_file": "python\\flask\\security\\unescaped-template-extension.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "unescaped-template-extension"
+  },
+  {
+   "id": "response-contains-unsanitized-input",
+   "source_file": "python\\flask\\security\\unsanitized-input.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "response-contains-unsanitized-input"
+  },
+  {
+   "id": "directly-returned-format-string",
+   "source_file": "python\\flask\\security\\audit\\directly-returned-format-string.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "directly-returned-format-string"
+  },
+  {
+   "id": "make-response-with-unknown-content",
+   "source_file": "python\\flask\\security\\audit\\xss\\make-response-with-unknown-content.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "make-response-with-unknown-content"
+  },
+  {
+   "id": "os-system-injection",
+   "source_file": "python\\flask\\security\\injection\\os-system-injection.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "os-system-injection"
+  },
+  {
+   "id": "path-traversal-open.flask",
+   "source_file": "python\\flask\\security\\injection\\path-traversal-open.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "022"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "path-traversal-open"
+  },
+  {
+   "id": "raw-html-format.flask",
+   "source_file": "python\\flask\\security\\injection\\raw-html-concat.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "raw-html-format"
+  },
+  {
+   "id": "ssrf-requests",
+   "source_file": "python\\flask\\security\\injection\\ssrf-requests.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "ssrf-requests"
+  },
+  {
+   "id": "subprocess-injection.flask",
+   "source_file": "python\\flask\\security\\injection\\subprocess-injection.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "subprocess-injection"
+  },
+  {
+   "id": "tainted-url-host.flask",
+   "source_file": "python\\flask\\security\\injection\\tainted-url-host.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-url-host"
+  },
+  {
+   "id": "direct-use-of-jinja2",
+   "source_file": "python\\flask\\security\\xss\\audit\\direct-use-of-jinja2.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "direct-use-of-jinja2"
+  },
+  {
+   "id": "explicit-unescape-with-markup",
+   "source_file": "python\\flask\\security\\xss\\audit\\explicit-unescape-with-markup.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "explicit-unescape-with-markup"
+  },
+  {
+   "id": "dangerous-os-exec",
+   "source_file": "python\\lang\\security\\dangerous-os-exec.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-os-exec"
+  },
+  {
+   "id": "dangerous-spawn-process.lang",
+   "source_file": "python\\lang\\security\\dangerous-spawn-process.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-spawn-process"
+  },
+  {
+   "id": "dangerous-subprocess-use.lang",
+   "source_file": "python\\lang\\security\\dangerous-subprocess-use.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-subprocess-use"
+  },
+  {
+   "id": "dangerous-system-call.lang",
+   "source_file": "python\\lang\\security\\dangerous-system-call.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-system-call"
+  },
+  {
+   "id": "dangerous-asyncio-create-exec-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-create-exec-audit"
+  },
+  {
+   "id": "dangerous-asyncio-create-exec-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-create-exec-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-create-exec-tainted-env-args"
+  },
+  {
+   "id": "dangerous-asyncio-exec-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-exec-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-exec-audit"
+  },
+  {
+   "id": "dangerous-asyncio-exec-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-exec-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-exec-tainted-env-args"
+  },
+  {
+   "id": "dangerous-asyncio-shell-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-shell-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-shell-audit"
+  },
+  {
+   "id": "dangerous-asyncio-shell-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-asyncio-shell-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-asyncio-shell-tainted-env-args"
+  },
+  {
+   "id": "dangerous-os-exec-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-os-exec-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-os-exec-audit"
+  },
+  {
+   "id": "dangerous-os-exec-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-os-exec-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-os-exec-tainted-env-args"
+  },
+  {
+   "id": "dangerous-spawn-process-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-spawn-process-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-spawn-process-audit"
+  },
+  {
+   "id": "dangerous-spawn-process-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-spawn-process-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-spawn-process-tainted-env-args"
+  },
+  {
+   "id": "dangerous-subprocess-use-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-subprocess-use-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-subprocess-use-audit"
+  },
+  {
+   "id": "dangerous-subprocess-use-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-subprocess-use-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-subprocess-use-tainted-env-args"
+  },
+  {
+   "id": "dangerous-system-call-audit",
+   "source_file": "python\\lang\\security\\audit\\dangerous-system-call-audit.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-system-call-audit"
+  },
+  {
+   "id": "dangerous-system-call-tainted-env-args",
+   "source_file": "python\\lang\\security\\audit\\dangerous-system-call-tainted-env-args.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-system-call-tainted-env-args"
+  },
+  {
+   "id": "formatted-sql-query",
+   "source_file": "python\\lang\\security\\audit\\formatted-sql-query.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "formatted-sql-query"
+  },
+  {
+   "id": "hardcoded-password-default-argument",
+   "source_file": "python\\lang\\security\\audit\\hardcoded-password-default-argument.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-password-default-argument"
+  },
+  {
+   "id": "mako-templates-detected",
+   "source_file": "python\\lang\\security\\audit\\mako-templates-detected.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "INFO",
+   "upstream_id": "mako-templates-detected"
+  },
+  {
+   "id": "subprocess-list-passed-as-string",
+   "source_file": "python\\lang\\security\\audit\\subprocess-list-passed-as-string.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "subprocess-list-passed-as-string"
+  },
+  {
+   "id": "subprocess-shell-true",
+   "source_file": "python\\lang\\security\\audit\\subprocess-shell-true.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "subprocess-shell-true"
+  },
+  {
+   "id": "paramiko-exec-command",
+   "source_file": "python\\lang\\security\\audit\\paramiko\\paramiko-exec-command.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "paramiko-exec-command"
+  },
+  {
+   "id": "aiopg-sqli",
+   "source_file": "python\\lang\\security\\audit\\sqli\\aiopg-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "aiopg-sqli"
+  },
+  {
+   "id": "asyncpg-sqli",
+   "source_file": "python\\lang\\security\\audit\\sqli\\asyncpg-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "asyncpg-sqli"
+  },
+  {
+   "id": "pg8000-sqli",
+   "source_file": "python\\lang\\security\\audit\\sqli\\pg8000-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "pg8000-sqli"
+  },
+  {
+   "id": "psycopg-sqli.lang",
+   "source_file": "python\\lang\\security\\audit\\sqli\\psycopg-sqli.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "psycopg-sqli"
+  },
+  {
+   "id": "pyramid-direct-use-of-response",
+   "source_file": "python\\pyramid\\security\\direct-use-of-response.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "pyramid-direct-use-of-response"
+  },
+  {
+   "id": "pyramid-sqlalchemy-sql-injection",
+   "source_file": "python\\pyramid\\security\\sqlalchemy-sql-injection.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "pyramid-sqlalchemy-sql-injection"
+  },
+  {
+   "id": "string-concat",
+   "source_file": "python\\sh\\security\\string-concat.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "string-concat"
+  },
+  {
+   "id": "sqlalchemy-execute-raw-query",
+   "source_file": "python\\sqlalchemy\\security\\sqlalchemy-execute-raw-query.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "sqlalchemy-execute-raw-query"
+  },
+  {
+   "id": "sqlalchemy-sql-injection",
+   "source_file": "python\\sqlalchemy\\security\\sqlalchemy-sql-injection.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sqlalchemy-sql-injection"
+  },
+  {
+   "id": "avoid-sqlalchemy-text",
+   "source_file": "python\\sqlalchemy\\security\\audit\\avoid-sqlalchemy-text.yaml",
+   "languages": [
+    "python"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "avoid-sqlalchemy-text"
+  },
+  {
+   "id": "detect-angular-element-methods",
+   "source_file": "javascript\\angular\\security\\detect-angular-element-methods.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "INFO",
+   "upstream_id": "detect-angular-element-methods"
+  },
+  {
+   "id": "detect-angular-element-taint",
+   "source_file": "javascript\\angular\\security\\detect-angular-element-taint.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-element-taint"
+  },
+  {
+   "id": "detect-angular-open-redirect",
+   "source_file": "javascript\\angular\\security\\detect-angular-open-redirect.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "detect-angular-open-redirect"
+  },
+  {
+   "id": "detect-angular-resource-loading",
+   "source_file": "javascript\\angular\\security\\detect-angular-resource-loading.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-resource-loading"
+  },
+  {
+   "id": "detect-angular-sce-disabled",
+   "source_file": "javascript\\angular\\security\\detect-angular-sce-disabled.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "detect-angular-sce-disabled"
+  },
+  {
+   "id": "detect-angular-trust-as-css-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-css.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-css-method"
+  },
+  {
+   "id": "detect-angular-trust-as-html-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-html-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-html-method"
+  },
+  {
+   "id": "detect-angular-trust-as-js-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-js-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-js-method"
+  },
+  {
+   "id": "detect-angular-trust-as-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-method"
+  },
+  {
+   "id": "detect-angular-trust-as-resourceurl-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-resourceurl-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-resourceurl-method"
+  },
+  {
+   "id": "detect-angular-trust-as-url-method",
+   "source_file": "javascript\\angular\\security\\detect-angular-trust-as-url-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-trust-as-url-method"
+  },
+  {
+   "id": "detect-angular-translateprovider-translations-method",
+   "source_file": "javascript\\angular\\security\\detect-third-party-angular-translate.yaml",
+   "languages": [
+    "javascript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-angular-translateprovider-translations-method"
+  },
+  {
+   "id": "apollo-axios-ssrf",
+   "source_file": "javascript\\apollo\\security\\apollo-axios-ssrf.yaml",
+   "languages": [
+    "javascript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "apollo-axios-ssrf"
+  },
+  {
+   "id": "detect-replaceall-sanitization",
+   "source_file": "javascript\\audit\\detect-replaceall-sanitization.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "INFO",
+   "upstream_id": "detect-replaceall-sanitization"
+  },
+  {
+   "id": "detect-child-process.aws-lambda",
+   "source_file": "javascript\\aws-lambda\\security\\detect-child-process.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "detect-child-process"
+  },
+  {
+   "id": "knex-sqli",
+   "source_file": "javascript\\aws-lambda\\security\\knex-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "knex-sqli"
+  },
+  {
+   "id": "mysql-sqli.javascript-aws-lambda",
+   "source_file": "javascript\\aws-lambda\\security\\mysql-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "mysql-sqli"
+  },
+  {
+   "id": "pg-sqli",
+   "source_file": "javascript\\aws-lambda\\security\\pg-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "pg-sqli"
+  },
+  {
+   "id": "sequelize-sqli",
+   "source_file": "javascript\\aws-lambda\\security\\sequelize-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sequelize-sqli"
+  },
+  {
+   "id": "tainted-html-response.javascript-aws-lambda",
+   "source_file": "javascript\\aws-lambda\\security\\tainted-html-response.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-html-response"
+  },
+  {
+   "id": "tainted-html-string.javascript-aws-lambda",
+   "source_file": "javascript\\aws-lambda\\security\\tainted-html-string.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tainted-html-string"
+  },
+  {
+   "id": "tainted-sql-string.javascript-aws-lambda",
+   "source_file": "javascript\\aws-lambda\\security\\tainted-sql-string.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "tainted-sql-string"
+  },
+  {
+   "id": "vm-runincontext-injection",
+   "source_file": "javascript\\aws-lambda\\security\\vm-runincontext-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "094"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "vm-runincontext-injection"
+  },
+  {
+   "id": "tofastproperties-code-execution",
+   "source_file": "javascript\\bluebird\\security\\audit\\tofastproperties-code-execution.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "tofastproperties-code-execution"
+  },
+  {
+   "id": "dom-based-xss",
+   "source_file": "javascript\\browser\\security\\dom-based-xss.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dom-based-xss"
+  },
+  {
+   "id": "insecure-document-method",
+   "source_file": "javascript\\browser\\security\\insecure-document-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "insecure-document-method"
+  },
+  {
+   "id": "insecure-innerhtml",
+   "source_file": "javascript\\browser\\security\\insecure-innerhtml.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "insecure-innerhtml"
+  },
+  {
+   "id": "raw-html-concat",
+   "source_file": "javascript\\browser\\security\\raw-html-concat.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "raw-html-concat"
+  },
+  {
+   "id": "raw-html-join",
+   "source_file": "javascript\\browser\\security\\raw-html-join.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "raw-html-join"
+  },
+  {
+   "id": "chrome-remote-interface-compilescript-injection",
+   "source_file": "javascript\\chrome-remote-interface\\security\\audit\\chrome-remote-interface-compilescript-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "chrome-remote-interface-compilescript-injection"
+  },
+  {
+   "id": "deno-dangerous-run",
+   "source_file": "javascript\\deno\\security\\audit\\deno-dangerous-run.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "deno-dangerous-run"
+  },
+  {
+   "id": "express-jwt-hardcoded-secret",
+   "source_file": "javascript\\express\\security\\express-jwt-hardcoded-secret.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "express-jwt-hardcoded-secret"
+  },
+  {
+   "id": "express-phantom-injection",
+   "source_file": "javascript\\express\\security\\express-phantom-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-phantom-injection"
+  },
+  {
+   "id": "express-puppeteer-injection",
+   "source_file": "javascript\\express\\security\\express-puppeteer-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-puppeteer-injection"
+  },
+  {
+   "id": "express-sandbox-code-injection",
+   "source_file": "javascript\\express\\security\\express-sandbox-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "094"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-sandbox-code-injection"
+  },
+  {
+   "id": "express-vm-injection",
+   "source_file": "javascript\\express\\security\\express-vm-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "094"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-vm-injection"
+  },
+  {
+   "id": "express-vm2-injection",
+   "source_file": "javascript\\express\\security\\express-vm2-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "express-vm2-injection"
+  },
+  {
+   "id": "express-wkhtmltoimage-injection",
+   "source_file": "javascript\\express\\security\\express-wkhtml-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-wkhtmltoimage-injection"
+  },
+  {
+   "id": "express-wkhtmltopdf-injection",
+   "source_file": "javascript\\express\\security\\express-wkhtml-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-wkhtmltopdf-injection"
+  },
+  {
+   "id": "express-path-join-resolve-traversal",
+   "source_file": "javascript\\express\\security\\audit\\express-path-join-resolve-traversal.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "express-path-join-resolve-traversal"
+  },
+  {
+   "id": "express-session-hardcoded-secret",
+   "source_file": "javascript\\express\\security\\audit\\express-session-hardcoded-secret.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "express-session-hardcoded-secret"
+  },
+  {
+   "id": "express-ssrf",
+   "source_file": "javascript\\express\\security\\audit\\express-ssrf.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "express-ssrf"
+  },
+  {
+   "id": "direct-response-write",
+   "source_file": "javascript\\express\\security\\audit\\xss\\direct-response-write.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "direct-response-write"
+  },
+  {
+   "id": "escape-function-overwrite",
+   "source_file": "javascript\\express\\security\\audit\\xss\\mustache\\escape-function-overwrite.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "escape-function-overwrite"
+  },
+  {
+   "id": "raw-html-format.express",
+   "source_file": "javascript\\express\\security\\injection\\raw-html-format.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "raw-html-format"
+  },
+  {
+   "id": "tainted-sql-string.express",
+   "source_file": "javascript\\express\\security\\injection\\tainted-sql-string.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "tainted-sql-string"
+  },
+  {
+   "id": "insecure-createnodesfrommarkup",
+   "source_file": "javascript\\fbjs\\security\\audit\\insecure-createnodesfrommarkup.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "insecure-createnodesfrommarkup"
+  },
+  {
+   "id": "hardcoded-jwt-secret.jose",
+   "source_file": "javascript\\jose\\security\\jwt-hardcode.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-jwt-secret"
+  },
+  {
+   "id": "jquery-insecure-method",
+   "source_file": "javascript\\jquery\\security\\audit\\jquery-insecure-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "jquery-insecure-method"
+  },
+  {
+   "id": "jquery-insecure-selector",
+   "source_file": "javascript\\jquery\\security\\audit\\jquery-insecure-selector.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "jquery-insecure-selector"
+  },
+  {
+   "id": "prohibit-jquery-html",
+   "source_file": "javascript\\jquery\\security\\audit\\prohibit-jquery-html.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "prohibit-jquery-html"
+  },
+  {
+   "id": "hardcoded-jwt-secret.jsonwebtoken",
+   "source_file": "javascript\\jsonwebtoken\\security\\jwt-hardcode.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-jwt-secret"
+  },
+  {
+   "id": "detect-child-process.lang",
+   "source_file": "javascript\\lang\\security\\detect-child-process.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "detect-child-process"
+  },
+  {
+   "id": "spawn-git-clone",
+   "source_file": "javascript\\lang\\security\\spawn-git-clone.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "spawn-git-clone"
+  },
+  {
+   "id": "dangerous-spawn-shell",
+   "source_file": "javascript\\lang\\security\\audit\\dangerous-spawn-shell.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "dangerous-spawn-shell"
+  },
+  {
+   "id": "detect-non-literal-fs-filename",
+   "source_file": "javascript\\lang\\security\\audit\\detect-non-literal-fs-filename.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "detect-non-literal-fs-filename"
+  },
+  {
+   "id": "hardcoded-hmac-key",
+   "source_file": "javascript\\lang\\security\\audit\\hardcoded-hmac-key.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-hmac-key"
+  },
+  {
+   "id": "spawn-shell-true",
+   "source_file": "javascript\\lang\\security\\audit\\spawn-shell-true.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "spawn-shell-true"
+  },
+  {
+   "id": "unknown-value-with-script-tag",
+   "source_file": "javascript\\lang\\security\\audit\\unknown-value-with-script-tag.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "unknown-value-with-script-tag"
+  },
+  {
+   "id": "unsafe-dynamic-method",
+   "source_file": "javascript\\lang\\security\\audit\\unsafe-dynamic-method.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "unsafe-dynamic-method"
+  },
+  {
+   "id": "path-join-resolve-traversal",
+   "source_file": "javascript\\lang\\security\\audit\\path-traversal\\path-join-resolve-traversal.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "022"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "path-join-resolve-traversal"
+  },
+  {
+   "id": "node-knex-sqli",
+   "source_file": "javascript\\lang\\security\\audit\\sqli\\node-knex-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "node-knex-sqli"
+  },
+  {
+   "id": "node-mssql-sqli",
+   "source_file": "javascript\\lang\\security\\audit\\sqli\\node-mssql-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "node-mssql-sqli"
+  },
+  {
+   "id": "node-mysql-sqli",
+   "source_file": "javascript\\lang\\security\\audit\\sqli\\node-mysql-sqli.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "node-mysql-sqli"
+  },
+  {
+   "id": "monaco-hover-htmlsupport",
+   "source_file": "javascript\\monaco-editor\\security\\audit\\monaco-hover-htmlsupport.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "monaco-hover-htmlsupport"
+  },
+  {
+   "id": "hardcoded-passport-secret",
+   "source_file": "javascript\\passport-jwt\\security\\passport-hardcode.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "798"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "hardcoded-passport-secret"
+  },
+  {
+   "id": "phantom-injection",
+   "source_file": "javascript\\phantom\\security\\audit\\phantom-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "phantom-injection"
+  },
+  {
+   "id": "playwright-addinitscript-code-injection",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-addinitscript-code-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-addinitscript-code-injection"
+  },
+  {
+   "id": "playwright-evaluate-arg-injection",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-evaluate-arg-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-evaluate-arg-injection"
+  },
+  {
+   "id": "playwright-evaluate-code-injection",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-evaluate-code-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-evaluate-code-injection"
+  },
+  {
+   "id": "playwright-exposed-chrome-devtools",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-exposed-chrome-devtools.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-exposed-chrome-devtools"
+  },
+  {
+   "id": "playwright-goto-injection",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-goto-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-goto-injection"
+  },
+  {
+   "id": "playwright-setcontent-injection",
+   "source_file": "javascript\\playwright\\security\\audit\\playwright-setcontent-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "playwright-setcontent-injection"
+  },
+  {
+   "id": "puppeteer-evaluate-arg-injection",
+   "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-arg-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "puppeteer-evaluate-arg-injection"
+  },
+  {
+   "id": "puppeteer-evaluate-code-injection",
+   "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-evaluate-code-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "puppeteer-evaluate-code-injection"
+  },
+  {
+   "id": "puppeteer-exposed-chrome-devtools",
+   "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-exposed-chrome-devtools.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "puppeteer-exposed-chrome-devtools"
+  },
+  {
+   "id": "puppeteer-goto-injection",
+   "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-goto-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "puppeteer-goto-injection"
+  },
+  {
+   "id": "puppeteer-setcontent-injection",
+   "source_file": "javascript\\puppeteer\\security\\audit\\puppeteer-setcontent-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "puppeteer-setcontent-injection"
+  },
+  {
+   "id": "sandbox-code-injection",
+   "source_file": "javascript\\sandbox\\security\\audit\\sandbox-code-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sandbox-code-injection"
+  },
+  {
+   "id": "express-sequelize-injection",
+   "source_file": "javascript\\sequelize\\security\\audit\\sequelize-injection-express.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "089"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "express-sequelize-injection"
+  },
+  {
+   "id": "sequelize-raw-query",
+   "source_file": "javascript\\sequelize\\security\\audit\\sequelize-raw-query.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "089"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "sequelize-raw-query"
+  },
+  {
+   "id": "sequelize-tls-disabled-cert-validation",
+   "source_file": "javascript\\sequelize\\security\\audit\\sequelize-tls-disabled-cert-validation.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "sequelize-tls-disabled-cert-validation"
+  },
+  {
+   "id": "shelljs-exec-injection",
+   "source_file": "javascript\\shelljs\\security\\shelljs-exec-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "shelljs-exec-injection"
+  },
+  {
+   "id": "multiargs-code-execution",
+   "source_file": "javascript\\thenify\\security\\audit\\multiargs-code-execution.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "multiargs-code-execution"
+  },
+  {
+   "id": "vm2-code-injection",
+   "source_file": "javascript\\vm2\\security\\audit\\vm2-code-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "vm2-code-injection"
+  },
+  {
+   "id": "vm2-context-injection",
+   "source_file": "javascript\\vm2\\security\\audit\\vm2-context-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "094"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "vm2-context-injection"
+  },
+  {
+   "id": "wkhtmltoimage-injection",
+   "source_file": "javascript\\wkhtmltoimage\\security\\audit\\wkhtmltoimage-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "wkhtmltoimage-injection"
+  },
+  {
+   "id": "wkhtmltopdf-injection",
+   "source_file": "javascript\\wkhtmltopdf\\security\\audit\\wkhtmltopdf-injection.yaml",
+   "languages": [
+    "javascript",
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "918"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "wkhtmltopdf-injection"
+  },
+  {
+   "id": "angular-bypasssecuritytrust",
+   "source_file": "typescript\\angular\\security\\audit\\angular-domsanitizer.yaml",
+   "languages": [
+    "typescript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "angular-bypasssecuritytrust"
+  },
+  {
+   "id": "mcp-command-injection-typescript",
+   "source_file": "typescript\\mcp\\security\\mcp-command-injection-typescript.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "078"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "mcp-command-injection-typescript"
+  },
+  {
+   "id": "mcp-ssrf-typescript",
+   "source_file": "typescript\\mcp\\security\\mcp-ssrf-typescript.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "918"
+   ],
+   "severity": "ERROR",
+   "upstream_id": "mcp-ssrf-typescript"
+  },
+  {
+   "id": "nestjs-header-xss-disabled",
+   "source_file": "typescript\\nestjs\\security\\audit\\nestjs-header-xss-disabled.yaml",
+   "languages": [
+    "typescript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "nestjs-header-xss-disabled"
+  },
+  {
+   "id": "react-markdown-insecure-html",
+   "source_file": "typescript\\react\\security\\react-markdown-insecure-html.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "search",
+   "mode_taint": false,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": false,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "react-markdown-insecure-html"
+  },
+  {
+   "id": "react-dangerouslysetinnerhtml",
+   "source_file": "typescript\\react\\security\\audit\\react-dangerouslysetinnerhtml.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "react-dangerouslysetinnerhtml"
+  },
+  {
+   "id": "react-href-var",
+   "source_file": "typescript\\react\\security\\audit\\react-href-var.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "react-href-var"
+  },
+  {
+   "id": "react-unsanitized-method",
+   "source_file": "typescript\\react\\security\\audit\\react-unsanitized-method.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "react-unsanitized-method"
+  },
+  {
+   "id": "react-unsanitized-property",
+   "source_file": "typescript\\react\\security\\audit\\react-unsanitized-property.yaml",
+   "languages": [
+    "typescript",
+    "javascript"
+   ],
+   "mode": "taint",
+   "mode_taint": true,
+   "has_sources_key": false,
+   "has_sinks_key": false,
+   "is_taint": true,
+   "cwe": [
+    "079"
+   ],
+   "severity": "WARNING",
+   "upstream_id": "react-unsanitized-property"
+  }
+ ]
+}

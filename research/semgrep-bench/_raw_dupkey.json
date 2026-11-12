@@ -1,0 +1,129 @@
+﻿running control_distinct_ids
+running cross_language_same_id
+running same_language_same_id
+running renamed_unique_ids
+{
+  "semgrep_cli": [
+    "C:\\Users\\romeo_keta\\AppData\\Local\\Temp\\cr-semgrep-venv\\Scripts\\pysemgrep.exe"
+  ],
+  "semgrep_core": "C:\\Users\\romeo_keta\\AppData\\Local\\Temp\\cr-semgrep-venv\\Lib\\site-packages\\semgrep\\bin\\semgrep-core.exe",
+  "cases": [
+    {
+      "case": "control_distinct_ids",
+      "declared": 2,
+      "cli": {
+        "rc": -9,
+        "ran_rules": null,
+        "error": "cli timeout"
+      },
+      "core": {
+        "rc": 0,
+        "check_ids": [
+          "ctrl-py",
+          "ctrl-ts"
+        ],
+        "results": [
+          {
+            "check_id": "ctrl-py",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_hd8r0ps1\\a.py",
+            "start": 1
+          },
+          {
+            "check_id": "ctrl-ts",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_hd8r0ps1\\b.ts",
+            "start": 1
+          }
+        ],
+        "errors": 0
+      }
+    },
+    {
+      "case": "cross_language_same_id",
+      "declared": 2,
+      "cli": {
+        "rc": 4294967295,
+        "ran_rules": null,
+        "check_ids": [],
+        "results": [],
+        "errors": 0,
+        "stderr_tail": []
+      },
+      "core": {
+        "rc": 0,
+        "check_ids": [
+          "dup-key-test"
+        ],
+        "results": [
+          {
+            "check_id": "dup-key-test",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_9sgwb7q6\\b.ts",
+            "start": 1
+          }
+        ],
+        "errors": 0
+      }
+    },
+    {
+      "case": "same_language_same_id",
+      "declared": 2,
+      "cli": {
+        "rc": 4294967295,
+        "ran_rules": null,
+        "check_ids": [],
+        "results": [],
+        "errors": 0,
+        "stderr_tail": []
+      },
+      "core": {
+        "rc": 0,
+        "check_ids": [
+          "dup-key-test"
+        ],
+        "results": [
+          {
+            "check_id": "dup-key-test",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_cm45ukr_\\a.py",
+            "start": 1
+          },
+          {
+            "check_id": "dup-key-test",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_cm45ukr_\\a.py",
+            "start": 2
+          }
+        ],
+        "errors": 0
+      }
+    },
+    {
+      "case": "renamed_unique_ids",
+      "declared": 2,
+      "cli": {
+        "rc": -9,
+        "ran_rules": null,
+        "error": "cli timeout"
+      },
+      "core": {
+        "rc": 0,
+        "check_ids": [
+          "dup-key-test.alpha",
+          "dup-key-test.beta"
+        ],
+        "results": [
+          {
+            "check_id": "dup-key-test.alpha",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_3xng3lvb\\a.py",
+            "start": 1
+          },
+          {
+            "check_id": "dup-key-test.beta",
+            "path": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\dupkey_3xng3lvb\\a.py",
+            "start": 2
+          }
+        ],
+        "errors": 0
+      }
+    }
+  ],
+  "cli_version": "timeout",
+  "core_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)"
+}

@@ -1,0 +1,76 @@
+{
+  "ticket": "#17 pre 阶段 Semgrep 单文件临时根墙钟实测",
+  "date": "2026-11-06",
+  "env": {
+    "os": "Windows (PowerShell, Defender real-time protection on)",
+    "semgrep": "1.184.0 (pip, isolated venv)",
+    "python": "3.12",
+    "dsh": "0.2.0-rc.1 (ticket assumed 0.2.1-rc.3; scan wall clock is independent of DSH)",
+    "cli_path": "semgrep.exe -> semgrep-core.exe (osemgrep) -> pysemgrep.exe (Python fallback) for `scan`"
+  },
+  "ruleset": {
+    "source": "semgrep/semgrep-rules",
+    "commit": "16b9e6d45f10649f6a531ec4838ed9924372c3bc",
+    "filter": "metadata.cwe in {022,078,079,089,094,798,918} AND languages in {python,javascript,typescript,tsx,jsx}",
+    "rule_files": 33,
+    "rules_effective": { "ts": 26, "js": 26, "py": 7 },
+    "packing": "single merged rules.yaml (one --config file); one-file-per-rule costs ~56 ms/file extra",
+    "yaml_bytes": 73365,
+    "yaml_sha256": "6692D409467D98EA4460D8FE8E93F8E7736A223A445A2298F51EC3D1C0106969"
+  },
+  "samples": {
+    "sample.ts": { "bytes": 261843, "lang": "typescript" },
+    "sample.js": { "bytes": 261945, "lang": "javascript" },
+    "sample.py": { "bytes": 261999, "lang": "python" },
+    "sample_small.ts": { "bytes": 1926, "lang": "typescript" }
+  },
+  "protocol": {
+    "measure": "wall clock of: create unique temp root + write sample + empty .semgrepignore + spawn full `semgrep scan` + parse + delete root",
+    "command": "semgrep scan --config <rules dir> --json --metrics off --disable-version-check --x-semgrepignore-filename .semgrepignore .",
+    "cwd": "temp root, target \".\"",
+    "cold": "each iteration uses a fresh copy of rules.yaml under a new config dir (new disk bytes)",
+    "warm": "fixed config dir reused",
+    "n": 5,
+    "warmup": "1 discarded run per group",
+    "timeout": "45 s hard cap per run; 0 runs hit the cap in the final matrix",
+    "percentile": "linear interpolation on sorted samples"
+  },
+  "results": {
+    "s1-ts-cold":    { "n": 5, "p50_ms": 2876.0, "p95_ms": 3087.6, "raw_ms": [2966, 2802, 2793, 2876, 3118] },
+    "s1-ts-warm":    { "n": 5, "p50_ms": 2830.0, "p95_ms": 2911.8, "raw_ms": [2796, 2926, 2830, 2769, 2855] },
+    "s1-js-cold":    { "n": 5, "p50_ms": 2950.0, "p95_ms": 3046.0, "raw_ms": [3066, 2950, 2834, 2889, 2966] },
+    "s1-js-warm":    { "n": 5, "p50_ms": 2992.0, "p95_ms": 3063.4, "raw_ms": [2841, 3064, 3061, 2992, 2793] },
+    "s1-py-cold":    { "n": 5, "p50_ms": 7268.0, "p95_ms": 7362.8, "raw_ms": [7330, 7223, 7268, 7371, 7108] },
+    "s1-py-warm":    { "n": 5, "p50_ms": 7113.0, "p95_ms": 7212.4, "raw_ms": [7220, 7063, 7053, 7182, 7113] },
+    "s1-small-cold": { "n": 5, "p50_ms": 2977.0, "p95_ms": 3106.8, "raw_ms": [2990, 3136, 2976, 2977, 2903] },
+    "s1-small-warm": { "n": 5, "p50_ms": 2898.0, "p95_ms": 3015.6, "raw_ms": [2838, 2938, 3035, 2873, 2898] }
+  },
+  "rule_count_curve": {
+    "note": "2 KB sample.ts, warm, N=3, same host, earlier in the session",
+    "groups": {
+      "1 rule":          { "p50_ms": 2992.9, "rules_run": 1 },
+      "33-file/26 rule": { "p50_ms": 3385.2, "rules_run": 26 },
+      "415-file/170 rule": { "p50_ms": 11661.5, "rules_run": 170 },
+      "592-file/205 rule": { "p50_ms": 13939.0, "rules_run": 205 }
+    }
+  },
+  "verdict": {
+    "criterion": "P50 <= 1.2 s",
+    "met": false,
+    "observed_min": "2769 ms (2 KB sample, warm, 1 of 5 runs)",
+    "ratio_to_budget": ">= 2.3x on the cheapest configuration measured",
+    "cold_vs_warm": "no material difference (+0.3% .. +1.6%); cost is dominated by CLI/core startup, not rule-file disk reads",
+    "size_effect": "2 KB vs 256 KB identical (~2.9 s) for TS; Python 256 KB adds ~4.2 s of rule matching",
+    "consequence": "#13 D9 (synchronous pre-stage Semgrep with 1.2 s P50) is not achievable on this host with the stock CLI; #9 pre P50 <= 2 s is also unreachable. Pre path must change shape (persistent semgrep-core / batch / demote to post) or the budget must be redefined."
+  },
+  "call_findings_for_13": [
+    "--semgrepignore-filename does not exist; the flag is --x-semgrepignore-filename",
+    "an absolute Windows path for that flag fails with Fpath.add_seg: invalid segment (rc=2); pass a relative name with cwd at the temp root",
+    "--quiet makes osemgrep hand off to pysemgrep and is slower; do not pass it",
+    "one merged YAML is required: one config file per rule adds ~56 ms per file"
+  ],
+  "stability": {
+    "note": "the full CLI intermittently wedges (0 CPU, >120 s) on this host; wedged runs were all excluded from the matrix above (final run: 40/40 rc=0)",
+    "known_cause_candidates": ["stdin/console handle inheritance on Windows (DEVNULL or piped parent stdio)", "Defender first-touch scan of the 256 MB semgrep-core.exe"]
+  }
+}

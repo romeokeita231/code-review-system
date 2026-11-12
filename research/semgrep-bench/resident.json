@@ -1,0 +1,348 @@
+{
+  "ticket": "#20 pre 阶段 Semgrep 常驻/增量形态实测",
+  "date": "2026-11-09",
+  "env": {
+    "semgrep": "1.184.0 (pip, isolated venv)",
+    "python": "3.12",
+    "os": "Windows, Defender real-time on",
+    "core": "site-packages/semgrep/bin/semgrep-core.exe",
+    "rules": "semgrep-rules @16b9e6d, 33 files merged, rules.yaml 73365 B sha256 6692D409...6969",
+    "samples": "sample.ts 261843 B / sample.py 261999 B / sample_small.ts 1926 B / sample_small.py 2040 B",
+    "rule_subset": "sub25.yaml = rules whose languages include typescript/tsx (25 rules; 26 TS-applicable rules reported by the CLI on the full set)"
+  },
+  "resident_core": {
+    "lsp_flag": "semgrep-core.exe: unknown option -lsp (rc=1)",
+    "rpc_flag": {
+      "process": "-rpc stays alive and accepts RpcCall packets",
+      "callscan": "RetError: Scanning over RPC is a proprietary feature, but semgrep-pro has not been loaded",
+      "probe_ms": 187.2
+    },
+    "conclusion": "OSS semgrep-core exposes no resident matching entry point"
+  },
+  "resident_lsp": {
+    "note": "semgrep lsp (osemgrep language server), one process, N distinct files opened one by one via textDocument/didOpen",
+    "ts256_full": {
+      "init_ms": 759.0,
+      "n": 15,
+      "first_ms": 218.0,
+      "p50_ms": 137.5,
+      "steady_p50_ms": 135.7,
+      "steady_p95_ms": 146.2,
+      "raw_ms": [
+        218,
+        138,
+        140,
+        131,
+        132,
+        123,
+        141,
+        124,
+        133,
+        138,
+        134,
+        146,
+        147,
+        140,
+        129
+      ],
+      "diagnostics": [
+        0
+      ],
+      "rss_mb_first": 128.0,
+      "rss_mb_peak": 131.2,
+      "rss_mb_last": 130.5,
+      "handles_first": 1140,
+      "handles_last": 1141,
+      "didchange_answered": 0,
+      "didchange_total": 1
+    },
+    "ts256_sub25": {
+      "init_ms": 716.1,
+      "n": 15,
+      "first_ms": 182.4,
+      "p50_ms": 128.8,
+      "steady_p50_ms": 128.4,
+      "steady_p95_ms": 135.5,
+      "raw_ms": [
+        182,
+        126,
+        117,
+        125,
+        130,
+        128,
+        135,
+        137,
+        129,
+        121,
+        132,
+        121,
+        130,
+        123,
+        129
+      ],
+      "diagnostics": [
+        0
+      ],
+      "rss_mb_first": 127.9,
+      "rss_mb_peak": 129.9,
+      "rss_mb_last": 129.0,
+      "handles_first": 1140,
+      "handles_last": 1141,
+      "didchange_answered": 0,
+      "didchange_total": 1
+    },
+    "py256_full": {
+      "init_ms": 1011.8,
+      "n": 15,
+      "first_ms": 7212.7,
+      "p50_ms": 6605.8,
+      "steady_p50_ms": 6604.1,
+      "steady_p95_ms": 6973.9,
+      "raw_ms": [
+        7213,
+        6996,
+        6588,
+        6919,
+        6736,
+        6606,
+        6962,
+        6602,
+        6479,
+        6744,
+        6688,
+        6571,
+        6585,
+        6527,
+        6502
+      ],
+      "diagnostics": [
+        0
+      ],
+      "rss_mb_first": 160.3,
+      "rss_mb_peak": 176.9,
+      "rss_mb_last": 173.5,
+      "handles_first": 1143,
+      "handles_last": 1142,
+      "didchange_answered": 0,
+      "didchange_total": 1
+    }
+  },
+  "core_direct": {
+    "note": "fresh semgrep-core process per file: -rules -targets -json",
+    "ts256_full": {
+      "n": 15,
+      "p50_ms": 314.2,
+      "p95_ms": 338.4,
+      "raw_ms": [
+        309,
+        326,
+        325,
+        322,
+        313,
+        321,
+        324,
+        346,
+        307,
+        335,
+        311,
+        314,
+        298,
+        302,
+        309
+      ],
+      "findings": [
+        0
+      ],
+      "non_zero_rc": 0
+    },
+    "ts256_sub25": {
+      "n": 15,
+      "p50_ms": 276.3,
+      "p95_ms": 300.8,
+      "raw_ms": [
+        287,
+        292,
+        298,
+        297,
+        279,
+        308,
+        270,
+        272,
+        272,
+        273,
+        272,
+        277,
+        274,
+        274,
+        276
+      ],
+      "findings": [
+        0
+      ],
+      "non_zero_rc": 0
+    },
+    "py256_full": {
+      "n": 15,
+      "p50_ms": 6005.9,
+      "p95_ms": 6231.1,
+      "raw_ms": [
+        6040,
+        6068,
+        6032,
+        6006,
+        6245,
+        5896,
+        5962,
+        6111,
+        6225,
+        6133,
+        5948,
+        5832,
+        5890,
+        5922,
+        5861
+      ],
+      "findings": [
+        0
+      ],
+      "non_zero_rc": 0
+    },
+    "py2k_full": {
+      "n": 15,
+      "p50_ms": 301.8,
+      "p95_ms": 320.2,
+      "raw_ms": [
+        281,
+        293,
+        294,
+        285,
+        298,
+        299,
+        302,
+        305,
+        304,
+        327,
+        316,
+        317,
+        300,
+        305,
+        307
+      ],
+      "findings": [
+        0
+      ],
+      "non_zero_rc": 0
+    }
+  },
+  "cli_engines": {
+    "note": "semgrep scan --config rules.yaml --json; stdout/stderr redirected to files, stdin=file. Capture pipes make the pysemgrep layer wedge >90 s",
+    "default": {
+      "n": 5,
+      "p50_ms": 4042.1,
+      "p95_ms": 4173.9,
+      "raw_ms": [
+        3990,
+        4162,
+        4177,
+        4000,
+        4042
+      ],
+      "findings": [
+        0
+      ],
+      "timeouts": 0
+    },
+    "legacy": {
+      "n": 3,
+      "p50_ms": 3372.8,
+      "p95_ms": 3403.5,
+      "raw_ms": [
+        3298,
+        3373,
+        3407
+      ],
+      "findings": [
+        0
+      ],
+      "timeouts": 0
+    },
+    "experimental": {
+      "n": 5,
+      "p50_ms": 784.4,
+      "p95_ms": 792.9,
+      "raw_ms": [
+        792,
+        793,
+        772,
+        784,
+        763
+      ],
+      "findings": [
+        0
+      ],
+      "timeouts": 0
+    },
+    "py256_default": {
+      "n": 2,
+      "raw_ms": [
+        13270,
+        21207
+      ],
+      "min_ms": 13270,
+      "max_ms": 21207,
+      "findings": [
+        0
+      ],
+      "timeouts": 0
+    },
+    "py256_experimental": {
+      "n": 3,
+      "raw_ms": [
+        16726,
+        15346,
+        16829
+      ],
+      "min_ms": 15346,
+      "max_ms": 16829,
+      "findings": [
+        0
+      ],
+      "timeouts": 0
+    },
+    "py_note": "Python 256 KiB on the CLI is both slow and noisy (default 13.3-21.2 s, experimental 15.3-16.8 s) while direct semgrep-core is stable at 6.0 s; the CLI layer adds 7-15 s for this file"
+  },
+  "py_cost_split": {
+    "profile": "256 KiB py / 33 rules: rules_parse 0.05 s, parsing 0.19 s, scanning 5.60 s (matching 1.05 s + tainting 4.31 s), findings 0",
+    "scaling": "116 KiB py, 2000 findings: 6307 ms / 2.06 MB JSON; same file minus the matching rule: 737 ms / 1.8 KB",
+    "per_finding_ms": 2.79
+  },
+  "ignore_flag_equivalence": {
+    "experimental": {
+      "results_equal": true,
+      "paths_equal": true,
+      "findings": 1
+    },
+    "default": {
+      "results_equal": true,
+      "paths_equal": true,
+      "findings": 1
+    },
+    "conclusion": "--x-semgrepignore-filename can be dropped; identical results and paths on both engines"
+  },
+  "stability": {
+    "pipe_capture": "pysemgrep wedges >90-120 s when stdout/stderr are pipes; file redirection removes it",
+    "orphans": "killed timeouts leave orphan semgrep-core.exe children",
+    "semgrep_killed": {
+      "cli_pipe_mode": 14,
+      "lsp": 0,
+      "core": 0
+    }
+  },
+  "verdict": {
+    "criterion": "resident steady P50 <= 2 s and no degradation over 3 consecutive calls",
+    "resident_core": "IMPOSSIBLE on OSS: -lsp removed, -rpc CallScan is semgrep-pro only",
+    "ts": "PASS: steady 136 ms (first 218 ms), RSS +2.5 MB over 15 files, handles flat 1140->1141",
+    "py": "FAIL: steady 6604 ms resident, 6006 ms fresh core, 13-21 s via CLI; resident buys nothing",
+    "cheapest_non_resident": "semgrep-core direct 314 ms (ts) / 6006 ms (py); osemgrep 784 ms; pysemgrep 3373-4042 ms"
+  }
+}

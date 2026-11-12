@@ -1,0 +1,951 @@
+{
+  "ticket": "#23 规则集重建与预算重测",
+  "superseded": {
+    "by": "research/semgrep-bench/recert_after_rename.json",
+    "ticket": "#25",
+    "new_rules_sha256": "7caf50f01b2ebb7a5e9b95085173f015015133c34926fa694c69df15e6994fdf",
+    "invalidated": [
+      "本文件 ruleset.artifacts.rules.yaml.sha256 / 各子集 sha256（#24 改名后重建）",
+      "coverage.firing_rows=173 与 not_firing（重名 id 取错 body 的测量假象；新值 188/188）",
+      "cost 中 ts-core-256k 的 6596.4 ms / 0 命中（92 条去重集，非生效集；改名后生效 95 条）"
+    ]
+  },
+  "engine": {
+    "name": "semgrep",
+    "cli": "1.184.0",
+    "core": "semgrep-core (bundled with 1.184.0)",
+    "venv": "C:\\Users\\ROMEO_~1\\AppData\\Local\\Temp\\cr-semgrep-venv"
+  },
+  "ruleset": {
+    "upstream": "https://gh-proxy.com/https://github.com/semgrep/semgrep-rules.git",
+    "commit": "16b9e6d45f10649f6a531ec4838ed9924372c3bc",
+    "commit_date": "2026-10-21T17:01:43-04:00",
+    "dirty": false,
+    "cwe_filter": [
+      "022",
+      "078",
+      "079",
+      "089",
+      "094",
+      "798",
+      "918"
+    ],
+    "cwe_normalization": "int(CWE-<n>) -> zfill(3)",
+    "rules_kept": 188,
+    "unique_ids": 172,
+    "rules_by_language": {
+      "python": {
+        "rules": 91,
+        "taint": 37
+      },
+      "javascript": {
+        "rules": 95,
+        "taint": 44
+      },
+      "typescript": {
+        "rules": 95,
+        "taint": 45
+      }
+    },
+    "rules_by_cwe": {
+      "022": 8,
+      "078": 41,
+      "079": 59,
+      "089": 34,
+      "094": 13,
+      "798": 8,
+      "918": 25
+    },
+    "artifacts": {
+      "rules.yaml": {
+        "sha256": "a8629a07c6cea67438dc70db3583a52b3279c869882d5a144146e8476571c4e9",
+        "bytes": 485953,
+        "rules": 188
+      },
+      "py_all.yaml": {
+        "sha256": "8759cba304f27c32e5c9f5f0010d5b39753afdfb27a3a335045bbf61f8db20ae",
+        "bytes": 288932,
+        "rules": 91
+      },
+      "py_taint.yaml": {
+        "sha256": "1151645faa1047ecda3d5cecf1a32c497257d9fa2b0b14255b0e83a234936c56",
+        "bytes": 101930,
+        "rules": 37
+      },
+      "py_nontaint.yaml": {
+        "sha256": "618ff267da728bf19e66e6baeead27f495d2c71c4a20baa038c2c62ed33c07f9",
+        "bytes": 187010,
+        "rules": 54
+      },
+      "js_all.yaml": {
+        "sha256": "57c10e788dd8ff7001c38306e5aafe1c3b8fb6c162c1c70aa9e0914018e7a6e5",
+        "bytes": 192088,
+        "rules": 95
+      },
+      "ts_all.yaml": {
+        "sha256": "0d16ce08dc19a1a7c5ad6285a6fbf60dcac16416168656482472f5f5aba6dfe9",
+        "bytes": 194612,
+        "rules": 95
+      },
+      "ts_dedup.yaml": {
+        "sha256": "f1691438c671b646173df1369d9a40c4f757f25b2961421d4330f90771e6fec0",
+        "bytes": 187542,
+        "rules": 92
+      },
+      "py_block.yaml": {
+        "sha256": "faf15c5c3bb89bc14b109a26a4830771b93b2f3b8b32c7eb41d7f905b1fd191a",
+        "bytes": 278387,
+        "rules": 85
+      }
+    },
+    "builder": "research/semgrep-bench/build_snapshot.py",
+    "rebuild_command": "python build_snapshot.py --rules-repo <semgrep-rules@16b9e6d4> --out snapshot --block-ids snapshot/py_block_ids.json",
+    "block_subset_definition": "python rules whose own upstream test file yields >=1 result"
+  },
+  "duplicate_id_evidence": {
+    "rows_in_rules_yaml": 188,
+    "unique_ids_in_rules_yaml": 172,
+    "cli_effective_rules_single_merged_file": 172,
+    "cli_effective_rules_ts_all": 92,
+    "ts_all_rows": 95,
+    "variant_test": {
+      "rule": "tainted-sql-string",
+      "target": "synthetic sample.ts (811 sinks)",
+      "aws_lambda_variant": {
+        "core_results": 0,
+        "cli_results": 0
+      },
+      "express_variant": {
+        "core_results": 811,
+        "cli_results": 811
+      },
+      "conclusion": "core 保留同 id 的全部 body 并全部执行；CLI/osemgrep 按 id 去重只保留首个 body，跨语言/跨框架同名规则会静默丢覆盖"
+    },
+    "consequence": "多语言合并成单文件时 CLI 实际规则数 172 < 188；ts_all 95 条在 CLI 下只执行 92 条"
+  },
+  "coverage": {
+    "rules_total_rows": 188,
+    "firing_rows": 173,
+    "py_unique_ids": 83,
+    "py_firing_unique_ids": 78,
+    "js_ts_unique_ids": 92,
+    "js_ts_firing_unique_ids": 92,
+    "sample_definition": "每条规则用上游同目录同名测试文件（.py/.ts/.tsx/.js/.jsx）作正样本，命中口径 = results ≥ 1",
+    "matrix": {
+      "022": {
+        "python": {
+          "rules": 5,
+          "taint": 0,
+          "firing": 4,
+          "taint_ratio": 0.0,
+          "firing_ratio": 0.8
+        },
+        "javascript": {
+          "rules": 3,
+          "taint": 3,
+          "firing": 3,
+          "taint_ratio": 1.0,
+          "firing_ratio": 1.0
+        },
+        "typescript": {
+          "rules": 3,
+          "taint": 3,
+          "firing": 3,
+          "taint_ratio": 1.0,
+          "firing_ratio": 1.0
+        }
+      },
+      "078": {
+        "python": {
+          "rules": 33,
+          "taint": 20,
+          "firing": 29,
+          "taint_ratio": 0.606,
+          "firing_ratio": 0.879
+        },
+        "javascript": {
+          "rules": 8,
+          "taint": 5,
+          "firing": 8,
+          "taint_ratio": 0.625,
+          "firing_ratio": 1.0
+        },
+        "typescript": {
+          "rules": 8,
+          "taint": 5,
+          "firing": 8,
+          "taint_ratio": 0.625,
+          "firing_ratio": 1.0
+        }
+      },
+      "079": {
+        "python": {
+          "rules": 23,
+          "taint": 6,
+          "firing": 19,
+          "taint_ratio": 0.261,
+          "firing_ratio": 0.826
+        },
+        "javascript": {
+          "rules": 34,
+          "taint": 12,
+          "firing": 34,
+          "taint_ratio": 0.353,
+          "firing_ratio": 1.0
+        },
+        "typescript": {
+          "rules": 35,
+          "taint": 13,
+          "firing": 35,
+          "taint_ratio": 0.371,
+          "firing_ratio": 1.0
+        }
+      },
+      "089": {
+        "python": {
+          "rules": 23,
+          "taint": 8,
+          "firing": 20,
+          "taint_ratio": 0.348,
+          "firing_ratio": 0.87
+        },
+        "javascript": {
+          "rules": 11,
+          "taint": 10,
+          "firing": 10,
+          "taint_ratio": 0.909,
+          "firing_ratio": 0.909
+        },
+        "typescript": {
+          "rules": 11,
+          "taint": 10,
+          "firing": 10,
+          "taint_ratio": 0.909,
+          "firing_ratio": 0.909
+        }
+      },
+      "094": {
+        "javascript": {
+          "rules": 13,
+          "taint": 5,
+          "firing": 13,
+          "taint_ratio": 0.385,
+          "firing_ratio": 1.0
+        },
+        "typescript": {
+          "rules": 13,
+          "taint": 5,
+          "firing": 13,
+          "taint_ratio": 0.385,
+          "firing_ratio": 1.0
+        }
+      },
+      "798": {
+        "python": {
+          "rules": 2,
+          "taint": 1,
+          "firing": 2,
+          "taint_ratio": 0.5,
+          "firing_ratio": 1.0
+        },
+        "javascript": {
+          "rules": 6,
+          "taint": 2,
+          "firing": 5,
+          "taint_ratio": 0.333,
+          "firing_ratio": 0.833
+        },
+        "typescript": {
+          "rules": 6,
+          "taint": 2,
+          "firing": 5,
+          "taint_ratio": 0.333,
+          "firing_ratio": 0.833
+        }
+      },
+      "918": {
+        "python": {
+          "rules": 5,
+          "taint": 2,
+          "firing": 4,
+          "taint_ratio": 0.4,
+          "firing_ratio": 0.8
+        },
+        "javascript": {
+          "rules": 20,
+          "taint": 7,
+          "firing": 20,
+          "taint_ratio": 0.35,
+          "firing_ratio": 1.0
+        },
+        "typescript": {
+          "rules": 19,
+          "taint": 7,
+          "firing": 19,
+          "taint_ratio": 0.368,
+          "firing_ratio": 1.0
+        }
+      }
+    },
+    "py_firing_per_cwe": {
+      "022": {
+        "rules": 5,
+        "taint": 0,
+        "firing": 4,
+        "taint_ratio": 0.0,
+        "firing_ratio": 0.8
+      },
+      "078": {
+        "rules": 33,
+        "taint": 20,
+        "firing": 29,
+        "taint_ratio": 0.606,
+        "firing_ratio": 0.879
+      },
+      "079": {
+        "rules": 23,
+        "taint": 6,
+        "firing": 19,
+        "taint_ratio": 0.261,
+        "firing_ratio": 0.826
+      },
+      "089": {
+        "rules": 23,
+        "taint": 8,
+        "firing": 20,
+        "taint_ratio": 0.348,
+        "firing_ratio": 0.87
+      },
+      "798": {
+        "rules": 2,
+        "taint": 1,
+        "firing": 2,
+        "taint_ratio": 0.5,
+        "firing_ratio": 1.0
+      },
+      "918": {
+        "rules": 5,
+        "taint": 2,
+        "firing": 4,
+        "taint_ratio": 0.4,
+        "firing_ratio": 0.8
+      }
+    },
+    "py_cwe_with_firing": [
+      "022",
+      "078",
+      "079",
+      "089",
+      "798",
+      "918"
+    ],
+    "py_cwe_count_with_firing": 6,
+    "py_cwe_missing": [
+      "094"
+    ],
+    "not_firing": [
+      {
+        "rule_id": "dangerous-spawn-process",
+        "cwe": [
+          "078"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\dangerous-spawn-process.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "dangerous-subprocess-use",
+        "cwe": [
+          "078"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\dangerous-subprocess-use.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "dangerous-system-call",
+        "cwe": [
+          "078"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\dangerous-system-call.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "mysql-sqli",
+        "cwe": [
+          "089"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\mysql-sqli.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "psycopg-sqli",
+        "cwe": [
+          "089"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\psycopg-sqli.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "tainted-html-response",
+        "cwe": [
+          "079"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\tainted-html-response.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "tainted-html-string",
+        "cwe": [
+          "079"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\tainted-html-string.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "tainted-sql-string",
+        "cwe": [
+          "089"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\aws-lambda\\security\\tainted-sql-string.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "raw-html-format",
+        "cwe": [
+          "079"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\django\\security\\injection\\raw-html-format.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "tainted-url-host",
+        "cwe": [
+          "918"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\django\\security\\injection\\tainted-url-host.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "subprocess-injection",
+        "cwe": [
+          "078"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\django\\security\\injection\\command\\subprocess-injection.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "path-traversal-open",
+        "cwe": [
+          "022"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": false,
+        "sample": "python\\django\\security\\injection\\path-traversal\\path-traversal-open.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "raw-html-format",
+        "cwe": [
+          "079"
+        ],
+        "languages": [
+          "python"
+        ],
+        "is_taint": true,
+        "sample": "python\\flask\\security\\injection\\raw-html-concat.py",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "tainted-sql-string",
+        "cwe": [
+          "089"
+        ],
+        "languages": [
+          "javascript",
+          "typescript"
+        ],
+        "is_taint": true,
+        "sample": "javascript\\aws-lambda\\security\\tainted-sql-string.js",
+        "reason": "no_hit"
+      },
+      {
+        "rule_id": "hardcoded-jwt-secret",
+        "cwe": [
+          "798"
+        ],
+        "languages": [
+          "javascript",
+          "typescript"
+        ],
+        "is_taint": false,
+        "sample": "javascript\\jose\\security\\jwt-hardcode.js",
+        "reason": "no_hit"
+      }
+    ],
+    "raw": "research/semgrep-bench/_raw_coverage.json",
+    "script": "research/semgrep-bench/coverage_matrix.py"
+  },
+  "cost": [
+    {
+      "label": "py-all-small",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 91,
+      "rules_sha256": "8759cba304f27c32e5c9f5f0010d5b39753afdfb27a3a335045bbf61f8db20ae",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 352.2,
+      "p95_ms": 482.3,
+      "max_ms": 497.2,
+      "min_ms": 293.3,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "__init__.py",
+        "_files.py",
+        "browser.py",
+        "error.py",
+        "error_location.py",
+        "r.py",
+        "regsetup.py",
+        "test_codecontext.py",
+        "usage_audio_speeches_response.py",
+        "utils.py"
+      ]
+    },
+    {
+      "label": "py-taint-small",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 37,
+      "rules_sha256": "1151645faa1047ecda3d5cecf1a32c497257d9fa2b0b14255b0e83a234936c56",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 282.2,
+      "p95_ms": 327.5,
+      "max_ms": 333.9,
+      "min_ms": 255.8,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "__init__.py",
+        "_files.py",
+        "browser.py",
+        "error.py",
+        "error_location.py",
+        "r.py",
+        "regsetup.py",
+        "test_codecontext.py",
+        "usage_audio_speeches_response.py",
+        "utils.py"
+      ]
+    },
+    {
+      "label": "py-nontaint-small",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 54,
+      "rules_sha256": "618ff267da728bf19e66e6baeead27f495d2c71c4a20baa038c2c62ed33c07f9",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 292.1,
+      "p95_ms": 355.4,
+      "max_ms": 365.7,
+      "min_ms": 278.7,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "__init__.py",
+        "_files.py",
+        "browser.py",
+        "error.py",
+        "error_location.py",
+        "r.py",
+        "regsetup.py",
+        "test_codecontext.py",
+        "usage_audio_speeches_response.py",
+        "utils.py"
+      ]
+    },
+    {
+      "label": "py-block-small",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 85,
+      "rules_sha256": "faf15c5c3bb89bc14b109a26a4830771b93b2f3b8b32c7eb41d7f905b1fd191a",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 338.3,
+      "p95_ms": 458.5,
+      "max_ms": 460.2,
+      "min_ms": 281.1,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "__init__.py",
+        "_files.py",
+        "browser.py",
+        "error.py",
+        "error_location.py",
+        "r.py",
+        "regsetup.py",
+        "test_codecontext.py",
+        "usage_audio_speeches_response.py",
+        "utils.py"
+      ]
+    },
+    {
+      "label": "py-all-big",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 91,
+      "rules_sha256": "8759cba304f27c32e5c9f5f0010d5b39753afdfb27a3a335045bbf61f8db20ae",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 1230.7,
+      "p95_ms": 11792.2,
+      "max_ms": 14096.0,
+      "min_ms": 504.9,
+      "results_total": 31,
+      "failures": 0,
+      "samples": [
+        "_asyncio.py",
+        "_generate_schema.py",
+        "_make.py",
+        "descriptor_pb2.py",
+        "fromnumeric.py",
+        "matrixbase.py",
+        "test_argparse.py",
+        "test_fixers.py",
+        "test_functools.py",
+        "test_os.py"
+      ]
+    },
+    {
+      "label": "py-taint-big",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 37,
+      "rules_sha256": "1151645faa1047ecda3d5cecf1a32c497257d9fa2b0b14255b0e83a234936c56",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 991.4,
+      "p95_ms": 8682.1,
+      "max_ms": 11045.6,
+      "min_ms": 351.2,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "_asyncio.py",
+        "_generate_schema.py",
+        "_make.py",
+        "descriptor_pb2.py",
+        "fromnumeric.py",
+        "matrixbase.py",
+        "test_argparse.py",
+        "test_fixers.py",
+        "test_functools.py",
+        "test_os.py"
+      ]
+    },
+    {
+      "label": "py-nontaint-big",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 54,
+      "rules_sha256": "618ff267da728bf19e66e6baeead27f495d2c71c4a20baa038c2c62ed33c07f9",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 473.0,
+      "p95_ms": 1063.0,
+      "max_ms": 1376.1,
+      "min_ms": 354.9,
+      "results_total": 31,
+      "failures": 0,
+      "samples": [
+        "_asyncio.py",
+        "_generate_schema.py",
+        "_make.py",
+        "descriptor_pb2.py",
+        "fromnumeric.py",
+        "matrixbase.py",
+        "test_argparse.py",
+        "test_fixers.py",
+        "test_functools.py",
+        "test_os.py"
+      ]
+    },
+    {
+      "label": "py-block-big",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 85,
+      "rules_sha256": "faf15c5c3bb89bc14b109a26a4830771b93b2f3b8b32c7eb41d7f905b1fd191a",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 1054.5,
+      "p95_ms": 9155.1,
+      "max_ms": 12701.4,
+      "min_ms": 471.8,
+      "results_total": 31,
+      "failures": 0,
+      "samples": [
+        "_asyncio.py",
+        "_generate_schema.py",
+        "_make.py",
+        "descriptor_pb2.py",
+        "fromnumeric.py",
+        "matrixbase.py",
+        "test_argparse.py",
+        "test_fixers.py",
+        "test_functools.py",
+        "test_os.py"
+      ]
+    },
+    {
+      "label": "ts-core-small",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 92,
+      "rules_sha256": "f1691438c671b646173df1369d9a40c4f757f25b2961421d4330f90771e6fec0",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 10,
+      "p50_ms": 369.9,
+      "p95_ms": 430.3,
+      "max_ms": 451.5,
+      "min_ms": 356.0,
+      "results_total": 18,
+      "failures": 0,
+      "samples": [
+        "6zub.tsx",
+        "FIxm.tsx",
+        "FRPs.tsx",
+        "I6CV.tsx",
+        "JsAutoCompletion.ts",
+        "W0wT.tsx",
+        "WVGH.tsx",
+        "Y0dM.tsx",
+        "extension.ts",
+        "sutn.tsx"
+      ]
+    },
+    {
+      "label": "ts-core-256k",
+      "engine": "semgrep-core",
+      "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+      "rules": 92,
+      "rules_sha256": "f1691438c671b646173df1369d9a40c4f757f25b2961421d4330f90771e6fec0",
+      "rules_declared": null,
+      "rules_effective": null,
+      "n": 2,
+      "p50_ms": 6596.4,
+      "p95_ms": 6691.8,
+      "max_ms": 6702.4,
+      "min_ms": 6490.4,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "sample.ts"
+      ]
+    },
+    {
+      "label": "osemgrep-ts-small",
+      "engine": "osemgrep",
+      "engine_version": "1.184.0",
+      "rules": "ts_all.yaml",
+      "rules_sha256": "0d16ce08dc19a1a7c5ad6285a6fbf60dcac16416168656482472f5f5aba6dfe9",
+      "rules_declared": 95,
+      "rules_effective": 92,
+      "n": 10,
+      "p50_ms": 1047.6,
+      "p95_ms": 1234.9,
+      "max_ms": 1259.8,
+      "min_ms": 960.1,
+      "results_total": 18,
+      "failures": 0,
+      "samples": [
+        "small_0.json",
+        "small_1.json",
+        "small_2.json",
+        "small_3.json",
+        "small_4.json",
+        "small_5.json",
+        "small_6.json",
+        "small_7.json",
+        "small_8.json",
+        "small_9.json"
+      ]
+    },
+    {
+      "label": "osemgrep-ts-256k",
+      "engine": "osemgrep",
+      "engine_version": "1.184.0",
+      "rules": "ts_all.yaml",
+      "rules_sha256": "0d16ce08dc19a1a7c5ad6285a6fbf60dcac16416168656482472f5f5aba6dfe9",
+      "rules_declared": 95,
+      "rules_effective": 92,
+      "n": 2,
+      "p50_ms": 6938.4,
+      "p95_ms": 7228.1,
+      "max_ms": 7260.3,
+      "min_ms": 6616.4,
+      "results_total": 0,
+      "failures": 0,
+      "samples": [
+        "sample.ts"
+      ]
+    }
+  ],
+  "payload": {
+    "per_language": {
+      "py": {
+        "file": "research/semgrep-bench/_payload_py.json",
+        "results_kept": 3,
+        "fields": {
+          "check_id": true,
+          "cwe": true,
+          "severity": true,
+          "lines": true,
+          "path": true
+        },
+        "paths_scanned": 1,
+        "severity_value": "ERROR",
+        "cwe_value": [
+          "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+        ]
+      },
+      "ts": {
+        "file": "research/semgrep-bench/_payload_ts.json",
+        "results_kept": 3,
+        "fields": {
+          "check_id": true,
+          "cwe": true,
+          "severity": true,
+          "lines": true,
+          "path": true
+        },
+        "paths_scanned": 1,
+        "severity_value": "WARNING",
+        "cwe_value": [
+          "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+        ]
+      }
+    },
+    "all_fields_parse": true,
+    "paths_scanned_eq_1": true,
+    "verdict": "满足"
+  },
+  "paths": {
+    "targets_real_repo_file": true,
+    "semgrepignore_probe": {
+      "cwd": "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures",
+      "semgrepignore": "target.py",
+      "target": "target.py",
+      "results_with_ignore": 4,
+      "paths_scanned_with_ignore": [
+        "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\target.py"
+      ],
+      "ignore_applied": false,
+      "rc": 0
+    },
+    "paths_scanned_echo": [
+      "f:\\DSH\\graduation-project\\Code-Review-System\\research\\semgrep-bench\\fixtures\\hit.py"
+    ],
+    "paths_scanned_is_absolute_fpath": true,
+    "verdict": "core 不读 .semgrepignore（忽略判定不在 core 层）；paths.scanned 回显绝对 fpath 而非 ppath"
+  },
+  "fixtures": {
+    "dir": "research/semgrep-bench/fixtures",
+    "files": {
+      "hit.py": {
+        "expected_results": 3,
+        "rules": "py_all.yaml",
+        "bytes": 100,
+        "check_ids": [
+          "dangerous-subprocess-use-audit",
+          "dangerous-system-call-audit",
+          "subprocess-shell-true"
+        ]
+      },
+      "target.py": {
+        "expected_results": 4,
+        "rules": "py_all.yaml",
+        "bytes": 116,
+        "check_ids": [
+          "dangerous-subprocess-use-audit",
+          "subprocess-shell-true"
+        ]
+      },
+      "target.ts": {
+        "expected_results": 1,
+        "rules": "ts_all.yaml",
+        "bytes": 89,
+        "check_ids": [
+          "detect-child-process"
+        ]
+      }
+    },
+    "hit_criterion": "results 条数",
+    "probe": "research/semgrep-bench/fixture_probe.py"
+  },
+  "verdicts": {
+    "py_block_small_max_le_1_2s": 460.2,
+    "py_block_small_pass": true,
+    "py_cwe_coverage_ge_5_of_7": true,
+    "py_hit_fixture_fields_ok": true
+  }
+}

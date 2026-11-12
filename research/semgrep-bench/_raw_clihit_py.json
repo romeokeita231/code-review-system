@@ -1,0 +1,56 @@
+[
+ {
+  "ms": 864.9,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4493,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "warmup"
+ },
+ {
+  "ms": 819.8,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4459,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "run"
+ },
+ {
+  "ms": 876.5,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4440,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "run"
+ },
+ {
+  "ms": 855.2,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4439,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "run"
+ },
+ {
+  "ms": 837.2,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4504,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "run"
+ },
+ {
+  "ms": 813.9,
+  "rc": 0,
+  "findings": 3,
+  "out_bytes": 4437,
+  "err_tail": " Summary \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\nSome files were skipped or only partially analyzed.\n  Scan was limited to files tracked by git.\n\nRan 31 rules on 1 file: 3 findings.",
+  "label": "osemgrep-hit-py",
+  "phase": "run"
+ }
+]

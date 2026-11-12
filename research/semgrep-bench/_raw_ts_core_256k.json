@@ -1,0 +1,36 @@
+[
+ {
+  "label": "ts-core-256k",
+  "sample": "sample.ts",
+  "sample_path": "C:\\Users\\romeo_keta\\AppData\\Local\\Temp\\prereq_samples\\sample.ts",
+  "sample_bytes": 261843,
+  "i": 0,
+  "ms": 6490.4,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1,
+  "engine": "semgrep-core",
+  "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+  "rules_sha256": "f1691438c671b646173df1369d9a40c4f757f25b2961421d4330f90771e6fec0",
+  "rules_count": 92,
+  "err_tail": ""
+ },
+ {
+  "label": "ts-core-256k",
+  "sample": "sample.ts",
+  "sample_path": "C:\\Users\\romeo_keta\\AppData\\Local\\Temp\\prereq_samples\\sample.ts",
+  "sample_bytes": 261843,
+  "i": 1,
+  "ms": 6702.4,
+  "rc": 0,
+  "results": 0,
+  "errors": 0,
+  "paths_scanned": 1,
+  "engine": "semgrep-core",
+  "engine_version": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+  "rules_sha256": "f1691438c671b646173df1369d9a40c4f757f25b2961421d4330f90771e6fec0",
+  "rules_count": 92,
+  "err_tail": ""
+ }
+]
