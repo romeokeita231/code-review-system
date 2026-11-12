@@ -32,6 +32,8 @@ const merged = (over: Partial<MergedFinding> = {}): MergedFinding => ({
   ...finding(),
   sources: ["aor"],
   rawIds: ["aor-1"],
+  evidenceSources: ["aor"],
+  certified: true,
   cweComparable: true,
   conflictResolution: "none",
   blockable: true,
@@ -88,7 +90,12 @@ describe("conflict", () => {
 
   it("prefers verifiable evidence", () => {
     const out = resolveConflicts([
-      merged({ sources: ["aor", "semgrep"], rawIds: ["a", "s"], evidence: "os.system(cmd)" }),
+      merged({
+        sources: ["aor", "semgrep"],
+        rawIds: ["a", "s"],
+        evidenceSources: ["aor", "semgrep"],
+        evidence: "os.system(cmd)",
+      }),
     ]);
     expect(out[0]!.conflictResolution).toBe("evidence_preferred");
     expect(out[0]!.blockable).toBe(true);

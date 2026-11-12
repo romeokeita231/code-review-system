@@ -29,7 +29,7 @@ describe("change events", () => {
     expect(event.phase).toBe("pre");
     expect(event.diffProvenance).toBe("synthesized");
     expect(event.files).toEqual(["src/app.ts"]);
-    expect(event.diff).toBe("--- a/src/app.ts\n+++ b/src/app.ts\n-b\n+c");
+    expect(event.diff).toBe("--- a/src/app.ts\n+++ b/src/app.ts\n@@ -2,1 +2,1 @@\n-b\n+c");
   });
 
   it("builds observed post events", () => {
@@ -46,7 +46,7 @@ describe("change events", () => {
     expect(ChangeEvent.parse(event)).toEqual(event);
     expect(event.phase).toBe("post");
     expect(event.diffProvenance).toBe("observed");
-    expect(event.diff).toBe("--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new");
+    expect(event.diff).toBe("--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new");
   });
 
   it("emits post-only command events without files or diff", () => {

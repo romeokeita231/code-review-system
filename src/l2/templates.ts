@@ -26,8 +26,10 @@ export interface TemplateGroup {
   cwe: string | null;
   lines: number[];
   fixClause: string;
-  source: string;
-  category: string;
+}
+
+export function groupKey(key: { file: string; ruleId: string }): string {
+  return `${key.file}\u0000${key.ruleId}`;
 }
 
 export function shortenPath(path: string, maxChars = DEFAULT_LIMITS.maxPathChars): string {
@@ -63,7 +65,7 @@ export function groupsFromFindings(findings: MergedFinding[]): TemplateGroup[] {
   const map = new Map<string, TemplateGroup>();
   for (const finding of findings) {
     const ruleId = finding.rawId.split("\u0000")[0] ?? finding.rawId;
-    const key = `${finding.file}\u0000${ruleId}`;
+    const key = groupKey({ file: finding.file, ruleId });
     const existing = map.get(key);
     if (existing) {
       existing.lines.push(finding.startLine);
@@ -77,8 +79,6 @@ export function groupsFromFindings(findings: MergedFinding[]): TemplateGroup[] {
       cwe: finding.cwe ?? null,
       lines: [finding.startLine],
       fixClause: fixClauseFor(finding),
-      source: finding.source,
-      category: finding.cwe ?? "unknown",
     });
   }
   return sortGroups([...map.values()]);

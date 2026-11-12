@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  FakeSource,
-  createSources,
-  createTriage,
-  degradedResult,
-  okResult,
-  timeoutResult,
-} from "../../src/l3/index.js";
+import { createSources, createTriage } from "../../src/l3/index.js";
+import { FakeSource, degradedResult, okResult, timeoutResult } from "../support/fake-source.js";
 import { finding, makeConfig, makeInput } from "./support.js";
 
 describe("FakeSource", () => {

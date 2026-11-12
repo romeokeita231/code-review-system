@@ -1,4 +1,4 @@
-import type { Finding, SignalSource, SourceName, SourceResult, SourceReviewInput } from "../contracts/index.js";
+import type { Finding, SignalSource, SourceName, SourceResult, SourceReviewInput } from "../../src/contracts/index.js";
 
 export class FakeSource implements SignalSource {
   readonly name: SourceName;

@@ -66,6 +66,7 @@ async function replayCommand(values: Record<string, string | undefined>): Promis
     baselines: baselines as Baseline[],
     outDir: resolve(values.out ?? "runs"),
     runIdPrefix: values["run-id"] ?? "replay",
+    repeats: values.repeat ? Number(values.repeat) : undefined,
     recordedDir: values.recorded ? resolve(values.recorded) : resolve("tests/fixtures/replay"),
   });
 }
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
       recorded: { type: "string" },
       "repo-rev": { type: "string" },
       "run-id": { type: "string" },
+      repeat: { type: "string" },
     },
   });
   if (command === "review") {

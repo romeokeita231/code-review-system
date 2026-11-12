@@ -122,7 +122,7 @@ export function applyCalibration(
 ): number {
   const prior = artifact?.pPrior ?? pPrior;
   const pMax = artifact?.pMax ?? P_MAX;
-  if (!artifact) return Math.min(Math.max(prior, prior), pMax);
+  if (!artifact) return Math.min(prior, pMax);
   const category = categoryOf(finding);
   const grid =
     artifact.grids.find((g) => g.source === finding.source && g.category === category) ??

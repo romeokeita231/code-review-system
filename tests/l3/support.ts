@@ -12,6 +12,7 @@ export interface ConfigOverrides {
   crg?: Partial<RunConfig["sources"]["crg"]>;
   registry?: Partial<RunConfig["sources"]["registry"]>;
   triage?: Partial<RunConfig["triage"]>;
+  sMax?: Partial<RunConfig["sMax"]>;
 }
 
 export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
@@ -23,12 +24,19 @@ export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
       semgrep: {
         enabled: true,
         command: "semgrep",
+        osemgrepCommand: "osemgrep",
         version: "1.184.0",
-        rulesPath: "rules.yaml",
-        rulesSha256: "a".repeat(64),
-        subsets: [{ id: "py", path: "py.yaml", sha256: "b".repeat(64), langs: ["python"], blockRules: ["r"] }],
+        fullBlockMaxBytes: 102400,
+        subsets: [
+          {
+            id: "py-block",
+            path: "research/semgrep-bench/snapshot/py_block.yaml",
+            sha256: "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+            langs: ["python"],
+            blockRules: ["command-injection-os-system"],
+          },
+        ],
         timeoutsMs: { callMs: 5000 },
-        failOpenOverBytes: { py: 102400, ts: 102400, js: 102400 },
         ...overrides.semgrep,
       },
       aor: {
@@ -72,12 +80,14 @@ export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
       crgQueryMs: 300,
       fusionWriteMs: 500,
       softCapMs: 6000,
+      cacheTtlMs: 300000,
+      maxConcurrency: 2,
     },
     thresholds: { block: 0.9, warn: 0.7 },
     weights: { single: 1, dual: 0.75 },
     prior: { pPrior: 0.1 },
     calibration: { artifactPath: "calibration.json", version: "1" },
-    sMax: { py: 743188, ts: 200000 },
+    sMax: { python: 743188, typescript: 102400, ...overrides.sMax },
     persistence: {
       jsonlPath: "runs/runs.jsonl",
       rawDir: "runs/raw",

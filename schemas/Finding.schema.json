@@ -5,6 +5,9 @@
     "Finding": {
       "additionalProperties": false,
       "properties": {
+        "certified": {
+          "type": "boolean"
+        },
         "confidence": {
           "maximum": 1,
           "minimum": 0,

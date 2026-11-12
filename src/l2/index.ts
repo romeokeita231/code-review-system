@@ -3,10 +3,9 @@ export {
   DenyGuard,
   type ReviewContext,
   type ReviewOutcome,
-  type TriageProvider,
-  type TriageAnalysis,
   type DenyGroupKey,
 } from "./orchestrator.js";
+export { ConclusionCache } from "./cache.js";
 export {
   TurnBudgetLedger,
   ledgerFor,
@@ -19,6 +18,7 @@ export {
 export {
   DEFAULT_LIMITS,
   formatMessage,
+  groupKey,
   groupsFromFindings,
   mechanismOf,
   shortenPath,

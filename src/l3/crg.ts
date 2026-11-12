@@ -1,27 +1,13 @@
 import type { ChangeEvent } from "../contracts/index.js";
 import type { RunConfig } from "../contracts/index.js";
-import type { TriageAnalysis, TriageProvider } from "../l2/index.js";
+import type { TriageAnalysis, TriageProvider } from "../contracts/index.js";
 import { execaRunner, type CommandRunner } from "./semgrep.js";
+import { asNumber, asRecord, asString } from "./json.js";
 
 export interface CrgOptions {
   root: string;
   runner?: CommandRunner;
   python?: string;
-}
-
-const QUERY_BUDGET_MS = 300;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function toPosix(value: string): string {
@@ -82,21 +68,21 @@ export class CrgTriage implements TriageProvider {
   private readonly root: string;
   private readonly runner: CommandRunner;
   private readonly python: string;
-  private readonly readiness = new Map<string, boolean>();
+  private readonly queryMs: number;
 
-  constructor(_config: RunConfig, opts: CrgOptions) {
+  constructor(config: RunConfig, opts: CrgOptions) {
     this.root = opts.root;
     this.runner = opts.runner ?? execaRunner;
     this.python = opts.python ?? process.env["CRG_PYTHON"] ?? "python";
+    this.queryMs = config.budgets.crgQueryMs;
   }
 
   async analyze(event: ChangeEvent, deadline: number): Promise<TriageAnalysis> {
     const changedFiles = event.files ?? [];
-    if (this.readiness.get(this.root) === false) return degradedAnalysis(changedFiles);
 
     const remaining = deadline - Date.now();
     if (remaining <= 0) return degradedAnalysis(changedFiles);
-    const timeoutMs = Math.min(QUERY_BUDGET_MS, remaining);
+    const timeoutMs = Math.min(this.queryMs, remaining);
 
     let result;
     try {
@@ -117,12 +103,10 @@ export class CrgTriage implements TriageProvider {
         timeoutMs,
       });
     } catch {
-      this.readiness.set(this.root, false);
       return degradedAnalysis(changedFiles);
     }
 
     if (result.timedOut || result.exitCode !== 0) {
-      this.readiness.set(this.root, false);
       return degradedAnalysis(changedFiles);
     }
 
@@ -130,13 +114,10 @@ export class CrgTriage implements TriageProvider {
     try {
       parsed = JSON.parse(result.stdout);
     } catch {
-      this.readiness.set(this.root, false);
       return degradedAnalysis(changedFiles);
     }
 
-    const analysis = analyzeStatic(changedFiles, parsed, this.root);
-    this.readiness.set(this.root, analysis.indexReady);
-    return analysis;
+    return analyzeStatic(changedFiles, parsed, this.root);
   }
 }
 

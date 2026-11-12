@@ -21,6 +21,7 @@ function merged(
     rawId: `${file}:${startLine}:${endLine}:${cwe ?? "-"}`,
     sources: ["semgrep"],
     rawIds: [`${file}:${startLine}:${endLine}:${cwe ?? "-"}`],
+    evidenceSources: [],
     cweComparable: true,
     conflictResolution: "none",
     blockable: true,

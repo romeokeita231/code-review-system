@@ -9,8 +9,10 @@ export function categoriesComparable(a: Finding, b: Finding): boolean {
   return true;
 }
 
-function comparable(a: Finding, b: Finding): boolean {
-  return a.file === b.file && intervalsIntersect(a, b) && categoriesComparable(a, b);
+function joinable(group: Finding[], finding: Finding): boolean {
+  if (!group.every((member) => member.file === finding.file)) return false;
+  if (!group.some((member) => intervalsIntersect(member, finding))) return false;
+  return !group.some((member) => !categoriesComparable(member, finding));
 }
 
 function toMerged(group: Finding[]): MergedFinding {
@@ -36,6 +38,8 @@ function toMerged(group: Finding[]): MergedFinding {
     rawId: head.rawId,
     sources,
     rawIds: group.map((f) => f.rawId),
+    evidenceSources: [...new Set(group.filter((f) => f.evidence).map((f) => f.source))].sort(),
+    certified: group.every((f) => f.certified !== false),
     cweComparable: !(group.some((f) => f.cwe) && group.some((f) => !f.cwe)),
     conflictResolution: "none",
     blockable: true,
@@ -50,7 +54,7 @@ export function mergeFindings(findings: Finding[]): MergedFinding[] {
     return a.rawId < b.rawId ? -1 : a.rawId > b.rawId ? 1 : 0;
   });
   for (const finding of ordered) {
-    const hit = groups.find((g) => g.some((member) => comparable(member, finding)));
+    const hit = groups.find((g) => joinable(g, finding));
     if (hit) hit.push(finding);
     else groups.push([finding]);
   }

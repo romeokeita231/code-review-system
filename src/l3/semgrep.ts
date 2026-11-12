@@ -10,6 +10,9 @@ import type {
   SourceStatus,
 } from "../contracts/index.js";
 
+import { sha256 } from "../config/index.js";
+import { asNumber, asRecord, asString } from "./json.js";
+
 export interface CommandRequest {
   file: string;
   args: string[];
@@ -55,17 +58,17 @@ export interface SemgrepOptions {
   runner?: CommandRunner;
 }
 
-const DEFAULT_MAX_BYTES = 100 * 1024;
-
 const LANGUAGE_BY_EXT: Record<string, string> = {
-  ".py": "py",
-  ".ts": "ts",
-  ".tsx": "ts",
-  ".js": "js",
-  ".jsx": "js",
-  ".mjs": "js",
-  ".cjs": "js",
+  ".py": "python",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".js": "javascript",
+  ".jsx": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
 };
+
+const DENYLIST_LIMIT = 512;
 
 function toPosix(value: string): string {
   return value.replace(/\\/g, "/");
@@ -76,19 +79,6 @@ function normalizeRel(value: string): string | null {
   if (norm.length === 0 || norm.startsWith("/") || /^[A-Za-z]:/.test(norm)) return null;
   if (norm.split("/").some((part) => part === "..")) return null;
   return norm;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function languageOf(file: string): string | null {
@@ -175,12 +165,28 @@ interface Materialized {
   content: string;
 }
 
+interface GroupOutcome {
+  status: SourceStatus;
+  errorKind: string | null;
+  covered: number;
+  unknown: number;
+  findings: Finding[];
+}
+
+interface RuleSet {
+  id: string;
+  sha: string;
+  text: string;
+  blockRules: string[];
+}
+
 export class SemgrepSource implements SignalSource {
   readonly name = "semgrep" as const;
 
   private readonly config: RunConfig;
   private readonly root: string;
   private readonly runner: CommandRunner;
+  private readonly denylist = new Map<string, string>();
 
   constructor(config: RunConfig, opts: SemgrepOptions) {
     this.config = config;
@@ -208,17 +214,34 @@ export class SemgrepSource implements SignalSource {
       loaded.push({ file: target, rel, content });
     }
 
-    const limits = this.config.sources.semgrep.failOpenOverBytes;
+    const semgrepConfig = this.config.sources.semgrep;
+    const small: Materialized[] = [];
+    const large: Materialized[] = [];
+    let oversized = 0;
+    let unsupported = 0;
     for (const item of loaded) {
       const lang = languageOf(item.file);
-      const limit = (lang !== null ? limits[lang] : undefined) ?? DEFAULT_MAX_BYTES;
-      if (Buffer.byteLength(item.content, "utf8") > limit) {
-        return blank("degraded", "file_too_large", startedAt, 0, targets.length);
+      const limit = lang === null ? undefined : this.config.sMax[lang];
+      const bytes = Buffer.byteLength(item.content, "utf8");
+      if (lang === null || limit === undefined) {
+        unsupported += 1;
+        continue;
       }
+      if (bytes > limit) {
+        oversized += 1;
+        continue;
+      }
+      if (bytes <= semgrepConfig.fullBlockMaxBytes) small.push(item);
+      else large.push(item);
+    }
+
+    if (small.length === 0 && large.length === 0) {
+      const errorKind = loaded.length > 0 && oversized > 0 ? "file_too_large" : "language_unsupported";
+      return blank("degraded", errorKind, startedAt, 0, targets.length);
     }
 
     const remaining = input.deadline - Date.now();
-    const timeoutMs = Math.min(this.config.sources.semgrep.timeoutsMs.callMs, remaining);
+    const timeoutMs = Math.min(semgrepConfig.timeoutsMs.callMs, remaining);
     if (timeoutMs <= 0) return blank("timeout", "deadline", startedAt, 0, targets.length);
 
     let tempRoot: string;
@@ -229,127 +252,268 @@ export class SemgrepSource implements SignalSource {
     }
 
     try {
-      for (const item of loaded) {
+      const written: Materialized[] = [];
+      for (const item of [...small, ...large]) {
         const target = path.join(tempRoot, ...item.rel.split("/"));
         await mkdir(path.dirname(target), { recursive: true });
         await writeFile(target, item.content, "utf8");
+        written.push(item);
       }
 
-      let result: CommandResult;
-      try {
-        result = await this.runner.run({
-          file: this.config.sources.semgrep.command,
-          args: [
-            "scan",
-            "--config",
-            this.config.sources.semgrep.rulesPath,
-            "--json",
-            "--no-git-ignore",
-            "--x-semgrepignore-filename",
-            ".semgrepignore",
-            ...loaded.map((item) => item.rel),
-          ],
-          cwd: tempRoot,
-          timeoutMs,
-        });
-      } catch {
-        return blank("error", "spawn_error", startedAt, 0, targets.length);
-      }
-
-      if (result.timedOut) return blank("timeout", "timeout", startedAt, 0, targets.length);
-      if (result.exitCode !== 0) return blank("error", "exit_code", startedAt, 0, targets.length);
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(result.stdout);
-      } catch {
-        return blank("error", "json_parse", startedAt, 0, targets.length);
-      }
-
-      const doc = asRecord(parsed);
-      if (doc === null) return blank("degraded", "payload_missing", startedAt, 0, targets.length);
-
-      const paths = asRecord(doc["paths"]);
-      const scanned = scannedCount(paths?.["scanned"]);
-      if (scanned !== 1) {
-        return blank("degraded", "paths_scanned", startedAt, 0, targets.length);
-      }
-
-      const rawResults = doc["results"];
-      const rawErrors = doc["errors"];
-      if (!Array.isArray(rawResults) || !Array.isArray(rawErrors)) {
-        return blank("degraded", "payload_missing", startedAt, 0, targets.length);
-      }
-
-      const coreResults: Array<{ result: Record<string, unknown>; extra: Record<string, unknown> }> = [];
-      let sawEngine = false;
-      let malformed = false;
-      for (const raw of rawResults) {
-        const result = asRecord(raw);
-        if (result === null) {
-          malformed = true;
-          break;
+      const outcomes: GroupOutcome[] = [];
+      for (const [items, isLarge] of [
+        [small, false],
+        [large, true],
+      ] as const) {
+        if (items.length === 0) continue;
+        for (const [lang, group] of this.groupByLanguage(items)) {
+          outcomes.push(
+            await this.scanGroup(lang, isLarge, group, tempRoot, written, timeoutMs),
+          );
         }
-        if (asString(result["check_id"]) === null || asString(result["path"]) === null) {
-          malformed = true;
-          break;
-        }
-        const start = asRecord(result["start"]);
-        const end = asRecord(result["end"]);
-        if (asNumber(start?.["line"]) === null || asNumber(end?.["line"]) === null) {
-          malformed = true;
-          break;
-        }
-        const extra = asRecord(result["extra"]);
-        if (extra === null) {
-          malformed = true;
-          break;
-        }
-        const engine = engineOf(extra);
-        if (engine !== null) sawEngine = true;
-        if (engine === "core") coreResults.push({ result, extra });
-      }
-
-      if (malformed) return blank("degraded", "result_shape", startedAt, 0, targets.length);
-      if (rawResults.length > 0 && !sawEngine) {
-        return blank("degraded", "engine_contract", startedAt, 0, targets.length);
       }
 
       const findings: Finding[] = [];
-      for (const item of coreResults) {
-        const file = this.resolveFile(asString(item.result["path"]) ?? "", tempRoot, loaded);
-        if (file === null) return blank("degraded", "path_mismatch", startedAt, 0, targets.length);
-        const checkId = asString(item.result["check_id"])!;
-        const startLine = asNumber(asRecord(item.result["start"])?.["line"])!;
-        const endLine = asNumber(asRecord(item.result["end"])?.["line"])!;
-        const metadata = asRecord(item.extra["metadata"]);
-        const severity = severityNumber(
-          asString(metadata?.["severity"]) ?? asString(item.extra["severity"]),
-        );
-        const confidence = confidenceNumber(asString(metadata?.["confidence"]));
-        findings.push({
-          file,
-          startLine,
-          endLine,
-          severity,
-          confidence,
-          source: "semgrep",
-          cwe: normalizeCwe(metadata?.["cwe"]),
-          evidence: evidenceOf(item.extra),
-          rawId: `${checkId}\u0000${file}\u0000${startLine}\u0000${endLine}`,
-        });
+      let covered = 0;
+      let unknown = 0;
+      const reasons: string[] = [];
+      let status: SourceStatus = "ok";
+      for (const outcome of outcomes) {
+        covered += outcome.covered;
+        unknown += outcome.unknown;
+        findings.push(...outcome.findings);
+        if (outcome.errorKind !== null) reasons.push(outcome.errorKind);
+        status = worse(status, outcome.status);
       }
+      unknown += oversized + unsupported;
+      if (oversized > 0) reasons.push("file_too_large");
+      if (unsupported > 0) reasons.push("language_unsupported");
 
-      const filesUnknown = Math.max(0, targets.length - scanned);
-      if (rawErrors.length > 0) {
-        return blank("degraded", "scan_errors", startedAt, scanned, filesUnknown, findings);
-      }
-      return blank("ok", null, startedAt, scanned, filesUnknown, findings);
+      return blank(
+        status,
+        reasons.length > 0 ? reasons.join(";") : null,
+        startedAt,
+        Math.min(covered, targets.length),
+        Math.min(unknown, targets.length),
+        findings,
+      );
     } catch {
       return blank("error", "internal", startedAt, 0, targets.length);
     } finally {
       await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  private groupByLanguage(items: Materialized[]): Map<string, Materialized[]> {
+    const groups = new Map<string, Materialized[]>();
+    for (const item of items) {
+      const lang = languageOf(item.file)!;
+      const bucket = groups.get(lang);
+      if (bucket) bucket.push(item);
+      else groups.set(lang, [item]);
+    }
+    return groups;
+  }
+
+  private async scanGroup(
+    lang: string,
+    isLarge: boolean,
+    items: Materialized[],
+    tempRoot: string,
+    written: Materialized[],
+    timeoutMs: number,
+  ): Promise<GroupOutcome> {
+    const config = this.config.sources.semgrep;
+    const candidates = config.subsets.filter(
+      (subset) => subset.langs.includes(lang) && (subset.nontaint === true) === isLarge,
+    );
+    if (candidates.length === 0) {
+      return { status: "degraded", errorKind: "language_unsupported", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const rules: RuleSet[] = [];
+    const failures: string[] = [];
+    const denyKeys = new Map<string, string>();
+    for (const subset of candidates) {
+      const absolute = path.isAbsolute(subset.path) ? subset.path : path.resolve(this.root, subset.path);
+      try {
+        const text = await readFile(absolute, "utf8");
+        if (sha256(text) !== subset.sha256) {
+          failures.push("rules_sha256");
+          continue;
+        }
+        rules.push({ id: subset.id, sha: subset.sha256, text, blockRules: subset.blockRules });
+      } catch {
+        failures.push("rules_missing");
+        continue;
+      }
+    }
+    if (rules.length === 0) {
+      return { status: "degraded", errorKind: failures[0] ?? "rules_missing", covered: 0, unknown: items.length, findings: [] };
+    }
+    for (const rule of rules) {
+      for (const item of items) {
+        denyKeys.set(this.denyKey(item, rule.sha), rule.id);
+      }
+    }
+
+    const allowed = items.filter((item) =>
+      rules.every((rule) => !this.denylist.has(this.denyKey(item, rule.sha))),
+    );
+    if (allowed.length === 0) {
+      return { status: "degraded", errorKind: "denylist", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const merged = rules.map((rule) => rule.text).join("\n---\n");
+    const ruleFile = path.join(tempRoot, `rules-${lang}-${isLarge ? "nontaint" : "full"}.yaml`);
+    await writeFile(ruleFile, merged, "utf8");
+    const blockRules = new Set(rules.flatMap((rule) => rule.blockRules));
+
+    const args = [
+      "scan",
+      "--config",
+      ruleFile,
+      "--json",
+      "--no-git-ignore",
+      "--x-semgrepignore-filename",
+      ".semgrepignore",
+      ...allowed.map((item) => item.rel),
+    ];
+
+    const attempt = async (command: string): Promise<{ result: CommandResult | null; engine: "core" | "osemgrep" }> => {
+      try {
+        return {
+          result: await this.runner.run({ file: command, args, cwd: tempRoot, timeoutMs }),
+          engine: command === config.command ? "core" : "osemgrep",
+        };
+      } catch {
+        return { result: null, engine: command === config.command ? "core" : "osemgrep" };
+      }
+    };
+
+    let attemptResult = await attempt(config.command);
+    if (attemptResult.result === null || (attemptResult.result.exitCode !== 0 && !attemptResult.result.timedOut)) {
+      attemptResult = await attempt(config.osemgrepCommand);
+    }
+    const result = attemptResult.result;
+    if (result === null) {
+      return { status: "error", errorKind: "spawn_error", covered: 0, unknown: items.length, findings: [] };
+    }
+    if (result.timedOut) {
+      for (const [key, subsetId] of denyKeys) this.rememberDeny(key, subsetId);
+      return { status: "timeout", errorKind: "timeout", covered: 0, unknown: items.length, findings: [] };
+    }
+    if (result.exitCode !== 0) {
+      return { status: "error", errorKind: "exit_code", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.stdout);
+    } catch {
+      return { status: "error", errorKind: "json_parse", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const doc = asRecord(parsed);
+    if (doc === null) {
+      return { status: "degraded", errorKind: "payload_missing", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const scanned = scannedCount(asRecord(doc["paths"])?.["scanned"]);
+    if (scanned !== allowed.length) {
+      return { status: "degraded", errorKind: "paths_scanned", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const rawResults = doc["results"];
+    const rawErrors = doc["errors"];
+    if (!Array.isArray(rawResults) || !Array.isArray(rawErrors)) {
+      return { status: "degraded", errorKind: "payload_missing", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const coreResults: Array<{ result: Record<string, unknown>; extra: Record<string, unknown> }> = [];
+    let sawEngine = false;
+    let malformed = false;
+    for (const raw of rawResults) {
+      const result = asRecord(raw);
+      if (result === null) {
+        malformed = true;
+        break;
+      }
+      if (asString(result["check_id"]) === null || asString(result["path"]) === null) {
+        malformed = true;
+        break;
+      }
+      const start = asRecord(result["start"]);
+      const end = asRecord(result["end"]);
+      if (asNumber(start?.["line"]) === null || asNumber(end?.["line"]) === null) {
+        malformed = true;
+        break;
+      }
+      const extra = asRecord(result["extra"]);
+      if (extra === null) {
+        malformed = true;
+        break;
+      }
+      const engine = engineOf(extra);
+      if (engine !== null) sawEngine = true;
+      if (engine === "core") coreResults.push({ result, extra });
+    }
+
+    if (malformed) {
+      return { status: "degraded", errorKind: "result_shape", covered: 0, unknown: items.length, findings: [] };
+    }
+    if (rawResults.length > 0 && !sawEngine) {
+      return { status: "degraded", errorKind: "engine_contract", covered: 0, unknown: items.length, findings: [] };
+    }
+
+    const findings: Finding[] = [];
+    for (const item of coreResults) {
+      const file = this.resolveFile(asString(item.result["path"]) ?? "", tempRoot, written);
+      if (file === null) {
+        return { status: "degraded", errorKind: "path_mismatch", covered: 0, unknown: items.length, findings: [] };
+      }
+      const checkId = asString(item.result["check_id"])!;
+      const startLine = asNumber(asRecord(item.result["start"])?.["line"])!;
+      const endLine = asNumber(asRecord(item.result["end"])?.["line"])!;
+      const metadata = asRecord(item.extra["metadata"]);
+      const severity = severityNumber(
+        asString(metadata?.["severity"]) ?? asString(item.extra["severity"]),
+      );
+      const confidence = confidenceNumber(asString(metadata?.["confidence"]));
+      findings.push({
+        file,
+        startLine,
+        endLine,
+        severity,
+        confidence,
+        source: "semgrep",
+        cwe: normalizeCwe(metadata?.["cwe"]),
+        evidence: evidenceOf(item.extra),
+        certified: blockRules.has(checkId),
+        rawId: `${checkId}\u0000${file}\u0000${startLine}\u0000${endLine}`,
+      });
+    }
+
+    const unknown = items.length - allowed.length;
+    if (rawErrors.length > 0) {
+      return { status: "degraded", errorKind: "scan_errors", covered: scanned, unknown, findings };
+    }
+    if (attemptResult.engine === "osemgrep") {
+      return { status: "degraded", errorKind: "engine_osemgrep", covered: scanned, unknown, findings };
+    }
+    return { status: "ok", errorKind: null, covered: scanned, unknown, findings };
+  }
+
+  private denyKey(item: Materialized, subsetSha: string): string {
+    return `${item.rel}\u0000${sha256(item.content)}\u0000${subsetSha}`;
+  }
+
+  private rememberDeny(key: string, subsetId: string): void {
+    if (this.denylist.size >= DENYLIST_LIMIT) {
+      const oldest = this.denylist.keys().next().value;
+      if (oldest !== undefined) this.denylist.delete(oldest);
+    }
+    this.denylist.set(key, subsetId);
   }
 
   private resolveFile(rawPath: string, tempRoot: string, loaded: Materialized[]): string | null {
@@ -362,6 +526,12 @@ export class SemgrepSource implements SignalSource {
     if (path.isAbsolute(rawPath) || /^[A-Za-z]:/.test(rawPath)) return null;
     return relative;
   }
+}
+
+const STATUS_RANK: Record<SourceStatus, number> = { ok: 0, degraded: 1, error: 2, timeout: 3 };
+
+function worse(left: SourceStatus, right: SourceStatus): SourceStatus {
+  return STATUS_RANK[right] > STATUS_RANK[left] ? right : left;
 }
 
 export function createSemgrepSource(config: RunConfig, opts: SemgrepOptions): SemgrepSource {

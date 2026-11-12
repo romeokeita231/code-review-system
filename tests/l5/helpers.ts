@@ -18,14 +18,19 @@ export const BASE_CONFIG: RunConfig = {
     semgrep: {
       enabled: true,
       command: "semgrep",
+      osemgrepCommand: "osemgrep",
       version: "1.184.0",
-      rulesPath: "rules.yaml",
-      rulesSha256: "rules-sha",
+      fullBlockMaxBytes: 102400,
       subsets: [
-        { id: "py", path: "rules.yaml", sha256: "rules-sha", langs: ["python"], blockRules: [] },
+        {
+          id: "py-block",
+          path: "research/semgrep-bench/snapshot/py_block.yaml",
+          sha256: "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+          langs: ["python"],
+          blockRules: [],
+        },
       ],
       timeoutsMs: { callMs: 5000 },
-      failOpenOverBytes: { python: 743188 },
     },
     aor: {
       enabled: true,
@@ -56,6 +61,8 @@ export const BASE_CONFIG: RunConfig = {
     crgQueryMs: 300,
     fusionWriteMs: 500,
     softCapMs: 6000,
+    cacheTtlMs: 300000,
+    maxConcurrency: 2,
   },
   thresholds: { block: 0.9, warn: 0.7 },
   weights: { single: 1, dual: 0.75 },

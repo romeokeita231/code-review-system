@@ -6,6 +6,9 @@ import type {
   SourceReviewInput,
 } from "../contracts/index.js";
 
+import { addedLines } from "./diff.js";
+import { asRecord } from "./json.js";
+
 export interface RegistryResponse {
   status: number;
 }
@@ -31,11 +34,6 @@ type Check =
   | { kind: "exists" }
   | { kind: "missing" }
   | { kind: "error"; errorKind: string };
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 function baseName(file: string): string {
   const parts = file.replace(/\\/g, "/").split("/");
@@ -96,36 +94,6 @@ function requirementDependencies(file: string, text: string): Dependency[] {
     }
   }
   return found;
-}
-
-function addedLines(diff: string | null): Map<string, Set<number>> | null {
-  if (diff === null) return null;
-  const map = new Map<string, Set<number>>();
-  let current: string | null = null;
-  let line = 0;
-  for (const raw of diff.split("\n")) {
-    if (raw.startsWith("+++ ")) {
-      const target = raw.slice(4).trim();
-      current = target === "/dev/null" ? null : target.replace(/^b\//, "");
-      if (current !== null && !map.has(current)) map.set(current, new Set());
-      continue;
-    }
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-    if (hunk?.[1]) {
-      line = Number(hunk[1]);
-      continue;
-    }
-    if (current === null) continue;
-    if (raw.startsWith("+")) {
-      map.get(current)?.add(line);
-      line += 1;
-    } else if (raw.startsWith("-") || raw.startsWith("\\")) {
-      continue;
-    } else {
-      line += 1;
-    }
-  }
-  return map;
 }
 
 function collect(text: string, file: string): Dependency[] {

@@ -1,8 +1,13 @@
 import { readFile } from "node:fs/promises";
-import type { CalibrationArtifact, ReviewRow, RunConfig, SignalSource } from "../contracts/index.js";
+import type {
+  CalibrationArtifact,
+  RunConfig,
+  SignalSource,
+  TriageProvider,
+} from "../contracts/index.js";
 import { ConfigError, loadCalibration, loadConfig } from "../config/index.js";
 import { DshAdapter } from "../l1/index.js";
-import { DenyGuard, TurnBudgetLedger, ledgerFor, review, type TriageProvider } from "../l2/index.js";
+import { DenyGuard, ConclusionCache, TurnBudgetLedger, ledgerFor, review } from "../l2/index.js";
 import { createSources, createTriage } from "../l3/index.js";
 import { appendRow } from "../l5/index.js";
 
@@ -20,6 +25,7 @@ export interface PluginRuntime {
   adapter: DshAdapter;
   ledger: TurnBudgetLedger;
   guards: Map<string, DenyGuard>;
+  cache: ConclusionCache;
   jsonlPath: string;
 }
 
@@ -63,6 +69,7 @@ export async function createRuntime(options: PluginOptions): Promise<PluginRunti
     }, () => `crs-${Date.now()}-${(counter += 1)}`),
     ledger: ledgerFor(config),
     guards: new Map(),
+    cache: new ConclusionCache(config.budgets.cacheTtlMs),
     jsonlPath: config.persistence.jsonlPath,
   };
 }
@@ -77,10 +84,6 @@ function guardFor(runtime: PluginRuntime, sessionId: string): DenyGuard {
   const guard = new DenyGuard();
   runtime.guards.set(sessionId, guard);
   return guard;
-}
-
-async function persist(runtime: PluginRuntime, row: ReviewRow): Promise<void> {
-  await appendRow(runtime.jsonlPath, row);
 }
 
 export async function preExecute(runtime: PluginRuntime, exec: HookExec): Promise<Decision> {
@@ -105,8 +108,10 @@ export async function preExecute(runtime: PluginRuntime, exec: HookExec): Promis
     artifact: runtime.artifact,
     guard: guardFor(runtime, sessionId),
     ledger: runtime.ledger,
+    sourceText: hooked.sourceText,
+    cache: runtime.cache,
   });
-  await persist(runtime, outcome.row);
+  await appendRow(runtime.jsonlPath, outcome.row);
   if (outcome.disposition.preDecision === "deny") {
     return { kind: "deny", reason: outcome.disposition.text ?? "blocked by code review" };
   }
@@ -120,7 +125,7 @@ export async function postExecute(
 ): Promise<Decision> {
   const sessionId = sessionOf(exec);
   const callId = exec.callId ?? `${Date.now()}`;
-  const event = await runtime.adapter.postExecute({
+  const hooked = await runtime.adapter.postExecute({
     name: exec.name,
     callId,
     rootCallId: exec.rootCallId ?? callId,
@@ -128,9 +133,7 @@ export async function postExecute(
     arguments: exec.arguments,
     value: result.value,
   });
-  if (event.files === null) return { kind: "accept" };
-
-  const outcome = await review(event, {
+  const outcome = await review(hooked.event, {
     runId: callId,
     config: runtime.config,
     sources: runtime.sources,
@@ -138,8 +141,10 @@ export async function postExecute(
     artifact: runtime.artifact,
     guard: guardFor(runtime, sessionId),
     ledger: runtime.ledger,
+    sourceText: hooked.sourceText,
+    cache: runtime.cache,
   });
-  await persist(runtime, outcome.row);
+  await appendRow(runtime.jsonlPath, outcome.row);
   if (outcome.disposition.postDecision === "inject_warn" && outcome.disposition.text) {
     return {
       kind: "accept",

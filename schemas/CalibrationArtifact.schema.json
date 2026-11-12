@@ -79,6 +79,9 @@
           "exclusiveMinimum": 0,
           "type": "number"
         },
+        "synthetic": {
+          "type": "boolean"
+        },
         "thresholds": {
           "additionalProperties": false,
           "properties": {

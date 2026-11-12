@@ -1,128 +1,141 @@
 {
-    "version":  "1.0.0",
-    "mode":  "replay",
-    "baseline":  "B4g",
-    "sources":  {
-                    "semgrep":  {
-                                    "enabled":  true,
-                                    "command":  "semgrep",
-                                    "version":  "1.184.0",
-                                    "rulesPath":  "research/semgrep-bench/snapshot/py_block.yaml",
-                                    "rulesSha256":  "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
-                                    "subsets":  [
-                                                    {
-                                                        "id":  "py-block",
-                                                        "path":  "research/semgrep-bench/snapshot/py_block.yaml",
-                                                        "sha256":  "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
-                                                        "langs":  [
-                                                                      "python"
-                                                                  ],
-                                                        "blockRules":  [
-                                                                           "command-injection-os-system",
-                                                                           "dangerous-subprocess-use",
-                                                                           "subprocess-shell-true",
-                                                                           "formatted-sql-query",
-                                                                           "sql-injection-db-cursor-execute",
-                                                                           "path-traversal-open"
-                                                                       ]
-                                                    },
-                                                    {
-                                                        "id":  "ts-dedup",
-                                                        "path":  "research/semgrep-bench/snapshot/ts_dedup.yaml",
-                                                        "sha256":  "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
-                                                        "langs":  [
-                                                                      "typescript"
-                                                                  ],
-                                                        "blockRules":  [
-
-                                                                       ]
-                                                    }
-                                                ],
-                                    "timeoutsMs":  {
-                                                       "callMs":  5000
-                                                   },
-                                    "failOpenOverBytes":  {
-                                                              "python":  743188,
-                                                              "typescript":  102400
-                                                          }
-                                },
-                    "aor":  {
-                                "enabled":  true,
-                                "command":  "ocr",
-                                "versionCommit":  "04deca6",
-                                "outerCapMs":  180000,
-                                "concurrency":  2,
-                                "timeoutPerFileMs":  120000,
-                                "maxChunks":  50,
-                                "preview":  {
-                                                "enabled":  true,
-                                                "budgetSwitchRatio":  0.6
-                                            },
-                                "tierTokens":  {
-                                                   "tier1":  60000,
-                                                   "tier2":  150000
-                                               },
-                                "tier2MaxTools":  100
-                            },
-                    "crg":  {
-                                "enabled":  true,
-                                "command":  "python",
-                                "indexTimeoutMs":  5000
-                            },
-                    "registry":  {
-                                     "enabled":  true,
-                                     "command":  "https://registry.npmjs.org",
-                                     "timeoutMs":  3000
-                                 }
-                },
-    "fusionStages":  {
-                         "merge":  true,
-                         "conflict":  true,
-                         "calibrate":  true,
-                         "vote":  true
-                     },
-    "tieBreak":  "max",
-    "triage":  {
-                   "enabled":  false,
-                   "tier0":  {
-                                 "filesMax":  3,
-                                 "nodesMax":  20
-                             },
-                   "tier1":  {
-                                 "filesMax":  10,
-                                 "nodesMax":  100
-                             }
-               },
-    "budgets":  {
-                    "callMs":  8000,
-                    "turnMs":  8000,
-                    "semgrepKillMs":  5000,
-                    "crgQueryMs":  300,
-                    "fusionWriteMs":  500,
-                    "softCapMs":  6000
-                },
-    "thresholds":  {
-                       "block":  0.9,
-                       "warn":  0.7
-                   },
-    "weights":  {
-                    "single":  1,
-                    "dual":  0.75
-                },
-    "prior":  {
-                  "pPrior":  0.3
-              },
-    "calibration":  {
-                        "artifactPath":  "artifacts/calibration.json",
-                        "version":  "calib-v1"
-                    },
-    "sMax":  {
-                 "python":  743188,
-                 "typescript":  102400
-             },
-    "persistence":  {
-                        "jsonlPath":  "runs/review.jsonl",
-                        "rawDir":  "runs/raw",
-                        "turnStatePath":  "runs/turn-state.json"
-                    }
+  "version": "1.0.0",
+  "mode": "replay",
+  "baseline": "B4g",
+  "sources": {
+    "semgrep": {
+      "enabled": true,
+      "command": "semgrep",
+      "version": "1.184.0",
+      "subsets": [
+        {
+          "id": "py-block",
+          "path": "research/semgrep-bench/snapshot/py_block.yaml",
+          "sha256": "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+          "langs": [
+            "python"
+          ],
+          "blockRules": [
+            "command-injection-os-system",
+            "dangerous-subprocess-use",
+            "subprocess-shell-true",
+            "formatted-sql-query",
+            "sql-injection-db-cursor-execute",
+            "path-traversal-open"
+          ]
+        },
+        {
+          "id": "ts-dedup",
+          "path": "research/semgrep-bench/snapshot/ts_dedup.yaml",
+          "sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+          "langs": [
+            "typescript"
+          ],
+          "blockRules": []
+        },
+        {
+          "id": "py-nontaint",
+          "path": "research/semgrep-bench/snapshot/py_nontaint.yaml",
+          "sha256": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c",
+          "langs": [
+            "python"
+          ],
+          "blockRules": [
+            "command-injection-os-system",
+            "sql-injection-db-cursor-execute",
+            "formatted-sql-query",
+            "subprocess-shell-true",
+            "path-traversal-open.django",
+            "path-traversal-open.flask"
+          ],
+          "nontaint": true
+        }
+      ],
+      "timeoutsMs": {
+        "callMs": 5000
+      },
+      "osemgrepCommand": "osemgrep",
+      "fullBlockMaxBytes": 102400
+    },
+    "aor": {
+      "enabled": true,
+      "command": "ocr",
+      "versionCommit": "04deca6",
+      "outerCapMs": 180000,
+      "concurrency": 2,
+      "timeoutPerFileMs": 120000,
+      "maxChunks": 50,
+      "preview": {
+        "enabled": true,
+        "budgetSwitchRatio": 0.6
+      },
+      "tierTokens": {
+        "tier1": 60000,
+        "tier2": 150000
+      },
+      "tier2MaxTools": 100
+    },
+    "crg": {
+      "enabled": true,
+      "command": "python",
+      "indexTimeoutMs": 5000
+    },
+    "registry": {
+      "enabled": false,
+      "command": "https://registry.npmjs.org",
+      "timeoutMs": 3000
+    }
+  },
+  "fusionStages": {
+    "merge": true,
+    "conflict": true,
+    "calibrate": true,
+    "vote": true
+  },
+  "tieBreak": "max",
+  "triage": {
+    "enabled": false,
+    "tier0": {
+      "filesMax": 3,
+      "nodesMax": 20
+    },
+    "tier1": {
+      "filesMax": 10,
+      "nodesMax": 100
+    }
+  },
+  "budgets": {
+    "callMs": 8000,
+    "turnMs": 8000,
+    "semgrepKillMs": 5000,
+    "crgQueryMs": 300,
+    "fusionWriteMs": 500,
+    "softCapMs": 6000,
+    "cacheTtlMs": 300000,
+    "maxConcurrency": 2
+  },
+  "thresholds": {
+    "block": 0.9,
+    "warn": 0.7
+  },
+  "weights": {
+    "single": 1,
+    "dual": 0.75
+  },
+  "prior": {
+    "pPrior": 0.3
+  },
+  "calibration": {
+    "artifactPath": "artifacts/calibration.json",
+    "version": "calib-v1"
+  },
+  "sMax": {
+    "python": 743188,
+    "typescript": 102400
+  },
+  "persistence": {
+    "jsonlPath": "runs/review.jsonl",
+    "rawDir": "runs/raw",
+    "turnStatePath": "runs/turn-state.json"
+  }
 }

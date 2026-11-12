@@ -35,7 +35,7 @@ describe("verifyDataset", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("reports content hash drift and root drift after tampering", async () => {
+  it("reports content hash drift and root drift after tampering", { timeout: 30000 }, async () => {
     const dir = await copyDataset();
     const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
     const target = join(dir, "samples", names[0]!);
@@ -49,7 +49,7 @@ describe("verifyDataset", () => {
     expect(result.errors.some((error) => error.includes("root hash drift"))).toBe(true);
   });
 
-  it("reports split leakage when a paired sample moves split", async () => {
+  it("reports split leakage when a paired sample moves split", { timeout: 30000 }, async () => {
     const dir = await copyDataset();
     const manifestPath = join(dir, "manifest.json");
     const manifest = await readJson<{

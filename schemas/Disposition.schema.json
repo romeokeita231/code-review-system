@@ -23,6 +23,9 @@
               "blockable": {
                 "type": "boolean"
               },
+              "certified": {
+                "type": "boolean"
+              },
               "confidence": {
                 "maximum": 1,
                 "minimum": 0,
@@ -60,6 +63,18 @@
                   "string",
                   "null"
                 ]
+              },
+              "evidenceSources": {
+                "items": {
+                  "enum": [
+                    "semgrep",
+                    "aor",
+                    "crg",
+                    "registry"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
               },
               "file": {
                 "minLength": 1,
@@ -123,6 +138,7 @@
               "rawId",
               "sources",
               "rawIds",
+              "evidenceSources",
               "cweComparable",
               "conflictResolution",
               "blockable"

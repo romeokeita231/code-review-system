@@ -61,7 +61,7 @@ describe("DshAdapter pre-execute", () => {
     });
 
     if (result.kind !== "allow" || result.event === null) throw new Error("expected event");
-    expect(result.event.diff).toBe("--- a/src/new.ts\n+++ b/src/new.ts\n+hello");
+    expect(result.event.diff).toBe("--- a/src/new.ts\n+++ b/src/new.ts\n@@ -1,0 +1,1 @@\n+hello");
   });
 
   it("applies edit with LF normalization", async () => {
@@ -95,7 +95,7 @@ describe("DshAdapter pre-execute", () => {
       arguments: { file_path: "F:\\elsewhere\\app.ts", content: "x\n" },
     });
 
-    expect(result).toEqual({ kind: "allow", event: null });
+    expect(result).toEqual({ kind: "allow", event: null, sourceText: {} });
     expect(api.reads).toEqual([]);
   });
 });
@@ -104,7 +104,7 @@ describe("DshAdapter post-execute", () => {
   it("emits an observed post event from value before/after", async () => {
     const fixture = load("write.json");
     const adapter = new DshAdapter(makeApi("F:\\repo", fixture.disk), () => "generated");
-    const event = await adapter.postExecute(fixture.post);
+    const { event, sourceText } = await adapter.postExecute(fixture.post);
 
     expect(ChangeEvent.parse(event)).toEqual(event);
     expect(event.id).toBe("call-write-1");
@@ -112,12 +112,13 @@ describe("DshAdapter post-execute", () => {
     expect(event.diffProvenance).toBe("observed");
     expect(event.files).toEqual(["src/app.ts"]);
     expect(event.diff).toContain("+const b = 3;");
+    expect(sourceText["src/app.ts"]).toContain("const b = 3;");
   });
 
   it("emits a post-only command event for non-file tools", async () => {
     const fixture = load("command.json");
     const adapter = new DshAdapter(makeApi("F:\\repo", ""), () => "generated");
-    const event = await adapter.postExecute(fixture.post);
+    const { event } = await adapter.postExecute(fixture.post);
 
     expect(ChangeEvent.parse(event)).toEqual(event);
     expect(event.trigger).toBe("command");

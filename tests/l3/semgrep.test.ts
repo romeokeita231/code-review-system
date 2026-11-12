@@ -90,7 +90,7 @@ describe("SemgrepSource", () => {
 
   it("fails open on oversized files without spawning", async () => {
     const runner = new ScriptedRunner(() => commandResult({}));
-    const config = makeConfig({ semgrep: { failOpenOverBytes: { py: 4 } } });
+    const config = makeConfig({ sMax: { python: 4 } });
     const source = createSemgrepSource(config, { root: process.cwd(), runner });
     const result = await source.review(makeInput(config, ["target.py"], { "target.py": "print(1)\n" }));
 

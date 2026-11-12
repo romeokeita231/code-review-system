@@ -102,18 +102,96 @@ function splitLines(text: string | null): string[] {
   return lines;
 }
 
-export function synthesizeDiff(path: string, before: string | null, after: string): string {
-  const oldLines = splitLines(before);
-  const newLines = splitLines(normalizeLf(after));
-  const lines: string[] = [`--- a/${path}`, `+++ b/${path}`];
-  const max = Math.max(oldLines.length, newLines.length);
+interface DiffOp {
+  kind: "same" | "del" | "add";
+  oldIndex: number;
+  newIndex: number;
+  text: string;
+}
 
+function positionalOps(oldLines: string[], newLines: string[]): DiffOp[] {
+  const ops: DiffOp[] = [];
+  const max = Math.max(oldLines.length, newLines.length);
   for (let index = 0; index < max; index += 1) {
     const oldLine = oldLines[index];
     const newLine = newLines[index];
-    if (oldLine === newLine) continue;
-    if (oldLine !== undefined) lines.push(`-${oldLine}`);
-    if (newLine !== undefined) lines.push(`+${newLine}`);
+    if (oldLine !== newLine && oldLine !== undefined) {
+      ops.push({ kind: "del", oldIndex: index, newIndex: index, text: oldLine });
+    }
+    if (oldLine !== newLine && newLine !== undefined) {
+      ops.push({ kind: "add", oldIndex: index, newIndex: index, text: newLine });
+    }
+    if (oldLine === newLine && oldLine !== undefined) {
+      ops.push({ kind: "same", oldIndex: index, newIndex: index, text: oldLine });
+    }
+  }
+  return ops;
+}
+
+function lcsOps(oldLines: string[], newLines: string[]): DiffOp[] {
+  const rows = oldLines.length + 1;
+  const cols = newLines.length + 1;
+  if (rows * cols > 2_000_000) return positionalOps(oldLines, newLines);
+
+  const table = new Uint32Array(rows * cols);
+  for (let i = oldLines.length - 1; i >= 0; i -= 1) {
+    for (let j = newLines.length - 1; j >= 0; j -= 1) {
+      table[i * cols + j] =
+        oldLines[i] === newLines[j]
+          ? table[(i + 1) * cols + j + 1]! + 1
+          : Math.max(table[(i + 1) * cols + j]!, table[i * cols + j + 1]!);
+    }
+  }
+
+  const ops: DiffOp[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < oldLines.length && j < newLines.length) {
+    if (oldLines[i] === newLines[j]) {
+      ops.push({ kind: "same", oldIndex: i, newIndex: j, text: oldLines[i]! });
+      i += 1;
+      j += 1;
+    } else if (table[(i + 1) * cols + j]! >= table[i * cols + j + 1]!) {
+      ops.push({ kind: "del", oldIndex: i, newIndex: j, text: oldLines[i]! });
+      i += 1;
+    } else {
+      ops.push({ kind: "add", oldIndex: i, newIndex: j, text: newLines[j]! });
+      j += 1;
+    }
+  }
+  while (i < oldLines.length) {
+    ops.push({ kind: "del", oldIndex: i, newIndex: j, text: oldLines[i]! });
+    i += 1;
+  }
+  while (j < newLines.length) {
+    ops.push({ kind: "add", oldIndex: i, newIndex: j, text: newLines[j]! });
+    j += 1;
+  }
+  return ops;
+}
+
+export function synthesizeDiff(path: string, before: string | null, after: string): string {
+  const ops = lcsOps(splitLines(before), splitLines(normalizeLf(after)));
+  const lines: string[] = [`--- a/${path}`, `+++ b/${path}`];
+
+  let index = 0;
+  while (index < ops.length) {
+    if (ops[index]!.kind === "same") {
+      index += 1;
+      continue;
+    }
+    const block: DiffOp[] = [];
+    while (index < ops.length && ops[index]!.kind !== "same") {
+      block.push(ops[index]!);
+      index += 1;
+    }
+    const oldCount = block.filter((op) => op.kind !== "add").length;
+    const newCount = block.filter((op) => op.kind !== "del").length;
+    const first = block[0]!;
+    lines.push(`@@ -${first.oldIndex + 1},${oldCount} +${first.newIndex + 1},${newCount} @@`);
+    for (const op of block) {
+      lines.push(`${op.kind === "del" ? "-" : "+"}${op.text}`);
+    }
   }
 
   return lines.join("\n");

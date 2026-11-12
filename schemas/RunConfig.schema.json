@@ -20,6 +20,10 @@
         "budgets": {
           "additionalProperties": false,
           "properties": {
+            "cacheTtlMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
             "callMs": {
               "exclusiveMinimum": 0,
               "type": "integer"
@@ -29,6 +33,10 @@
               "type": "integer"
             },
             "fusionWriteMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "maxConcurrency": {
               "exclusiveMinimum": 0,
               "type": "integer"
             },
@@ -51,7 +59,9 @@
             "semgrepKillMs",
             "crgQueryMs",
             "fusionWriteMs",
-            "softCapMs"
+            "softCapMs",
+            "cacheTtlMs",
+            "maxConcurrency"
           ],
           "type": "object"
         },
@@ -289,18 +299,11 @@
                 "enabled": {
                   "type": "boolean"
                 },
-                "failOpenOverBytes": {
-                  "additionalProperties": {
-                    "exclusiveMinimum": 0,
-                    "type": "integer"
-                  },
-                  "type": "object"
+                "fullBlockMaxBytes": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
                 },
-                "rulesPath": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "rulesSha256": {
+                "osemgrepCommand": {
                   "minLength": 1,
                   "type": "string"
                 },
@@ -325,6 +328,9 @@
                           "type": "string"
                         },
                         "type": "array"
+                      },
+                      "nontaint": {
+                        "type": "boolean"
                       },
                       "path": {
                         "minLength": 1,
@@ -368,12 +374,11 @@
               "required": [
                 "enabled",
                 "command",
+                "osemgrepCommand",
                 "version",
-                "rulesPath",
-                "rulesSha256",
+                "fullBlockMaxBytes",
                 "subsets",
-                "timeoutsMs",
-                "failOpenOverBytes"
+                "timeoutsMs"
               ],
               "type": "object"
             }

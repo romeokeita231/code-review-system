@@ -8,28 +8,54 @@ import type {
   SourceStatus,
 } from "../contracts/index.js";
 import { execaRunner, type CommandRunner } from "./semgrep.js";
+import { addedLines, intersectsAdded, repoPath } from "./diff.js";
+import { asNumber, asRecord, asString } from "./json.js";
 
 export interface AorOptions {
   root: string;
   runner?: CommandRunner;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function firstLine(text: string): string {
   const line = (text.trim().split("\n")[0] ?? "").trim();
   return line.slice(0, 200);
+}
+
+function collectPaths(value: unknown, into: Set<string>): void {
+  if (typeof value === "string") {
+    into.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPaths(item, into);
+    return;
+  }
+  const record = asRecord(value);
+  if (record === null) return;
+  const named = asString(record["path"]) ?? asString(record["file"]);
+  if (named !== null) into.add(named);
+}
+
+function previewPaths(stdout: string): Set<string> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const envelope = asRecord(parsed);
+  if (envelope === null) return null;
+  const files = new Set<string>();
+  for (const key of ["files", "paths", "preview_files", "predicted"]) {
+    if (envelope[key] !== undefined) collectPaths(envelope[key], files);
+  }
+  const manifest = asRecord(envelope["manifest"]);
+  if (manifest !== null) {
+    for (const key of ["files", "paths"]) {
+      if (manifest[key] !== undefined) collectPaths(manifest[key], files);
+    }
+  }
+  return files;
 }
 
 function severityOf(comment: Record<string, unknown>): number {
@@ -53,6 +79,7 @@ function blank(
   filesUnknown: number,
   tokens: number | null = null,
   findings: Finding[] = [],
+  tokenDetail: SourceResult["tokenDetail"] = null,
 ): SourceResult {
   return {
     source: "aor",
@@ -60,6 +87,7 @@ function blank(
     findings,
     coverage: { filesCovered, filesUnknown },
     tokens,
+    tokenDetail,
     latencyMs: Math.max(0, Date.now() - startedAt),
     errorKind,
   };
@@ -81,15 +109,57 @@ export class AorSource implements SignalSource {
   async review(input: SourceReviewInput): Promise<SourceResult> {
     const startedAt = Date.now();
     const config = this.config.sources.aor;
-    const targets = [...new Set(input.event.files ?? [])];
+    const targets = [...new Set((input.event.files ?? []).map((file) => repoPath(this.root, file)))];
+    const targetSet = new Set(targets);
+    const added = addedLines(input.event.diff);
 
     const remaining = input.deadline - Date.now();
     const outerMs = Math.min(remaining, config.outerCapMs);
     if (outerMs <= 0) return blank("timeout", "deadline", startedAt, 0, targets.length);
 
-    const chunks = Math.max(1, Math.ceil(targets.length / Math.max(1, config.concurrency)));
-    const timeoutMinutes = Math.max(1, Math.floor(outerMs / 60000 / chunks));
+    const chunks = Math.min(
+      config.maxChunks,
+      Math.max(1, Math.ceil(targets.length / Math.max(1, config.concurrency))),
+    );
+    const perWaveMs = Math.min(outerMs / chunks, config.timeoutPerFileMs);
+    const timeoutMinutes = Math.max(1, Math.floor(perWaveMs / 60000));
     const tokenBudget = input.tier === 1 ? config.tierTokens.tier1 : config.tierTokens.tier2;
+
+    const reasons: string[] = [];
+    if (config.preview.enabled) {
+      const previewMs = Math.min(outerMs, Math.floor(outerMs * config.preview.budgetSwitchRatio));
+      try {
+        const preview = await this.runner.run({
+          file: config.command,
+          args: [
+            "scan",
+            "--path",
+            targets.join(","),
+            "--preview",
+            "--format",
+            "json",
+            "--concurrency",
+            String(config.concurrency),
+            "--timeout",
+            String(timeoutMinutes),
+            "--no-summary",
+          ],
+          cwd: this.root,
+          timeoutMs: previewMs,
+        });
+        const predicted = preview.timedOut ? null : previewPaths(preview.stdout);
+        if (predicted === null) {
+          reasons.push("preview_unknown");
+        } else {
+          const unaccounted = [...predicted].filter(
+            (file) => !targetSet.has(repoPath(this.root, file)),
+          );
+          if (unaccounted.length > 0) reasons.push(`files_unaccounted:${unaccounted.length}`);
+        }
+      } catch {
+        reasons.push("preview_failed");
+      }
+    }
 
     let result;
     try {
@@ -169,10 +239,19 @@ export class AorSource implements SignalSource {
         dropped += 1;
         continue;
       }
-      const file = asString(comment["path"]);
+      const rawFile = asString(comment["path"]);
       const start = asNumber(comment["start_line"]);
       const end = asNumber(comment["end_line"]);
-      if (file === null || start === null || end === null) {
+      if (rawFile === null || start === null || end === null) {
+        dropped += 1;
+        continue;
+      }
+      const file = repoPath(this.root, rawFile);
+      if (!targetSet.has(file)) {
+        dropped += 1;
+        continue;
+      }
+      if (!intersectsAdded(added, file, start, end)) {
         dropped += 1;
         continue;
       }
@@ -210,11 +289,17 @@ export class AorSource implements SignalSource {
 
     const tokenTotal = asNumber(summary?.["total_tokens"]);
     const tokens = tokenTotal !== null ? Math.max(0, Math.trunc(tokenTotal)) : null;
+    const tokenDetail = {
+      total: tokens,
+      input: asNumber(summary?.["input_tokens"]),
+      output: asNumber(summary?.["output_tokens"]),
+      cacheRead: asNumber(summary?.["cache_read_input_tokens"]),
+      cacheWrite: asNumber(summary?.["cache_creation_input_tokens"]),
+    };
     const filesUnknown = filesComplete
       ? Math.max(0, targets.length - filesReviewed)
       : Math.max(missing, incomplete, targets.length > 0 ? 1 : 0);
 
-    const reasons: string[] = [];
     let status: SourceStatus = "ok";
     if (statusRaw === "completed_with_warnings") {
       status = "degraded";
@@ -238,6 +323,7 @@ export class AorSource implements SignalSource {
       filesUnknown,
       tokens,
       findings,
+      tokenDetail,
     );
   }
 }

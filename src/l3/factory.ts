@@ -1,5 +1,4 @@
-import type { RunConfig, SignalSource } from "../contracts/index.js";
-import type { TriageProvider } from "../l2/index.js";
+import type { RunConfig, SignalSource, TriageProvider } from "../contracts/index.js";
 import { createAorSource } from "./aor.js";
 import { createCrgTriage } from "./crg.js";
 import { createRegistrySource, type RegistryFetch } from "./registry.js";

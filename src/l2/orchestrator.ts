@@ -1,3 +1,4 @@
+import pLimit from "p-limit";
 import type {
   CalibrationArtifact,
   ChangeEvent,
@@ -12,34 +13,19 @@ import type {
   SourceResult,
   Tier,
   Toolchain,
+  TriageAnalysis,
+  TriageProvider,
 } from "../contracts/index.js";
 import { configHash } from "../config/index.js";
 import { fuse, singleSourceProbability } from "../l4/index.js";
-import { ledgerFor, planCall, systemClock, type Clock, type TurnBudgetLedger } from "./budget.js";
-import { formatMessage, mechanismOf } from "./templates.js";
+import { TurnBudgetLedger, ledgerFor, planCall, systemClock, type Clock } from "./budget.js";
+import type { ConclusionCache } from "./cache.js";
+import { formatMessage, groupKey, mechanismOf } from "./templates.js";
 import { computeTier, staticTier, type TriageResult } from "./triage.js";
-
-export interface TriageAnalysis {
-  changedFiles: string[];
-  impactedFiles: number;
-  impactedNodes: number;
-  truncated: boolean;
-  unresolvedCallSites: number;
-  indexReady: boolean;
-  indexStale: boolean;
-}
-
-export interface TriageProvider {
-  analyze(event: ChangeEvent, deadline: number): Promise<TriageAnalysis>;
-}
 
 export interface DenyGroupKey {
   file: string;
   ruleId: string;
-}
-
-function groupId(key: DenyGroupKey): string {
-  return `${key.file}\u0000${key.ruleId}`;
 }
 
 export class DenyGuard {
@@ -47,10 +33,10 @@ export class DenyGuard {
 
   check(keys: DenyGroupKey[]): { deny: boolean; blockLoop: boolean } {
     if (keys.length === 0) return { deny: false, blockLoop: false };
-    const looping = keys.some((key) => (this.counts.get(groupId(key)) ?? 0) >= 2);
+    const looping = keys.some((key) => (this.counts.get(groupKey(key)) ?? 0) >= 2);
     if (looping) return { deny: false, blockLoop: true };
     for (const key of keys) {
-      this.counts.set(groupId(key), (this.counts.get(groupId(key)) ?? 0) + 1);
+      this.counts.set(groupKey(key), (this.counts.get(groupKey(key)) ?? 0) + 1);
     }
     return { deny: true, blockLoop: false };
   }
@@ -71,6 +57,7 @@ export interface ReviewContext {
   ledger?: TurnBudgetLedger;
   toolchain?: Toolchain;
   sourceText?: Record<string, string>;
+  cache?: ConclusionCache | null;
 }
 
 export interface ReviewOutcome {
@@ -101,7 +88,7 @@ function costFor(name: string, config: RunConfig): number {
     case "registry":
       return config.sources.registry.timeoutMs;
     case "aor":
-      return Math.min(config.sources.aor.outerCapMs, config.budgets.callMs);
+      return config.sources.aor.outerCapMs;
     default:
       return config.budgets.callMs;
   }
@@ -193,8 +180,28 @@ function aggregateStatus(results: SourceResult[], skipped: boolean): ReviewRow["
 
 function reviewStatusOf(results: SourceResult[], skipped: boolean, skipReason: ReviewSkipReason | null): ReviewStatus {
   if (skipped) return "skipped";
-  if (skipReason === "index_not_ready" || skipReason === "index_stale") return "degraded";
+  if (
+    skipReason === "index_not_ready" ||
+    skipReason === "index_stale" ||
+    skipReason === "budget_exhausted" ||
+    skipReason === "turn_budget_exhausted" ||
+    skipReason === "language_unsupported"
+  ) {
+    return "degraded";
+  }
   return results.some((result) => result.status !== "ok") ? "degraded" : "ok";
+}
+
+type ThresholdKind = "block" | "warn";
+
+function thresholdFor(ctx: ReviewContext, kind: ThresholdKind): (cwe: string | null) => number {
+  return (cwe) => {
+    const perCategory = cwe ? ctx.artifact?.thresholds.perCategory[cwe] : undefined;
+    const fitted = perCategory ? perCategory[kind] : null;
+    if (fitted !== null && fitted !== undefined) return fitted;
+    const global = ctx.artifact?.thresholds.global[kind];
+    return global ?? ctx.config.thresholds[kind];
+  };
 }
 
 export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<ReviewOutcome> {
@@ -290,45 +297,59 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   const tier = tierDecision.tier;
 
   const semgrep = ctx.sources.find((source) => source.name === "semgrep");
-  if (semgrep) {
-    const decision = planCall(ledger, turn, costFor("semgrep", ctx.config), ctx.config.budgets.semgrepKillMs);
+  const callSource = async (
+    source: SignalSource,
+    ledger: TurnBudgetLedger,
+  ): Promise<SourceResult | null> => {
+    const cost = costFor(source.name, ctx.config);
+    const key = ctx.cache ? ctx.cache.key(source.name, files, sourceText, tier) : null;
+    if (key && ctx.cache) {
+      const cached = ctx.cache.get(key);
+      if (cached) return { ...cached, tokens: null, tokenDetail: null, latencyMs: 0 };
+    }
+    const decision = planCall(ledger, turn, cost, cost);
     if (!decision.start) {
       skipped = true;
-      skipReason = decision.reason;
-    } else {
-      const started = clock.now();
-      const result = await semgrep.review({
-        event: change,
-        tier,
-        config: ctx.config,
-        deadline: decision.deadline,
-        sourceText,
-      });
-      ledger.charge(turn, clock.now() - started);
-      results.push(result);
+      skipReason = skipReason ?? decision.reason;
+      return null;
     }
+    const started = clock.now();
+    const result = await source.review({
+      event: change,
+      tier,
+      config: ctx.config,
+      deadline: decision.deadline,
+      sourceText,
+    });
+    ledger.charge(turn, clock.now() - started);
+    if (key && ctx.cache) ctx.cache.set(key, result);
+    return result;
+  };
+
+  if (semgrep) {
+    const result = await callSource(semgrep, ledger);
+    if (result) results.push(result);
   }
 
   const semgrepResult = results.find((result) => result.source === "semgrep");
-  const fitted = ctx.artifact?.thresholds.global;
-  const thresholds = {
-    block: fitted?.block ?? ctx.config.thresholds.block,
-    warn: fitted?.warn ?? ctx.config.thresholds.warn,
-  };
+  const blockThreshold = thresholdFor(ctx, "block");
+  const warnThreshold = thresholdFor(ctx, "warn");
+  const probabilityOf = (finding: Finding): number =>
+    singleSourceProbability(finding, ctx.config, ctx.artifact);
   const semgrepFindings = semgrepResult && semgrepResult.status === "ok" ? semgrepResult.findings : [];
   const pSemgrep =
     semgrepFindings.length > 0
-      ? Math.max(...semgrepFindings.map((finding) => singleSourceProbability(finding, ctx.config, ctx.artifact)))
+      ? Math.max(...semgrepFindings.map(probabilityOf))
       : null;
+  const triggering = semgrepFindings.filter(
+    (finding) => finding.certified !== false && probabilityOf(finding) >= blockThreshold(finding.cwe ?? null),
+  );
 
   let preDecision: Disposition["preDecision"] = semgrepResult ? "allow" : "not_run";
   let blockLoop = false;
   let denyFindings: Finding[] = [];
 
-  if (pSemgrep !== null && pSemgrep >= thresholds.block) {
-    const triggering = semgrepFindings.filter(
-      (finding) => singleSourceProbability(finding, ctx.config, ctx.artifact) >= thresholds.block,
-    );
+  if (triggering.length > 0) {
     const keys = triggering.map((finding) => ({ file: finding.file, ruleId: ruleIdOf(finding) }));
     const verdict = guard.check(keys);
     if (verdict.deny) {
@@ -341,27 +362,13 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
 
   const postSources = change.phase === "post" ? ctx.sources.filter((source) => source.name !== "semgrep") : [];
   const runnable = postSources.filter((source) => !(source.name === "aor" && tier === 0));
+  const semanticLedger = new TurnBudgetLedger(ctx.config.sources.aor.outerCapMs, clock);
 
+  const limit = pLimit(
+    Math.max(1, Math.min(ctx.config.budgets.maxConcurrency, Math.max(1, runnable.length))),
+  );
   const postResults = await Promise.all(
-    runnable.map(async (source) => {
-      const cost = costFor(source.name, ctx.config);
-      const decision = planCall(ledger, turn, cost, cost);
-      if (!decision.start) {
-        skipped = true;
-        skipReason = skipReason ?? decision.reason;
-        return null;
-      }
-      const started = clock.now();
-      const result = await source.review({
-        event: change,
-        tier,
-        config: ctx.config,
-        deadline: decision.deadline,
-        sourceText,
-      });
-      ledger.charge(turn, clock.now() - started);
-      return result;
-    }),
+    runnable.map((source) => limit(() => callSource(source, semanticLedger))),
   );
   for (const result of postResults) {
     if (result) results.push(result);
@@ -399,14 +406,20 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
           ...finding,
           sources: [finding.source],
           rawIds: [finding.rawId],
+          evidenceSources: finding.evidence ? [finding.source] : [],
+          certified: finding.certified !== false,
           cweComparable: true,
-          conflictResolution: "none",
+          conflictResolution: "none" as const,
           blockable: true,
         })),
       );
     }
-  } else if (change.phase === "post" && tier >= 1 && pFused !== null && pFused >= thresholds.warn) {
-    const eligible = merged.filter((finding) => finding.blockable);
+  } else if (change.phase === "post" && pFused !== null) {
+    const eligible = merged.filter(
+      (finding) =>
+        finding.evidenceSources.length > 0 &&
+        finding.confidence >= warnThreshold(finding.cwe ?? null),
+    );
     if (eligible.length > 0) {
       postDecision = "inject_warn";
       text = formatMessage("[CRS-WARN]", eligible);

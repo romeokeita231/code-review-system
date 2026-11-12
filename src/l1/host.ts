@@ -29,12 +29,17 @@ export interface PostExecuteArgs extends PreExecuteArgs {
 }
 
 export type HookResult =
-  | { kind: "allow"; event: ChangeEvent | null }
+  | { kind: "allow"; event: ChangeEvent | null; sourceText: Record<string, string> }
   | { kind: "deny"; reason: string };
+
+export interface PostHookOutcome {
+  event: ChangeEvent;
+  sourceText: Record<string, string>;
+}
 
 export interface HookAdapter {
   preExecute(args: PreExecuteArgs): Promise<HookResult>;
-  postExecute(args: PostExecuteArgs): Promise<ChangeEvent>;
+  postExecute(args: PostExecuteArgs): Promise<PostHookOutcome>;
 }
 
 export type HostDecision = { decision: "allow" } | { decision: "deny"; reason: string };
@@ -124,26 +129,26 @@ export class DshAdapter implements HookAdapter {
 
   async preExecute(args: PreExecuteArgs): Promise<HookResult> {
     const trigger = triggerFor(args.name);
-    if (trigger === "command") return { kind: "allow", event: null };
+    if (trigger === "command") return { kind: "allow", event: null, sourceText: {} };
 
     const record = argumentRecord(args.arguments);
     const filePath = stringField(record, "file_path");
-    if (filePath === null) return { kind: "allow", event: null };
+    if (filePath === null) return { kind: "allow", event: null, sourceText: {} };
 
     const path = this.relativeOf(filePath);
-    if (path === null) return { kind: "allow", event: null };
+    if (path === null) return { kind: "allow", event: null, sourceText: {} };
 
     const before = await this.readOld(filePath);
     let after: string;
 
     if (trigger === "write") {
       const content = stringField(record, "content");
-      if (content === null) return { kind: "allow", event: null };
+      if (content === null) return { kind: "allow", event: null, sourceText: {} };
       after = normalizeLf(content);
     } else {
       const oldString = stringField(record, "old_string");
       const newString = stringField(record, "new_string");
-      if (oldString === null || newString === null) return { kind: "allow", event: null };
+      if (oldString === null || newString === null) return { kind: "allow", event: null, sourceText: {} };
       const applied = applyEdit(before, {
         file_path: filePath,
         old_string: oldString,
@@ -162,10 +167,10 @@ export class DshAdapter implements HookAdapter {
       files: [{ path, before, after }],
       ts: args.ts ?? this.now(),
     });
-    return { kind: "allow", event };
+    return { kind: "allow", event, sourceText: { [path]: after } };
   }
 
-  async postExecute(args: PostExecuteArgs): Promise<ChangeEvent> {
+  async postExecute(args: PostExecuteArgs): Promise<PostHookOutcome> {
     const base = {
       id: this.idOf(args),
       sessionId: args.sessionId,
@@ -173,18 +178,22 @@ export class DshAdapter implements HookAdapter {
       ts: args.ts ?? this.now(),
     };
     const trigger = triggerFor(args.name);
-    if (trigger === "command") return commandEvent(base);
+    if (trigger === "command") return { event: commandEvent(base), sourceText: {} };
 
     const record = argumentRecord(args.arguments);
     const filePath = stringField(record, "file_path");
-    if (filePath === null) return commandEvent(base);
+    if (filePath === null) return { event: commandEvent(base), sourceText: {} };
 
     const path = this.relativeOf(filePath);
-    if (path === null) return commandEvent(base);
+    if (path === null) return { event: commandEvent(base), sourceText: {} };
 
     const pair = valuePair(args.value);
-    if (pair === null) return commandEvent(base);
+    if (pair === null) return { event: commandEvent(base), sourceText: {} };
 
-    return observePostEvent({ ...base, trigger, path, before: pair.before, after: pair.after });
+    const after = normalizeLf(pair.after);
+    return {
+      event: observePostEvent({ ...base, trigger, path, before: pair.before, after }),
+      sourceText: { [path]: after },
+    };
   }
 }

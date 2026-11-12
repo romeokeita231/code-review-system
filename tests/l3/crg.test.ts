@@ -84,7 +84,7 @@ describe("CrgTriage", () => {
     });
   });
 
-  it("degrades on failure and caches readiness per root", async () => {
+  it("degrades on failure and retries on the next query", async () => {
     const runner = new ScriptedRunner(() => {
       throw new Error("no index");
     });
@@ -95,6 +95,6 @@ describe("CrgTriage", () => {
 
     expect(first.indexReady).toBe(false);
     expect(second.indexReady).toBe(false);
-    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls).toHaveLength(2);
   });
 });

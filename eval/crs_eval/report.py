@@ -151,6 +151,27 @@ def _subset(rows: Iterable[Mapping[str, Any]], baseline: str) -> list[Mapping[st
     return [row for row in rows if row.get("baseline") == baseline]
 
 
+def _main_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    main = [row for row in rows if int(row.get("repeat") or 0) == 0]
+    cold = [row for row in main if row.get("cache") in (None, "cold")]
+    return cold if cold else main
+
+
+def _thresholds(
+    row: Mapping[str, Any],
+    configs: Mapping[str, Mapping[str, Any]] | None,
+) -> tuple[float, float] | None:
+    config = row.get("config_json")
+    if not config and configs is not None:
+        config = configs.get(str(row.get("config_hash")))
+    values = (config or {}).get("thresholds") or {}
+    block = values.get("block")
+    warn = values.get("warn")
+    if not isinstance(block, (int, float)) or not isinstance(warn, (int, float)):
+        return None
+    return float(block), float(warn)
+
+
 def _tokens(row: Mapping[str, Any]) -> float | None:
     value = (row.get("tokens") or {}).get("total")
     return None if value is None else float(value)
@@ -432,21 +453,102 @@ def extrapolation_table(rows: Sequence[Mapping[str, Any]]) -> str:
     return _table(["model", "a", "b", "R^2", "points", "extrapolation sizes", "observed"], rows_out)
 
 
+def load_pairing(runs_dir: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in sorted(Path(runs_dir).rglob("pairing*.jsonl")):
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+    return rows
+
+
+def _baseline_of(run_id: str) -> str | None:
+    for baseline in BASELINES:
+        if run_id == baseline or run_id.endswith(f"-{baseline}"):
+            return baseline
+    return None
+
+
+def pairing_table(pairing: Sequence[Mapping[str, Any]]) -> str:
+    buckets: dict[str, list[Mapping[str, Any]]] = {}
+    for row in pairing:
+        baseline = _baseline_of(str(row.get("run_id", "")))
+        if baseline is None:
+            continue
+        buckets.setdefault(baseline, []).append(row)
+    body = []
+    for baseline in BASELINES:
+        subset = buckets.get(baseline)
+        if not subset:
+            continue
+        matched = [row for row in subset if row.get("merged_id") is not None]
+        unions = [int(row.get("union", 0)) for row in matched]
+        iou = [
+            int(row.get("overlap", 0)) / int(row["union"])
+            for row in matched
+            if int(row.get("union", 0)) > 0
+        ]
+        body.append(
+            [
+                baseline,
+                len(subset),
+                len(matched),
+                len(subset) - len(matched),
+                _fmt(sum(iou) / len(iou)) if iou else "n/a",
+                _fmt(sum(unions) / len(unions)) if unions else "n/a",
+            ]
+        )
+    return _table(
+        ["baseline", "gt spans", "matched", "unmatched", "mean IoU", "mean union"],
+        body,
+    )
+
+
+def counterfactual_table(
+    rows: Sequence[Mapping[str, Any]],
+    configs: Mapping[str, Mapping[str, Any]] | None = None,
+) -> str:
+    body = []
+    for baseline in BASELINES:
+        subset = _subset(rows, baseline)
+        total = 0
+        counterfactual = 0
+        for row in subset:
+            limits = _thresholds(row, configs)
+            disposition = row.get("disposition") or {}
+            p_semgrep = disposition.get("pSemgrep")
+            p_fused = disposition.get("pFused")
+            if limits is None or p_semgrep is None or p_fused is None:
+                continue
+            total += 1
+            if float(p_semgrep) >= limits[0] and float(p_fused) < limits[1]:
+                counterfactual += 1
+        rate = counterfactual / total if total else None
+        body.append([baseline, total, counterfactual, _fmt(rate)])
+    return _table(["baseline", "rows", "counterfactual", "rate"], body)
+
+
 def build_tables(
     rows: Sequence[Mapping[str, Any]],
     configs: Mapping[str, Mapping[str, Any]] | None = None,
     vulnerable: set[str] | None = None,
     detectable: set[str] | None = None,
+    pairing: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[tuple[str, str]]:
+    main = _main_rows(rows)
     return [
-        ("main 1: detection", detection_table(rows)),
-        ("main 2: block", block_table(rows, vulnerable, detectable)),
-        ("main 3: cost", cost_table(rows)),
-        ("main 4: per-source errors", error_table(rows)),
-        ("main 5: unknown coverage", coverage_table(rows)),
-        ("main 6: ablation (B4g)", ablation_table(rows, configs)),
-        ("delta: B3 -> B4g", delta_table(rows, "B3", "B4g")),
-        ("delta: B4g -> B4", delta_table(rows, "B4g", "B4")),
+        ("main 1: detection", detection_table(main)),
+        ("main 2: block", block_table(main, vulnerable, detectable)),
+        ("main 3: cost", cost_table(main)),
+        ("main 4: per-source errors", error_table(main)),
+        ("main 5: unknown coverage", coverage_table(main)),
+        ("main 6: ablation (B4g)", ablation_table(main, configs)),
+        ("main 7: pairing coverage", pairing_table(pairing or [])),
+        ("main 8: counterfactual reclassification", counterfactual_table(main, configs)),
+        ("delta: B3 -> B4g", delta_table(main, "B3", "B4g")),
+        ("delta: B4g -> B4", delta_table(main, "B4g", "B4")),
         ("appendix A: cache", cache_table(rows)),
         ("appendix B: cost extrapolation", extrapolation_table(rows)),
     ]
@@ -457,6 +559,7 @@ def render_markdown(
     configs: Mapping[str, Mapping[str, Any]] | None = None,
     vulnerable: set[str] | None = None,
     detectable: set[str] | None = None,
+    pairing: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     hashes = validate_rows(rows, configs)
     modes = sorted({str(row.get("mode")) for row in rows if row.get("mode")})
@@ -468,7 +571,7 @@ def render_markdown(
         f"- rows: {len(rows)}",
         "",
     ]
-    for title, table in build_tables(rows, configs, vulnerable, detectable):
+    for title, table in build_tables(rows, configs, vulnerable, detectable, pairing):
         lines.extend([f"## {title}", "", table, ""])
     return "\n".join(lines).rstrip() + "\n"
 
@@ -489,7 +592,8 @@ def write_report(
         detectable = detectable if detectable is not None else dataset_detectable
     if configs is None:
         configs = load_configs(Path(runs_dir))
-    markdown = render_markdown(rows, configs, vulnerable, detectable)
+    pairing = load_pairing(Path(runs_dir))
+    markdown = render_markdown(rows, configs, vulnerable, detectable, pairing)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.md"

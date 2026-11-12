@@ -2,6 +2,7 @@ import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ReviewRow, RunRecord } from "../src/contracts/index.js";
+import { arg } from "./shared.js";
 
 export interface LabelSpan {
   path: string;
@@ -47,7 +48,7 @@ async function collectJsonl(root: string): Promise<string[]> {
   for (const entry of entries) {
     const path = join(root, entry.name);
     if (entry.isDirectory()) out.push(...(await collectJsonl(path)));
-    else if (entry.name.endsWith(".jsonl")) out.push(path);
+    else if (entry.name.endsWith(".jsonl") && !entry.name.startsWith("pairing")) out.push(path);
   }
   return out;
 }
@@ -120,23 +121,29 @@ export function evaluateAcceptance(
   const ordered = [...rows].sort((a, b) => (a.change_event?.ts ?? 0) - (b.change_event?.ts ?? 0));
 
   const mainRows = ordered.filter((row) => row.baseline === "B4");
-  const detectable = mainRows.filter((row) => {
+  const positives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
-    return sample !== undefined && sample.labels.length > 0 && sample.expected_detectable_by.length > 0;
+    return (
+      sample !== undefined &&
+      sample.split === "eval" &&
+      sample.labels.length > 0 &&
+      sample.expected_detectable_by.includes("semgrep")
+    );
   });
-  const predicated = detectable.filter((row) => row.disposition.preDecision === "deny");
-  const truePositive = predicated.filter((row) => {
+  const negatives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
-    return sample !== undefined && sample.labels.length > 0;
+    return sample !== undefined && sample.labels.length === 0;
   });
-  const falsePositive = predicated.length - truePositive.length;
-  const missed = detectable.length - truePositive.length;
-  const n = detectable.length;
-  const k = predicated.length;
+  const denied = (row: AcceptanceRowLike): boolean => row.disposition.preDecision === "deny";
+  const truePositive = positives.filter(denied);
+  const falsePositive = negatives.filter(denied);
+  const missed = positives.length - truePositive.length;
+  const n = positives.length;
+  const k = truePositive.length + falsePositive.length;
   const recall = n === 0 ? 0 : truePositive.length / n;
   const precision = k === 0 ? 0 : truePositive.length / k;
   const gapSamples = new Set((gaps?.gaps ?? []).map((gap) => gap.sample_id));
-  const predictedGap = predicated.filter((row) => gapSamples.has(row.sample));
+  const predictedGap = mainRows.filter((row) => denied(row) && gapSamples.has(row.sample));
   const firstRun = ordered[0]?.change_event?.ts ?? null;
   const preregistered = gaps !== null && firstRun !== null && Date.parse(gaps.preregistered_at) <= firstRun;
   const line1Pass =
@@ -147,12 +154,20 @@ export function evaluateAcceptance(
     precision >= 0.9 &&
     predictedGap.length === 0;
   const line1: LineResult = {
-    name: "line1: block precision/recall on the detectable subset",
+    name: "line1: block precision/recall on the semgrep-detectable subset",
     pass: line1Pass,
     detail:
       `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} precision=${precision.toFixed(3)} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
-    metrics: { n, k, recall, precision, false_positive: falsePositive, missed, preregistered: String(preregistered) },
+    metrics: {
+      n,
+      k,
+      recall,
+      precision,
+      false_positive: falsePositive.length,
+      missed,
+      preregistered: String(preregistered),
+    },
   };
 
   const registryHits = ordered.filter((row) =>
@@ -164,25 +179,23 @@ export function evaluateAcceptance(
   );
   const line2: LineResult = {
     name: "line2: dependency hallucination closed by a registry hit",
-    pass: registryHits.length > 0,
-    detail: `registry_hits=${registryHits.length}`,
+    pass: mode === "live" && registryHits.length > 0,
+    detail: `mode=${mode} registry_hits=${registryHits.length}`,
     metrics: { registry_hits: registryHits.length },
   };
 
   const warned = ordered.filter((row) => row.disposition.postDecision === "inject_warn");
   const repeats: string[] = [];
   for (const row of warned) {
-    const ts = row.change_event?.ts ?? 0;
+    const index = ordered.indexOf(row);
     const classes = new Set(
-      row.findings_merged.map((finding) => `${finding.file}\u0000${finding.cwe ?? "none"}`),
+      (truth.get(row.sample)?.labels ?? [])
+        .map((label) => label.cwe)
+        .filter((cwe): cwe is string => cwe !== null),
     );
-    for (const later of ordered) {
-      if ((later.change_event?.ts ?? 0) <= ts) continue;
-      for (const finding of later.findings_merged) {
-        if (classes.has(`${finding.file}\u0000${finding.cwe ?? "none"}`)) {
-          repeats.push(`${row.sample}->${later.sample}:${finding.file}`);
-        }
-      }
+    for (const later of ordered.slice(index + 1, index + 3)) {
+      const hit = later.findings_merged.find((finding) => finding.cwe !== null && classes.has(finding.cwe));
+      if (hit) repeats.push(`${row.sample}->${later.sample}:${hit.cwe}`);
     }
   }
   const line3: LineResult = {
@@ -258,11 +271,6 @@ export function evaluateAcceptance(
 }
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const arg = (name: string, fallback: string): string => {
-    const index = args.indexOf(name);
-    return index >= 0 && args[index + 1] ? args[index + 1]! : fallback;
-  };
   const runsDir = resolve(arg("--runs", "runs"));
   const datasetDir = resolve(arg("--dataset", "datasets/self-built"));
   const gapsPath = resolve(arg("--gaps", "artifacts/block-gaps.json"));

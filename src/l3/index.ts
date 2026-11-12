@@ -22,7 +22,6 @@ export {
   type RegistryOptions,
   type RegistryResponse,
 } from "./registry.js";
-export { FakeSource, okResult, timeoutResult, degradedResult } from "./fake.js";
 export {
   createSources,
   createTriage,

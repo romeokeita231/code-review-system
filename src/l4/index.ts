@@ -8,7 +8,7 @@ import type {
 import { applyCalibration } from "./calibration.js";
 import { resolveConflicts } from "./conflict.js";
 import { mergeFindings } from "./merge.js";
-import { probabilitiesFor, probabilityByRawId, vote, weightFor } from "./vote.js";
+import { probabilitiesFor, probabilityByRawId, vote } from "./vote.js";
 
 export { fitCalibration, applyCalibration, categoryOf, logit, sigmoid } from "./calibration.js";
 export { fitThreshold, fitArtifactThresholds } from "./thresholds.js";
@@ -33,6 +33,8 @@ function asMerged(finding: Finding): MergedFinding {
     ...finding,
     sources: [finding.source],
     rawIds: [finding.rawId],
+    evidenceSources: finding.evidence ? [finding.source] : [],
+    certified: finding.certified !== false,
     cweComparable: true,
     conflictResolution: "none",
     blockable: true,
@@ -52,7 +54,7 @@ export function fuse({ sources, config, artifact }: FusionInput): FusionOutput {
   const stages = config.fusionStages;
   let merged: MergedFinding[] = stages.merge ? mergeFindings(raw) : raw.map(asMerged);
 
-  if (stages.conflict && stages.merge) merged = resolveConflicts(merged);
+  if (stages.conflict) merged = resolveConflicts(merged);
 
   const resolved = (finding: Finding): number => {
     if (stages.calibrate) return applyCalibration(finding, artifact, config.prior.pPrior);
@@ -65,7 +67,8 @@ export function fuse({ sources, config, artifact }: FusionInput): FusionOutput {
   } else {
     merged = merged.map((finding) => {
       const probs = probabilitiesFor(finding, rawProbabilities);
-      return { ...finding, confidence: Math.max(...probs) };
+      const value = config.tieBreak === "max" ? Math.max(...probs) : probs[probs.length - 1]!;
+      return { ...finding, confidence: value };
     });
   }
 
@@ -82,8 +85,4 @@ export function fuse({ sources, config, artifact }: FusionInput): FusionOutput {
 
 export function singleSourceProbability(finding: Finding, config: RunConfig, artifact: CalibrationArtifact | null): number {
   return applyCalibration(finding, artifact, config.prior.pPrior);
-}
-
-export function weightOf(finding: MergedFinding, config: RunConfig): number {
-  return weightFor(finding.sources.length, config);
 }

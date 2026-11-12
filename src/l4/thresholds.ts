@@ -32,20 +32,24 @@ export function fitThreshold(
     const precision = hits / support;
     if (precision >= targetPrecision) {
       best = { value: sample.score, reason: null, precision, support };
-    } else {
-      break;
     }
   }
   return best;
 }
 
+export interface CategoryThresholdSamples {
+  block: ThresholdSample[];
+  warn: ThresholdSample[];
+}
+
 export function fitArtifactThresholds(
   artifact: CalibrationArtifact,
-  global: ThresholdSample[],
-  byCategory: Map<string, ThresholdSample[]>,
+  blockSamples: ThresholdSample[],
+  warnSamples: ThresholdSample[],
+  byCategory: Map<string, CategoryThresholdSamples>,
 ): CalibrationArtifact {
-  const block = fitThreshold(global, 0.9, 10);
-  const warn = fitThreshold(global, 0.7, 10);
+  const block = fitThreshold(blockSamples, 0.9, 10);
+  const warn = fitThreshold(warnSamples, 0.7, 10);
   const skipped: { scope: string; reason: string }[] = [];
   if (block.value === null) {
     skipped.push({ scope: "global.block", reason: block.reason ?? "unfitted" });
@@ -56,12 +60,12 @@ export function fitArtifactThresholds(
 
   const perCategory: Record<string, { block: number | null; warn: number | null }> = {};
   for (const [category, samples] of byCategory) {
-    if (samples.length < 30) {
+    if (samples.block.length < 30 || samples.warn.length < 30) {
       skipped.push({ scope: `category.${category}`, reason: "class_declarations_below_30" });
       continue;
     }
-    const catBlock = fitThreshold(samples, 0.9, 10);
-    const catWarn = fitThreshold(samples, 0.7, 10);
+    const catBlock = fitThreshold(samples.block, 0.9, 10);
+    const catWarn = fitThreshold(samples.warn, 0.7, 10);
     perCategory[category] = { block: catBlock.value, warn: catWarn.value };
   }
 

@@ -74,6 +74,7 @@ export const Finding = z.object({
   source: SourceName,
   cwe: z.string().regex(/^CWE-\d+$/).nullable().optional(),
   evidence: z.string().nullable().optional(),
+  certified: z.boolean().optional(),
   rawId: z.string().min(1),
 });
 export type Finding = z.infer<typeof Finding>;
@@ -81,6 +82,7 @@ export type Finding = z.infer<typeof Finding>;
 export const MergedFinding = Finding.extend({
   sources: z.array(SourceName).min(1),
   rawIds: z.array(z.string().min(1)).min(1),
+  evidenceSources: z.array(SourceName),
   cweComparable: z.boolean(),
   conflictResolution: z.enum(["none", "evidence_preferred", "vote", "downgraded"]),
   blockable: z.boolean(),
@@ -93,16 +95,41 @@ export const Coverage = z.object({
 });
 export type Coverage = z.infer<typeof Coverage>;
 
+export const TokenDetail = z.object({
+  total: z.number().int().nonnegative().nullable(),
+  input: z.number().int().nonnegative().nullable(),
+  output: z.number().int().nonnegative().nullable(),
+  cacheRead: z.number().int().nonnegative().nullable(),
+  cacheWrite: z.number().int().nonnegative().nullable(),
+});
+export type TokenDetail = z.infer<typeof TokenDetail>;
+
 export const SourceResult = z.object({
   source: SourceName,
   status: SourceStatus,
   findings: z.array(Finding),
   coverage: Coverage,
   tokens: z.number().int().nonnegative().nullable(),
+  tokenDetail: TokenDetail.nullable().optional(),
   latencyMs: z.number().nonnegative(),
   errorKind: z.string().nullable().optional(),
+  synthetic: z.boolean().optional(),
 });
 export type SourceResult = z.infer<typeof SourceResult>;
+
+export interface TriageAnalysis {
+  changedFiles: string[];
+  impactedFiles: number;
+  impactedNodes: number;
+  truncated: boolean;
+  unresolvedCallSites: number;
+  indexReady: boolean;
+  indexStale: boolean;
+}
+
+export interface TriageProvider {
+  analyze(event: ChangeEvent, deadline: number): Promise<TriageAnalysis>;
+}
 
 export const DispositionMechanism = z.enum([
   "mechanical_block",
@@ -136,6 +163,8 @@ export const Budgets = z.object({
   crgQueryMs: z.number().int().positive(),
   fusionWriteMs: z.number().int().positive(),
   softCapMs: z.number().int().positive(),
+  cacheTtlMs: z.number().int().positive(),
+  maxConcurrency: z.number().int().positive(),
 });
 export type Budgets = z.infer<typeof Budgets>;
 
@@ -147,9 +176,9 @@ export const TierBoundary = z.object({
 export const SemgrepSourceConfig = z.object({
   enabled: z.boolean(),
   command: z.string().min(1),
+  osemgrepCommand: z.string().min(1),
   version: z.string().min(1),
-  rulesPath: z.string().min(1),
-  rulesSha256: z.string().min(1),
+  fullBlockMaxBytes: z.number().int().positive(),
   subsets: z
     .array(
       z.object({
@@ -158,11 +187,11 @@ export const SemgrepSourceConfig = z.object({
         sha256: z.string().min(1),
         langs: z.array(z.string().min(1)),
         blockRules: z.array(z.string().min(1)),
+        nontaint: z.boolean().optional(),
       }),
     )
     .nonempty(),
   timeoutsMs: z.object({ callMs: z.number().int().positive() }),
-  failOpenOverBytes: z.record(z.string(), z.number().int().positive()),
 });
 
 export const AorSourceConfig = z.object({
@@ -373,6 +402,7 @@ export const CalibrationArtifact = z.object({
     ),
     skipped: z.array(z.object({ scope: z.string(), reason: z.string() })),
   }),
+  synthetic: z.boolean().optional(),
 });
 export type CalibrationArtifact = z.infer<typeof CalibrationArtifact>;
 

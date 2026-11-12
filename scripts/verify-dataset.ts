@@ -4,20 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { DatasetManifest, SourceName } from "../src/contracts/index.js";
-
-const CWES = ["CWE-78", "CWE-79", "CWE-89", "CWE-94", "CWE-22", "CWE-502", "CWE-798"] as const;
-type Cwe = (typeof CWES)[number];
-type Risk = "low" | "medium" | "high";
-
-const BASE_RISK: Record<Cwe, Risk> = {
-  "CWE-78": "high",
-  "CWE-79": "medium",
-  "CWE-89": "high",
-  "CWE-94": "high",
-  "CWE-22": "medium",
-  "CWE-502": "high",
-  "CWE-798": "low",
-};
+import { CWES, diffCount, riskOf, type Cwe } from "./shared.js";
 
 const EXPECTED_SAMPLE_COUNT = 420;
 const EXPECTED_GROUPS = 210;
@@ -51,29 +38,9 @@ const sha256 = (text: string): string => createHash("sha256").update(text, "utf8
 
 const isCwe = (value: string | null): value is Cwe => value !== null && (CWES as readonly string[]).includes(value);
 
-const bump = (risk: Risk): Risk => (risk === "low" ? "medium" : "high");
-
-const riskOf = (cwe: Cwe, changedLines: number): Risk =>
-  changedLines >= 10 ? bump(BASE_RISK[cwe]) : BASE_RISK[cwe];
-
 function lineCount(text: string): number {
   const parts = text.split("\n");
   return text.endsWith("\n") ? parts.length - 1 : parts.length;
-}
-
-function diffCount(a: string[], b: string[]): number {
-  const n = a.length;
-  const m = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
-  for (let i = 1; i <= m; i += 1) {
-    for (let j = 1; j <= n; j += 1) {
-      dp[i]![j] =
-        a[j - 1] === b[i - 1]
-          ? dp[i - 1]![j - 1]! + 1
-          : Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
-    }
-  }
-  return n + m - 2 * dp[m]![n]!;
 }
 
 interface Loaded {

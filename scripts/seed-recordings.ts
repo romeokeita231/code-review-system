@@ -13,10 +13,11 @@ function findingsFor(sample: DatasetSample, source: "semgrep" | "aor"): Finding[
       startLine: Math.max(1, label.startLine - widen),
       endLine: label.endLine + widen,
       severity: 3,
-      confidence: source === "semgrep" ? 0.99 : 0.97,
+      confidence: source === "semgrep" ? 1 : 0.6,
       source,
-      cwe: label.cwe,
-      evidence: `recorded ${source} hit #${index + 1}`,
+      cwe: source === "semgrep" ? label.cwe : null,
+      evidence: `synthetic ${source} hit #${index + 1}`,
+      certified: source === "semgrep",
       rawId: `${source}-${sample.sample_id}-${index}`,
     };
   });
@@ -29,7 +30,12 @@ function result(source: "semgrep" | "aor", sample: DatasetSample): SourceResult 
     findings: findingsFor(sample, source),
     coverage: { filesCovered: 1, filesUnknown: 0 },
     tokens: source === "aor" ? 1200 : null,
+    tokenDetail:
+      source === "aor"
+        ? { total: 1200, input: 900, output: 300, cacheRead: 0, cacheWrite: 0 }
+        : null,
     latencyMs: source === "semgrep" ? 40 : 900,
+    synthetic: true,
   };
 }
 
@@ -52,6 +58,7 @@ async function main(): Promise<void> {
       coverage: { filesCovered: 1, filesUnknown: 0 },
       tokens: null,
       latencyMs: 5,
+      synthetic: true,
     };
     await writeFile(join(dir, "registry.json"), `${stableStringify(registry)}\n`, "utf8");
   }

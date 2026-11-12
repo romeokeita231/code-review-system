@@ -14,6 +14,8 @@ const merged = (over: Partial<MergedFinding> = {}): MergedFinding => ({
   rawId: "command-injection-os-system\u0000src/app.py\u000010\u000010",
   sources: ["semgrep"],
   rawIds: ["command-injection-os-system\u0000src/app.py\u000010\u000010"],
+  evidenceSources: ["semgrep"],
+  certified: true,
   cweComparable: true,
   conflictResolution: "none",
   blockable: true,

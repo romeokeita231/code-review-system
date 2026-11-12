@@ -217,6 +217,31 @@ export interface PersistedRunFile {
   hash: string;
 }
 
+function tokenTotals(sources: readonly SourceResult[]): RunRecord["tokens"] {
+  const pick = (key: "total" | "input" | "output" | "cacheRead" | "cacheWrite"): number | null => {
+    const values = sources
+      .map((source) => source.tokenDetail?.[key])
+      .filter((value): value is number => typeof value === "number");
+    return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0);
+  };
+  const detailTotal = pick("total");
+  const fallback = sources
+    .map((source) => source.tokens)
+    .filter((value): value is number => typeof value === "number");
+  return {
+    total:
+      detailTotal !== null
+        ? detailTotal
+        : fallback.length === 0
+          ? null
+          : fallback.reduce((sum, value) => sum + value, 0),
+    input: pick("input"),
+    output: pick("output"),
+    cache_read: pick("cacheRead"),
+    cache_write: pick("cacheWrite"),
+  };
+}
+
 export async function persistRunRecords(
   outDir: string,
   runId: string,
@@ -298,6 +323,7 @@ export async function runBaseline(opts: RunBaselineOptions): Promise<RunRecord[]
     const row = outcome.row;
     const status = row.status;
     const disposition = outcome.disposition;
+    const tokens = tokenTotals(row.sources);
     const record: RunRecord = {
       run_id: row.run_id,
       sample: sample.sample_id,
@@ -312,20 +338,19 @@ export async function runBaseline(opts: RunBaselineOptions): Promise<RunRecord[]
       sources: row.sources,
       disposition,
       gate: row.gate,
-      tokens: {
-        total: row.tokens,
-        input: null,
-        output: null,
-        cache_read: null,
-        cache_write: null,
-      },
+      tokens,
       latency_ms: row.latency_ms,
       status,
       outcome: outcomeOf(disposition, status),
       error: status === "ok" ? null : row.review_skip_reason,
       toolchain,
       repo: { rev: repoRev, files_scanned: filesScanned },
-      cache,
+      cache:
+        tokens.cache_read === null
+          ? cache
+          : tokens.cache_read > 0
+            ? "warm"
+            : "cold",
     };
     if (record.config_hash !== hash) {
       throw new Error(`config hash drift for ${sample.sample_id}: ${record.config_hash} != ${hash}`);
@@ -349,6 +374,7 @@ export interface RunReplayOptions {
   baselines?: Baseline[];
   mode?: Mode;
   repeat?: number;
+  repeats?: number;
   cache?: "cold" | "warm" | null;
   artifact?: CalibrationArtifact | null;
   toolchain?: Toolchain;
@@ -393,22 +419,28 @@ export async function runReplay(opts: RunReplayOptions): Promise<ReplayResult> {
     const config = effectiveConfig(opts.config, baseline, mode);
     const hash = configHash(config);
     hashes.push(hash);
-    const records = await runBaseline({
-      baseline,
-      mode,
-      config: opts.config,
-      samples,
-      recordedDir,
-      recorded,
-      runId,
-      datasetRoot: datasetDir,
-      repeat: opts.repeat,
-      cache: opts.cache,
-      artifact: opts.artifact,
-      toolchain: opts.toolchain,
-      repoRev: opts.repoRev,
-      filesScanned: opts.filesScanned,
-    });
+    const repeats = Math.max(1, opts.repeats ?? 1);
+    const records: RunRecord[] = [];
+    for (let index = 0; index < repeats; index += 1) {
+      records.push(
+        ...(await runBaseline({
+          baseline,
+          mode,
+          config: opts.config,
+          samples,
+          recordedDir,
+          recorded,
+          runId,
+          datasetRoot: datasetDir,
+          repeat: index,
+          cache: repeats > 1 ? (index === 0 ? "cold" : "warm") : opts.cache,
+          artifact: opts.artifact,
+          toolchain: opts.toolchain,
+          repoRev: opts.repoRev,
+          filesScanned: opts.filesScanned,
+        })),
+      );
+    }
     allRuns.push(...records);
 
     const baselineDir = join(rootDir, baseline);

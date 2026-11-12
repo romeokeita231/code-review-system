@@ -116,6 +116,9 @@
               "blockable": {
                 "type": "boolean"
               },
+              "certified": {
+                "type": "boolean"
+              },
               "confidence": {
                 "maximum": 1,
                 "minimum": 0,
@@ -153,6 +156,18 @@
                   "string",
                   "null"
                 ]
+              },
+              "evidenceSources": {
+                "items": {
+                  "enum": [
+                    "semgrep",
+                    "aor",
+                    "crg",
+                    "registry"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
               },
               "file": {
                 "minLength": 1,
@@ -216,6 +231,7 @@
               "rawId",
               "sources",
               "rawIds",
+              "evidenceSources",
               "cweComparable",
               "conflictResolution",
               "blockable"
@@ -354,6 +370,9 @@
                 "items": {
                   "additionalProperties": false,
                   "properties": {
+                    "certified": {
+                      "type": "boolean"
+                    },
                     "confidence": {
                       "maximum": 1,
                       "minimum": 0,
@@ -445,6 +464,84 @@
                   "degraded"
                 ],
                 "type": "string"
+              },
+              "synthetic": {
+                "type": "boolean"
+              },
+              "tokenDetail": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cacheRead": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "cacheWrite": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "input": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "output": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "total": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "total",
+                      "input",
+                      "output",
+                      "cacheRead",
+                      "cacheWrite"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "tokens": {
                 "anyOf": [

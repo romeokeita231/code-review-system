@@ -1,11 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
-
-const args = process.argv.slice(2);
-const arg = (name: string, fallback: string): string => {
-  const index = args.indexOf(name);
-  return index >= 0 && args[index + 1] ? args[index + 1]! : fallback;
-};
+import { arg } from "./shared.js";
 
 const runs = resolve(arg("--runs", "runs"));
 const out = resolve(arg("--out", "artifacts/report"));

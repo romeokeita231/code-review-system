@@ -2,25 +2,13 @@ import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BASE_RISK, CWES, diffCount, riskOf, type Cwe, type Risk } from "./shared.js";
 
 const OUT_DIR = fileURLToPath(new URL("../datasets/self-built", import.meta.url));
 const SAMPLE_DIR = join(OUT_DIR, "samples");
 const SAMPLE_COUNT_PER_CWE = 30;
 
-const CWES = ["CWE-78", "CWE-79", "CWE-89", "CWE-94", "CWE-22", "CWE-502", "CWE-798"] as const;
-type Cwe = (typeof CWES)[number];
-type Risk = "low" | "medium" | "high";
 type Split = "fit" | "eval";
-
-const BASE_RISK: Record<Cwe, Risk> = {
-  "CWE-78": "high",
-  "CWE-79": "medium",
-  "CWE-89": "high",
-  "CWE-94": "high",
-  "CWE-22": "medium",
-  "CWE-502": "high",
-  "CWE-798": "low",
-};
 
 const EXPECTED_DETECTABLE_BY = ["semgrep", "aor"];
 
@@ -30,28 +18,6 @@ const splitOf = (groupId: string, cwe: string): Split => {
   const bucket = Number.parseInt(sha256(`${groupId}|${cwe}`).slice(0, 4), 16) % 5;
   return bucket <= 2 ? "fit" : "eval";
 };
-
-const bump = (risk: Risk): Risk => (risk === "low" ? "medium" : "high");
-
-const riskOf = (cwe: Cwe, changedLines: number): Risk =>
-  changedLines >= 10 ? bump(BASE_RISK[cwe]) : BASE_RISK[cwe];
-
-function diffCount(a: string[], b: string[]): number {
-  const n = a.length;
-  const m = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
-  for (let i = 1; i <= m; i += 1) {
-    for (let j = 1; j <= n; j += 1) {
-      if (a[j - 1] === b[i - 1]) {
-        dp[i]![j] = dp[i - 1]![j - 1]! + 1;
-      } else {
-        dp[i]![j] = Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
-      }
-    }
-  }
-  const lcs = dp[m]![n]!;
-  return n + m - 2 * lcs;
-}
 
 const camel = (name: string): string =>
   name
