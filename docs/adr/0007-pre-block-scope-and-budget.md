@@ -34,7 +34,23 @@ p99 651.3 ms（≤1.2 s），完整 CLI 形态 p99 3254.9 ms。证据见
 
 结论：机械阻断仅 Python 可用；TS 事实只进 post 阶段的 warn/计数。line 1 的 block 分面
 按 `na`（`n=0 / k=样本数`）报，不得用可检测率顶替，也不得为凑数放宽第一条判据。
-另：1.2 s 判据只对 `semgrep-core` 直接调用成立，引用时必须带调用形态。
+另：1.2 s 判据只对 `semgrep-core` 直接调用成立——见勘误二，该判据已退役。
+
+## 勘误二（2026-11-13）：1.2 s 判据退役，只报 shipped 形态
+
+1.2 s 判据**退役**，不再作为门槛，也不作为可引用值。原因不是「数字不准」，而是**它
+描述的不是 shipped 形态**：`src/l3/semgrep.ts` 启动的是 `semgrep scan --config`，固定
+启动成本约 2.8 s。第 4 步 fit 跑（ds-2，12 行）实测：ok 行 3.3–4.7 s，4.3 KB 的
+`ts-cwe022-0003` 在 5.9 s 超时。5 s 的 `semgrepKillMs` / `timeoutsMs.callMs` 因此不是
+安全上界——这是「该路径会在真实使用中失守」，不是估算偏差。
+
+保留的是两预算而非单一延迟数：`budgets.semgrepKillMs`（进程树硬杀）与
+`sources.semgrep.timeoutsMs.callMs`（单次调用）。对外只报 shipped 形态的 p50/p95/p99，
+并注明形态；`semgrep-core` 数字仅作对照行。
+
+通用要求（第三次）：**任何延迟判据必须标注出处形态**（`semgrep-core` / `semgrep scan`
+/ 其他）。跨形态比较不构成证据。回收 ~2.8 s 固定开销（切 `semgrep-core -rules
+-targets -json`）是独立 perf 票，不并入 #41。
 
 ## Consequences
 

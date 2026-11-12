@@ -27,8 +27,8 @@
   "rationale": "SQL 字符串字面量引号转义：拼进 WHERE 前把 ' 变成 ''",
   "expected_detectable_by": "semgrep_only",
   "risk_level": "high",
-  "contamination_risk": "low",
-  "defect_origin": "injected",
+  "contamination_risk": "high",
+  "defect_origin": "real",
   "origin": {
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/search.ts",

@@ -28,7 +28,7 @@
   "expected_detectable_by": "semgrep_only",
   "risk_level": "low",
   "contamination_risk": "low",
-  "defect_origin": "injected",
+  "defect_origin": "real",
   "origin": {
     "kind": "public_repo",
     "ref": "goof@add14ba59e98240d9e00a235dd7d42cd61ae9912:app.js",

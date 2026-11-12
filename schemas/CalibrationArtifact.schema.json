@@ -100,6 +100,34 @@
         "thresholds": {
           "additionalProperties": false,
           "properties": {
+            "causes": {
+              "additionalProperties": false,
+              "properties": {
+                "class_declarations": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "class_rules": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "fit_negatives": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "n_fit": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "fit_negatives",
+                "class_declarations",
+                "class_rules",
+                "n_fit"
+              ],
+              "type": "object"
+            },
             "global": {
               "additionalProperties": false,
               "properties": {
@@ -189,6 +217,13 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "status": {
+              "enum": [
+                "fitted",
+                "unfittable"
+              ],
+              "type": "string"
             }
           },
           "required": [

@@ -34,6 +34,7 @@ function row(over: Partial<AcceptanceRowLike> & { sample: string; baseline: stri
       ts: over.ts,
       phase: over.change_event?.phase,
     },
+    review_skip_reason: over.review_skip_reason ?? null,
   };
 }
 
@@ -354,5 +355,43 @@ describe("acceptance", () => {
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(false);
     expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+  });
+
+  it("keeps a never-attempted language out of the recall denominator", () => {
+    const ts = Date.parse("2026-11-12T01:00:00Z");
+    const truth = new Map<string, SampleTruth>([
+      ["ts-1", truthOf("ts-1", "high", ["semgrep"])],
+      ["js-1", truthOf("js-1", "high", ["semgrep"])],
+      ["neg", truthOf("neg", "high", [])],
+    ]);
+    const rows = [
+      row({
+        sample: "ts-1",
+        baseline: "B4",
+        ts,
+        disposition: { preDecision: "deny", postDecision: "none", finalDisposition: "mechanical_block", text: "[CRS-BLOCK] a" },
+      }),
+      row({
+        sample: "js-1",
+        baseline: "B4",
+        ts: ts + 1,
+        review_skip_reason: "language_unsupported",
+        sources: [{ source: "semgrep", status: "degraded", errorKind: "language_unsupported", findings: [] }],
+      }),
+      row({ sample: "neg", baseline: "B4", ts: ts + 2 }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps, {
+      minSamples: 1,
+      coverage: { language: "typescript", perCwe: { "079": 35 } },
+    });
+    // The JavaScript row was never scanned, so it is neither a miss nor a
+    // denominator row; the timeout rule does not apply to it.
+    expect(report.lines[0]!.metrics).toMatchObject({
+      n: 1,
+      scannable: 1,
+      out_of_scope: 1,
+      recall: 1,
+    });
+    expect(report.resultsTable).toContain("never attempted");
   });
 });

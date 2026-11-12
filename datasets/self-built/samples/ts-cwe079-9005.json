@@ -17,7 +17,7 @@
   "rationale": "challenge.description 是应用自带挑战文案，请求不可写",
   "expected_detectable_by": null,
   "risk_level": "high",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": null,
   "origin": {
     "kind": "public_repo",

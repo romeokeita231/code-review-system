@@ -48,7 +48,8 @@ interface Row {
 }
 
 interface Provenance {
-  sources: Record<string, { commit: string; url: string; pedagogical: boolean }>;
+  stars_as_of: string;
+  sources: Record<string, { commit: string; url: string; pedagogical: boolean; stars: number }>;
   exhaustion: Array<{
     cwe: string;
     found: number;
@@ -105,6 +106,22 @@ function git(clone: string, args: string[]): string {
 /** `CWE-22` and `CWE-022` are the same class; the table counts the padded key. */
 function classKey(row: Row): string | null {
   return row.cwe === null ? null : row.cwe.padStart(3, "0");
+}
+
+/** A source this popular is in every training corpus; the rule is §10's. */
+const STAR_THRESHOLD = 1000;
+
+/**
+ * §10 contamination, as a derivation rather than a hand-filled field:
+ *
+ *   high  <=>  origin.kind = public_repo and (origin.advisory or (source.pedagogical and source.stars >= 1000))
+ *
+ * Every self row is `public_repo` with no advisory, so the second disjunct is
+ * the one that can fire. Star counts are a snapshot (see `stars_as_of`), not a
+ * property of the pinned commit.
+ */
+function contaminationRisk(source: Provenance["sources"][string]): "low" | "high" {
+  return source.pedagogical && source.stars >= STAR_THRESHOLD ? "high" : "low";
 }
 
 function cloneOf(root: string, repo: string): string {
@@ -281,8 +298,8 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       rationale: row.rationale,
       expected_detectable_by: row.label === 1 ? "semgrep_only" : null,
       risk_level: specRiskLevel(sampleCwe, changed),
-      contamination_risk: "low",
-      defect_origin: row.label === 1 ? "injected" : null,
+      contamination_risk: contaminationRisk(provenance.sources[row.repo]!),
+      defect_origin: row.label === 1 ? "real" : null,
       origin: {
         kind: "public_repo",
         ref: `${row.repo}@${provenance.sources[row.repo]!.commit}:${row.path}`,
@@ -344,16 +361,19 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       split_criterion:
         "groups keyed by repo:path, ordered by sha256(group_key), greedy fill to 0.6 eval; a group never crosses the split; negatives are held out in eval so the threshold cannot be tuned against them",
       negatives_split: "eval",
-      defect_origin: "injected",
+      defect_origin: "real",
       defect_origin_basis:
-        "every source is a deliberately vulnerable teaching application, so the defect is planted by design rather than observed in production code; real-field recall stays unmeasured",
+        "the vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+      contamination_rule:
+        "high iff origin.kind=public_repo and (origin.advisory or (source.pedagogical and source.stars >= 1000)); else low",
+      contamination_stars_as_of: provenance.stars_as_of,
       supply_exhausted: provenance.exhaustion,
     },
     retired: provenance.retired,
     sources: Object.fromEntries(
       Object.entries(provenance.sources).map(([name, source]) => [
         name,
-        { commit: source.commit, url: source.url, pedagogical: source.pedagogical },
+        { commit: source.commit, url: source.url, pedagogical: source.pedagogical, stars: source.stars },
       ]),
     ),
     samples: projection,

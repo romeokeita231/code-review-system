@@ -28,7 +28,7 @@
   "expected_detectable_by": "semgrep_only",
   "risk_level": "high",
   "contamination_risk": "low",
-  "defect_origin": "injected",
+  "defect_origin": "real",
   "origin": {
     "kind": "public_repo",
     "ref": "dvna@9ba473add536f66ac9007966acb2a775dd31277a:core/appHandler.js",

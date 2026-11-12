@@ -7,6 +7,7 @@ import {
   ConfigError,
   parseConfig,
   stableStringify,
+  thresholdState,
 } from "../../src/config/index.js";
 import { calibrationCategories, type CalibrationArtifact, type RunConfig } from "../../src/contracts/index.js";
 
@@ -137,6 +138,26 @@ describe("calibration provenance (#7 D2)", () => {
         categories: ["CWE-22", "CWE-89"],
       }),
     ).toThrow(/missing CWE-89/);
+  });
+
+  it("passes provenance for an unfittable artifact and exposes the state", () => {
+    // The artifact's thresholds are null (see `artifact()`), so a provenance
+    // check is the only thing that can separate "compliant but unfitted" from
+    // "fitted on another dataset". It must pass.
+    expect(thresholdState(artifact())).toBe("unfittable");
+    expect(() =>
+      assertCalibrationMatches(artifact(), {
+        datasetVersion: "ds-2",
+        rulesetFingerprint: "fp",
+        categories: ["CWE-22", "CWE-89"],
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertCalibrationMatches(artifact(), { datasetVersion: "ds-3" }),
+    ).toThrow(/dataset ds-2, expected ds-3/);
+    expect(thresholdState(artifact({ thresholds: { global: { block: 0.9, warn: 0.7 }, perCategory: {}, skipped: [] } }))).toBe(
+      "fitted",
+    );
   });
 
   it("recomputes the committed artifact's categories from the dataset and rules table", () => {

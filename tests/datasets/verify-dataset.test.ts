@@ -101,14 +101,29 @@ describe("verifyDataset", () => {
     expect(result.errors.some((error) => error.includes("crosses the split"))).toBe(true);
   });
 
-  it("rejects a defect_origin that misattributes a planted defect", { timeout: 30000 }, async () => {
+  it("rejects a defect_origin that calls an upstream defect planted", { timeout: 30000 }, async () => {
     const dir = await copyDataset();
     const target = await findRow(dir, (row) => row["label"] === 1);
-    target.row["defect_origin"] = "real";
+    target.row["defect_origin"] = "injected";
     await writeJson(target.path, target.row);
 
     const result = await verifyDataset(dir);
-    expect(result.errors.some((error) => error.includes("!= injected"))).toBe(true);
+    expect(result.errors.some((error) => error.includes("!= real"))).toBe(true);
+  });
+
+  it("rejects a contamination_risk that disagrees with the §10 derivation", { timeout: 30000 }, async () => {
+    const dir = await copyDataset();
+    const target = await findRow(
+      dir,
+      (row) => row["repo"] === "juice-shop" && row["label"] === 1,
+    );
+    target.row["contamination_risk"] = "low";
+    await writeJson(target.path, target.row);
+
+    const result = await verifyDataset(dir);
+    expect(
+      result.errors.some((error) => error.includes("!= §10 derivation high")),
+    ).toBe(true);
   });
 
   it("requires defect_origin to be null on a negative row", { timeout: 30000 }, async () => {

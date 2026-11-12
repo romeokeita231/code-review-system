@@ -6,7 +6,7 @@ actually passed a gate.
 
 | Set | Path | Role | Status |
 | --- | --- | --- | --- |
-| self-built TS | `datasets/self-built` | fit + eval, per-CWE P/R | **not spec-conformant, blocking line 1** |
+| self-built (`ds-2`) | `datasets/self-built` | fit + eval, per-CWE P/R | 33 rows (26 pos / 7 neg), 28 groups; gate + conformance PASS |
 | AACR-Bench TS | `datasets/aacr` | eval only: Precision / noise rate | imported 2026-11-12, conformance PASS |
 | SecurityEval | — | fit only (class priors) | not imported |
 | CWE-Bench-Java | — | external sanity only | not imported |
@@ -55,36 +55,100 @@ declarations, report its descriptive numbers (n, interval) and **no threshold**;
 the pipeline uses the global threshold for every class. A per-class threshold may
 only appear once that class passes 30.
 
-## self-built
+## self-built (`ds-2`)
 
-`npx tsx scripts/verify-dataset.ts` checks the set against its own manifest
-(hashes, counts, pairing, split leakage). It passes.
+The set is generated, never hand-edited: `scripts/build-ds2.ts` reads
+`source/rows.json` (mechanical row description + line hunks) and
+`source/provenance.json` (pinned commits, star snapshot, supply records), then derives
+`before`/`after`, `changed_lines`, `risk_level`, `defect_id`, `defect_origin`,
+`contamination_risk`, the split, the hashes and the manifest projection.
 
-`npx tsx scripts/verify-dataset.ts --conformance` checks it against the spec and
-fails with ~3300 violations across 7 rules: field names (`cwe`/`path`/`paired_safe`
-instead of `sample_cwe`/`file_path`/`variant_of`), `sample_id` pattern, `medium` risk
-levels that §9 cannot derive, CWE-502 where §6 asks for CWE-918, and 60 rows per class
-instead of a 3:2 fit/eval split.
+```bash
+npm run dataset:build     # --emit: rewrite the tree from the pinned blobs
+npm run dataset:check     # emit in memory, compare byte for byte, then run the gate
+npm run dataset:verify    # the gate: offline, no network, no detector
+```
 
-Both checks exist because they answer different questions. The first says "the files
-agree with the manifest"; the second says "the dataset agrees with the spec". A dataset
-whose schema drifted passes the first perfectly — which is exactly what happened, and
-why replay recall/precision looked clean while live line 1 measured 0.
+`--check` is the reproducibility claim: it re-reads every upstream blob at its pinned
+commit, asserts the pinned `blob_sha`, rebuilds `before` from `after` plus the recorded
+hunks, and compares all 34 files with the committed tree. `datasets/self-built/**` is
+marked `-text` in `.gitattributes`, because on a machine with `core.autocrlf=true` a
+checkout would otherwise rewrite the tree to CRLF and turn the byte comparison red — a
+reproducibility claim that does not survive another machine is not one.
 
-Two further defects, found while measuring:
+`verifyDataset` and `--conformance` answer different questions ("the files agree with
+the manifest" vs "the rows agree with the spec"). Both pass on `ds-2`; the old set
+failed the second with ~3300 violations, which is why replay recall looked clean while
+live line 1 measured 0.
 
-- All 210 pair-safe "variants" are no-op writes (`before === after`,
-  `changed_lines = 0`). They are "no change", not "changed but safe", so they cannot
-  serve as a precision denominator.
-- The manifest's `expected_detectable_by` is uniformly `["semgrep", "aor"]`, i.e. it
-  carries no information. It must not select the recall denominator (#7 §6) — the
-  ruleset's *declared* coverage does that now (see `docs/live-drill.md`).
+### What a row is, exactly
 
-Rebuilding this set is P2 of the #41 sequence: parents from `nodejs-goof` / `dvna` /
-Juice Shop with a `tsc --noEmit` gate, CWE-502 replaced by CWE-918, `origin` /
-`repo` / `contamination_risk` filled in, `risk_level` re-derived.
+| field | value | why |
+| --- | --- | --- |
+| `after` | the upstream blob, byte for byte (`origin.blob_sha`) | the detector sees real code |
+| `before` | our minimal pre-image: `after` plus one re-added control | only builds the change event and `changed_lines`; **no detector sees it** |
+| `defect_origin` | `real` on positives, `null` on negatives | the vulnerable bytes are the upstream author's; the project authored the pre-image only |
+| `origin.kind` | `public_repo` | `after` is upstream; `self_rewritten` would misdescribe it |
+| `contamination_risk` | derived from §10, not filled in | see below |
 
-### P2 supply check (measured 2026-11-12)
+**Range sentence.** Self-built recall is *real-defect* recall over 26 upstream vulnerable
+files. The limit is the **parent population**: all three sources are deliberately
+vulnerable teaching applications, with source and sink often in one function, no
+sanitisation and no reachability constraint, so they are easier to detect than production
+code. This is not evidence that generalises to production code.
+
+**`contamination_risk` (revised §10).** `high` iff `origin.kind = public_repo` and either
+`origin.advisory` is set or the source is `pedagogical` with `stars >= 1000`; else `low`.
+Star counts are a dated snapshot (`declared.contamination_stars_as_of`). With the
+2026-11-12 snapshot the rule *splits* the set: juice-shop (14,433) gives 27 `high`, while
+goof (549) and dvna (781) stay `low`. The teaching-app flag alone does not establish that
+a file is in a training corpus.
+
+**Negatives, held out on purpose.** 7 rows, all from juice-shop, all in eval
+(`declared.negatives_split: "eval"`): the threshold must never be fitted against the rows
+that measure precision. A file that already hosts a positive cannot host a negative — the
+positive's `before` is that file plus a control, so the pair is a near-duplicate and the
+split would leak the label. The builder throws on it and the gate re-checks it.
+
+**Supply exhaustion, not "insufficient_n".** CWE-078 (2 rows) and CWE-918 (1 row) are
+below the reporting threshold. Each carries a `declared.supply_exhausted` record that
+names every source searched and the verdict for each (`no sink` / `1 real sink` + the
+line). The gate refuses an `insufficient_n` class without one, so "we looked and the
+source is dry" can never be written as "too few samples".
+
+### Calibration cannot be fitted on `fit_negatives = 0`
+
+Holding the negatives out for a single, blind precision measurement has a price: the fit
+split has no negative, so every finding is a true positive, PAVA collapses every score
+towards 1.0, and no operating point can be certified. `artifacts/calibration.json`
+records the outcome as `thresholds.status: "unfittable"` with all three causes:
+
+| cause | value | nature |
+| --- | --- | --- |
+| `fit_negatives` | 0 | **design choice** — precision is measured once, in eval |
+| `class_declarations` | 4 (max, one class) | corpus size (the per-class gate wants ≥30) |
+| `n_fit` | 4 findings | corpus size |
+
+`class_rules` (11) sits next to them as context: it is what the pinned ruleset declares
+for the class that did produce findings (CWE-089 in TypeScript). This is a recorded
+trade-off, not a bug: fitting a threshold later requires putting some negatives into
+fit, and then precision has two numbers — a fitted-side estimate and an acceptance-side
+measurement — which must never be quoted interchangeably.
+
+### Two limitations that belong in the paper
+
+1. **No defect-free low-risk row.** 11 of the 33 rows are `risk_level: low` (079/798 with
+   changes ≤30 lines), so the tier ladder does see both levels — but every low row is a
+   *positive*, and line 4 needs 8 **defect-free** low-risk samples to pair B4 against B4g.
+   On `ds-2` those pairs would be built on defective rows, which is why line 4 is
+   unmeasurable here rather than merely thin.
+2. **Language coverage is part of the claim.** The shipped config scans Python and
+   TypeScript; `ds-2` is 27 TypeScript + 6 JavaScript rows. The 6 JavaScript rows are
+   `out_of_scope` (never attempted), not misses — see `docs/live-drill.md`. Line 1's
+   `n >= 20` is also out of reach: the eval split has 14 positives (11 TypeScript), so the
+   live drill stages 10 and fails the size gate on the data, not on detection.
+
+## P2 supply check (measured 2026-11-12)
 
 `gh api repos/<repo>/git/trees/<sha>?recursive=1` at each parent's HEAD:
 
@@ -94,9 +158,8 @@ Juice Shop with a `tsc --noEmit` gate, CWE-502 replaced by CWE-918, `origin` /
 | `appsecco/dvna` | 151 | **0** | 14 |
 | `juice-shop/juice-shop` | 1498 | 664 | 9 |
 
-`language` is now `ts | js` (#41 裁定), so the two JavaScript-only parents are
-admissible after all; the question is no longer which language can be used but how
-many real defects the parents actually contain.
+`language` is `ts | js` (#41 裁定), so the two JavaScript-only parents are admissible;
+the binding question was how many real defects they contain, not which language.
 
 ### 第 1 步：候选清点 (2026-11-12)
 

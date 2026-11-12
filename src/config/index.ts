@@ -116,6 +116,18 @@ export function assertCalibrationMatches(
   }
 }
 
+/**
+ * A null threshold is a *state*, not a bad value. `assertCalibrationMatches`
+ * only checks provenance, so an `unfittable` artifact with the right
+ * `dataset_version`/`ruleset_fingerprint` is compliant; consumers propagate the
+ * state instead of substituting a constant.
+ */
+export function thresholdState(artifact: CalibrationArtifact): "fitted" | "unfittable" {
+  return artifact.thresholds.global.block === null && artifact.thresholds.global.warn === null
+    ? "unfittable"
+    : "fitted";
+}
+
 export interface LadderShape {
   semgrep: boolean;
   aor: boolean;

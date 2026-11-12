@@ -141,17 +141,18 @@ describe("live drill plan", () => {
     }
   });
 
-  // Re-armed in the line-2 pass: ds-2 has no defect-free low-risk row, because
-  // the one 798 candidate (lib/insecurity.ts) already hosts a positive, and the
-  // same-file rule makes it ineligible as a negative.
-  it.skip("picks defect-free low-risk rows so line1's precision has a denominator", () => {
-    for (const sample of planDrill(DATASET).lowRisk) {
+  it("stages defect-free rows as line1's false-positive denominator", () => {
+    // `risk_level` describes the change (§9), not defect-freeness, so ds-2's
+    // negatives are all `high`: selecting controls by `low` staged none and
+    // made line1 report `precision: na`.
+    const controls = planDrill(DATASET).controls;
+    expect(controls.length).toBe(7);
+    for (const sample of controls) {
+      expect(sample.kind).toBe("control");
       const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
-        labels: unknown[];
-        risk_level: string;
+        defects: unknown[];
       };
-      expect(row.risk_level).toBe("low");
-      expect(row.labels).toEqual([]);
+      expect(row.defects).toEqual([]);
     }
   });
 

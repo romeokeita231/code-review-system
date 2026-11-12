@@ -27,8 +27,8 @@
   "rationale": "路径包含校验：path.basename 先剥离目录分隔符再 resolve",
   "expected_detectable_by": "semgrep_only",
   "risk_level": "high",
-  "contamination_risk": "low",
-  "defect_origin": "injected",
+  "contamination_risk": "high",
+  "defect_origin": "real",
   "origin": {
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/dataErasure.ts",

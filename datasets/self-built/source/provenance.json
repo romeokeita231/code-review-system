@@ -1,19 +1,23 @@
 {
+  "stars_as_of": "2026-11-12",
   "sources": {
     "juice-shop": {
       "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
       "url": "https://github.com/juice-shop/juice-shop",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 14433
     },
     "goof": {
       "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
       "url": "https://github.com/snyk-labs/nodejs-goof",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 549
     },
     "dvna": {
       "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
       "url": "https://github.com/appsecco/dvna",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 781
     }
   },
   "exhaustion": [

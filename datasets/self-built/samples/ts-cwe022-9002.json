@@ -17,7 +17,7 @@
   "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
   "expected_detectable_by": null,
   "risk_level": "high",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": null,
   "origin": {
     "kind": "public_repo",

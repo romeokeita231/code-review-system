@@ -38,8 +38,10 @@
     "split_band_basis": "positives",
     "split_criterion": "groups keyed by repo:path, ordered by sha256(group_key), greedy fill to 0.6 eval; a group never crosses the split; negatives are held out in eval so the threshold cannot be tuned against them",
     "negatives_split": "eval",
-    "defect_origin": "injected",
-    "defect_origin_basis": "every source is a deliberately vulnerable teaching application, so the defect is planted by design rather than observed in production code; real-field recall stays unmeasured",
+    "defect_origin": "real",
+    "defect_origin_basis": "the vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+    "contamination_rule": "high iff origin.kind=public_repo and (origin.advisory or (source.pedagogical and source.stars >= 1000)); else low",
+    "contamination_stars_as_of": "2026-11-12",
     "supply_exhausted": [
       {
         "cwe": "078",
@@ -109,17 +111,20 @@
     "juice-shop": {
       "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
       "url": "https://github.com/juice-shop/juice-shop",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 14433
     },
     "goof": {
       "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
       "url": "https://github.com/snyk-labs/nodejs-goof",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 549
     },
     "dvna": {
       "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
       "url": "https://github.com/appsecco/dvna",
-      "pedagogical": true
+      "pedagogical": true,
+      "stars": 781
     }
   },
   "samples": [

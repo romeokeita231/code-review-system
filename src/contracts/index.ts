@@ -436,6 +436,30 @@ export const CalibrationArtifact = z.object({
       z.object({ block: z.number().min(0).max(1).nullable(), warn: z.number().min(0).max(1).nullable() }),
     ),
     skipped: z.array(z.object({ scope: z.string(), reason: z.string() })),
+    /**
+     * `unfittable` means no operating point exists. It is a state, not a low
+     * threshold: a consumer must propagate it and must never substitute a
+     * constant (0.5, 0.7, or the config's declared value).
+     */
+    status: z.enum(["fitted", "unfittable"]).optional(),
+    /**
+     * Why the fit failed, recorded separately for each cause: `fit_negatives`
+     * is a design choice (precision is measured once, in eval), the other two
+     * are corpus size. Collapsing them into one `insufficient_support` hides
+     * which cause a fix would have to attack.
+     */
+    causes: z
+      .object({
+        /** Fit rows with no defect: PAVA needs both classes, or it degenerates. */
+        fit_negatives: z.number().int().nonnegative(),
+        /** Largest number of findings one class contributed (the 30-gate counts these). */
+        class_declarations: z.number().int().nonnegative(),
+        /** Rules the pinned ruleset declares for that same class. */
+        class_rules: z.number().int().nonnegative(),
+        /** Findings the fit run produced. */
+        n_fit: z.number().int().nonnegative(),
+      })
+      .optional(),
   }),
   synthetic: z.boolean().optional(),
 });

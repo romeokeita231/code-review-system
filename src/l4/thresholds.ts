@@ -42,11 +42,24 @@ export interface CategoryThresholdSamples {
   warn: ThresholdSample[];
 }
 
+/**
+ * Why a fit produced no operating point. Every cause is recorded on its own:
+ * the first is a design choice, the other three are corpus size, and a reader
+ * deciding whether to fix the fit needs to know which is which.
+ */
+export interface ThresholdCauses {
+  fit_negatives: number;
+  class_declarations: number;
+  class_rules: number;
+  n_fit: number;
+}
+
 export function fitArtifactThresholds(
   artifact: CalibrationArtifact,
   blockSamples: ThresholdSample[],
   warnSamples: ThresholdSample[],
   byCategory: Map<string, CategoryThresholdSamples>,
+  causes: ThresholdCauses,
 ): CalibrationArtifact {
   const block = fitThreshold(blockSamples, 0.9, 10);
   const warn = fitThreshold(warnSamples, 0.7, 10);
@@ -75,6 +88,8 @@ export function fitArtifactThresholds(
       global: { block: block.value, warn: warn.value },
       perCategory,
       skipped,
+      status: block.value === null && warn.value === null ? "unfittable" : "fitted",
+      causes,
     },
   };
 }

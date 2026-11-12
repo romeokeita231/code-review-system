@@ -55,10 +55,22 @@ export interface AcceptanceRowLike {
     text: string | null;
   };
   findings_merged: Array<{ file: string; startLine: number; endLine: number; cwe: string | null }>;
-  sources: Array<{ source: string; status: string; findings: Array<{ file: string; cwe: string | null; evidence: string | null }> }>;
+  sources: Array<{
+    source: string;
+    status: string;
+    /** `language_unsupported` = never attempted, not a failed attempt. */
+    errorKind?: string | null;
+    findings: Array<{ file: string; cwe: string | null; evidence: string | null }>;
+  }>;
   tokens: { total: number | null } | number | null;
   latency_ms: number;
   change_event: { sessionId: string; ts: number; phase?: string } | null;
+  /**
+   * Why the pipeline skipped the review, when it did. `language_unsupported`
+   * means the source was never attempted, which is a different fact from a
+   * timeout (attempted, failed) and must not share its denominator.
+   */
+  review_skip_reason?: string | null;
 }
 
 export async function collectJsonl(root: string): Promise<string[]> {  const out: string[] = [];
@@ -157,6 +169,17 @@ export function evaluateAcceptance(
     const sample = truth.get(row.sample);
     return sample !== undefined && sample.split === "eval" && sample.labels.length > 0;
   });
+  // Two denominators, one gate. A row whose language no shipped subset can scan
+  // was never attempted: counting it as a miss would report recall as a
+  // function of language coverage. It is listed separately instead. A timeout
+  // *was* attempted and stays in as a miss.
+  const neverScanned = (row: AcceptanceRowLike): boolean =>
+    row.review_skip_reason === "language_unsupported" ||
+    row.sources.some(
+      (source) => source.source === "semgrep" && source.errorKind === "language_unsupported",
+    );
+  const outOfScope = evalPositives.filter(neverScanned);
+  const scannable = evalPositives.filter((row) => !neverScanned(row));
   // `expected_detectable_by` is a non-truth hint (annotation spec §6) and must
   // not select the denominator. The ruleset's *declared* coverage does, and it
   // is a fact about the pinned rules table, decidable before unblinding.
@@ -165,8 +188,8 @@ export function evaluateAcceptance(
     const key = cweKey(truth.get(row.sample)?.sample_cwe ?? null);
     return key !== null && (coverage.perCwe[key] ?? 0) > 0;
   };
-  const positives = evalPositives.filter(covered);
-  const excluded = evalPositives.filter((row) => !covered(row));
+  const positives = scannable.filter(covered);
+  const excluded = scannable.filter((row) => !covered(row));
   const negatives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
     return sample !== undefined && sample.labels.length === 0;
@@ -196,12 +219,13 @@ export function evaluateAcceptance(
     predictedGap.length === 0;
   const excludedClasses = [...new Set(excluded.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"))];
   const line1: LineResult = {
-    name: "line1: block precision/recall on the covered eval positives",
+    name: "line1: block precision/recall on the covered, scannable eval positives",
     pass: line1Pass,
     detail:
       `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} ` +
       `precision=${precisionMeasurable ? precision.toFixed(3) : "na"} negatives=${negatives.length} ` +
       `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
+      `out_of_scope=${outOfScope.length} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
     metrics: {
       n,
@@ -211,6 +235,9 @@ export function evaluateAcceptance(
       false_positive: falsePositive.length,
       negatives: negatives.length,
       missed,
+      // Every row that exists, once: n + excluded + out_of_scope = eval positives.
+      scannable: scannable.length,
+      out_of_scope: outOfScope.length,
       excluded: excluded.length,
       excluded_classes: excludedClasses.join(","),
       preregistered: String(preregistered),
@@ -363,6 +390,13 @@ export function evaluateAcceptance(
           table(["class", "declared rules", "eval rows", "outside line1"], coverageRows),
         ]
       : []),
+    ...(outOfScope.length > 0
+      ? [
+          "",
+          `line1 out of scope (never attempted: no subset for the row's language): ` +
+            `${outOfScope.length} row(s) - ${outOfScope.map((row) => row.sample).join(", ")}`,
+        ]
+      : []),
   ].join("\n");
 
   const verdict = [
@@ -377,6 +411,13 @@ export function evaluateAcceptance(
           "",
           `line1 分母口径：按钉定规则表声明的 ${coverage.language} 规则分面，` +
             `${excluded.length} 条 eval 正样本因规则集无该类规则不在分母内（见结果表末表）。`,
+        ]),
+    ...(outOfScope.length === 0
+      ? []
+      : [
+          "",
+          `line1 另将 ${outOfScope.length} 条 eval 正样本单列为 out_of_scope：其语言无任何已装载子集，` +
+            `系统从未尝试扫描，故不计入分母。timeout 属"试过、失败"，仍计为未命中。`,
         ]),
     "",
   ].join("\n");

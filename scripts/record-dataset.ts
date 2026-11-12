@@ -21,7 +21,7 @@ import type { Finding, RunConfig, SourceResult } from "../src/contracts/index.js
 import { loadConfig, stableStringify } from "../src/config/index.js";
 import { createSemgrepSource } from "../src/l3/index.js";
 import { changeEventOf, loadDataset, type DatasetSample } from "../src/l5/index.js";
-import { declaredCoverage, cweKey, loadRulesTable, rulesFor } from "./coverage.js";
+import { cweKey, declaredCoverage, loadRulesTable, rulesFor, semgrepLanguage } from "./coverage.js";
 
 const DEFAULT_RULES_TABLE = "research/semgrep-bench/snapshot/rules_table.json";
 
@@ -32,6 +32,9 @@ interface RowReport {
   findings: number;
   hit: boolean;
   status: string;
+  errorKind: string | null;
+  /** `out_of_scope` = never attempted; every other state is an attempt. */
+  state: "scanned" | "timeout" | "failed" | "out_of_scope";
   declaredRules: number;
   latencyMs: number;
 }
@@ -103,6 +106,14 @@ async function main(): Promise<void> {
       const result = await scan(config, sample, root);
       const coverage = coverageFor(sample.language);
       const hit = result.findings.some((finding) => overlaps(finding, sample));
+      const state: RowReport["state"] =
+        result.status === "ok"
+          ? "scanned"
+          : result.errorKind === "language_unsupported"
+            ? "out_of_scope"
+            : result.status === "timeout"
+              ? "timeout"
+              : "failed";
       reports.push({
         sample: sample.sample_id,
         cwe: sample.cwe,
@@ -110,6 +121,8 @@ async function main(): Promise<void> {
         findings: result.findings.length,
         hit,
         status: result.status,
+        errorKind: result.errorKind ?? null,
+        state,
         declaredRules: rulesFor(coverage, sample.cwe).length,
         latencyMs: result.latencyMs,
       });
@@ -127,19 +140,40 @@ async function main(): Promise<void> {
 
   if (matrix) {
     const classes = [...new Set(reports.map((report) => cweKey(report.cwe) ?? "none"))].sort();
-    process.stdout.write("\nclass  rows  hit  declared  findings\n");
+    process.stdout.write("\nclass  rows  oosc  scanned  hit  declared  findings\n");
     for (const key of classes) {
       const inClass = reports.filter((report) => (cweKey(report.cwe) ?? "none") === key);
+      const outOfScope = inClass.filter((report) => report.state === "out_of_scope").length;
+      const scanned = inClass.length - outOfScope;
       const hits = inClass.filter((report) => report.hit).length;
       const findings = inClass.reduce((sum, report) => sum + report.findings, 0);
       const declared = Math.max(...inClass.map((report) => report.declaredRules));
-      process.stdout.write(`${key.padEnd(6)} ${String(inClass.length).padEnd(5)} ${String(hits).padEnd(4)} ${String(declared).padEnd(9)} ${findings}\n`);
+      process.stdout.write(
+        `${key.padEnd(6)} ${String(inClass.length).padEnd(5)} ${String(outOfScope).padEnd(5)} ` +
+          `${String(scanned).padEnd(8)} ${String(hits).padEnd(4)} ${String(declared).padEnd(9)} ${findings}\n`,
+      );
     }
-    const unscanned = reports.filter((report) => report.status !== "ok");
+
+    // Dual denominator, single gate. `language_unsupported` means the scan was
+    // never attempted (no subset, no `sMax` entry): listing it in the recall
+    // denominator would report the config's language coverage as a detector
+    // miss, and deleting it would hide the gap. So it gets its own line and is
+    // excluded; a timeout *was* attempted and stays in as a miss.
+    const outOfScope = reports.filter((report) => report.state === "out_of_scope");
+    const attempted = reports.filter((report) => report.state !== "out_of_scope");
+    const hits = attempted.filter((report) => report.hit).length;
+    const languageCoverage: Record<string, number> = { python: 0, typescript: 0, javascript: 0 };
+    for (const sample of dataset.samples) {
+      const language = semgrepLanguage(sample.language);
+      languageCoverage[language] = (languageCoverage[language] ?? 0) + 1;
+    }
     process.stdout.write(
-      `\nrows=${reports.length} hit=${reports.filter((report) => report.hit).length} ` +
-        `findings=${reports.reduce((sum, report) => sum + report.findings, 0)} ` +
-        `not_ok=${unscanned.length}${unscanned.length > 0 ? `: ${unscanned.map((row) => `${row.sample}=${row.status}`).join(",")}` : ""}\n`,
+      `\ndenominator all rows: n=${reports.length} hit=${reports.filter((report) => report.hit).length}\n` +
+        `denominator attempted (gate): n=${attempted.length} hit=${hits} ` +
+        `recall=${attempted.length === 0 ? "na" : (hits / attempted.length).toFixed(3)}\n` +
+        `out_of_scope: ${outOfScope.length}` +
+        `${outOfScope.length > 0 ? ` (${outOfScope.map((report) => `${report.sample}=${report.errorKind ?? report.status}`).join(",")})` : ""}\n` +
+        `language_coverage (whole dataset): ${JSON.stringify(languageCoverage)}\n`,
     );
   }
 }

@@ -27,8 +27,8 @@
   "rationale": "字符白名单：key 仅保留字母数字下划线与连字符",
   "expected_detectable_by": "semgrep_only",
   "risk_level": "high",
-  "contamination_risk": "low",
-  "defect_origin": "injected",
+  "contamination_risk": "high",
+  "defect_origin": "real",
   "origin": {
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/vulnCodeSnippet.ts",

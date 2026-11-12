@@ -284,4 +284,50 @@ describe("review facade", () => {
     expect(enabled.disposition.tier).toBe(2);
     expect(enabled.disposition.preDecision).toBe("deny");
   });
+
+  it("propagates an unfittable threshold instead of substituting a constant", async () => {
+    const unfittable: CalibrationArtifact = {
+      ...artifact,
+      thresholds: { global: { block: null, warn: null }, perCategory: {}, skipped: [] },
+    };
+    const config = withConfig((cfg) => {
+      cfg.sources.registry.enabled = false;
+    });
+
+    // The block face is gated by rule certification, not by a probability the
+    // artifact could not certify.
+    const certified = await review(event(), {
+      runId: "run-8",
+      config,
+      sources: [source("semgrep", [result("semgrep", [finding()])])],
+      artifact: unfittable,
+    });
+    expect(certified.disposition.preDecision).toBe("deny");
+
+    // A finding the ruleset did not certify still cannot block.
+    const uncertified = await review(event(), {
+      runId: "run-9",
+      config,
+      sources: [source("semgrep", [result("semgrep", [finding({ certified: false })])])],
+      artifact: unfittable,
+    });
+    expect(uncertified.disposition.preDecision).toBe("allow");
+
+    // A warning is a precision claim; with no fitted warn point there is no
+    // claim to make and no constant to fall back to.
+    const warned = await review(event(), {
+      runId: "run-10",
+      config,
+      sources: [
+        source("semgrep", [result("semgrep", [])]),
+        source("aor", [
+          result("aor", [
+            finding({ source: "aor", cwe: "CWE-79", rawId: "aor-1", evidence: "returns user input" }),
+          ]),
+        ]),
+      ],
+      artifact: unfittable,
+    });
+    expect(warned.disposition.postDecision).not.toBe("inject_warn");
+  });
 });

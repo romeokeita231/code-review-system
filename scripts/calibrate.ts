@@ -4,7 +4,7 @@ import { calibrationCategories, cweCategory, type CalibrationArtifact, type Sour
 import { assertCalibrationMatches, loadConfig, sha256, stableStringify } from "../src/config/index.js";
 import { fitArtifactThresholds, fitCalibration, applyCalibration, fuse } from "../src/l4/index.js";
 import { loadDataset, loadRecorded } from "../src/l5/index.js";
-import { declaredCoverage, loadRulesTable } from "./coverage.js";
+import { cweKey, declaredCoverage, loadRulesTable, semgrepLanguage } from "./coverage.js";
 import { arg } from "./shared.js";
 
 const DEFAULT_RULES_TABLE = "research/semgrep-bench/snapshot/rules_table.json";
@@ -191,8 +191,31 @@ async function main(): Promise<void> {
     });
   }
 
+  // Rules per class for the audit record, counted for the languages the fit
+  // rows are written in: those are the subsets a scan of them would load, so
+  // the number describes the ruleset the fit actually exercised.
+  const fitLanguages = new Set(fitSamples.map((sample) => semgrepLanguage(sample.language)));
+  const auditLanguages = scannedLanguages.filter((language) => fitLanguages.has(language));
+  const declaredRules = new Map<string, number>();
+  for (const language of auditLanguages.length > 0 ? auditLanguages : scannedLanguages) {
+    for (const [key, ids] of declaredCoverage(rulesTable, language).perCwe) {
+      declaredRules.set(key, Math.max(declaredRules.get(key) ?? 0, ids.length));
+    }
+  }
+
   const fitted: CalibrationArtifact = {
-    ...fitArtifactThresholds(artifact, blockSamples, warnSamples, byCategory),
+    ...fitArtifactThresholds(artifact, blockSamples, warnSamples, byCategory, {
+      // Design choice, not shortage: negatives are held out in eval so the
+      // threshold cannot be tuned against them, which leaves PAVA with one
+      // class and makes every score look perfect.
+      fit_negatives: fitSamples.filter((sample) => sample.labels.length === 0).length,
+      class_declarations: Math.max(0, ...[...blockByCategory.values()].map((samples) => samples.length)),
+      class_rules: Math.max(
+        0,
+        ...[...blockByCategory.keys()].map((category) => declaredRules.get(cweKey(category) ?? category) ?? 0),
+      ),
+      n_fit: keptScored.length,
+    }),
     synthetic,
   };
 

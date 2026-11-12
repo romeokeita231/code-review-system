@@ -17,7 +17,7 @@
   "rationale": "subtitles 取自 application.promotion.subtitles 配置项，非请求可达输入",
   "expected_detectable_by": null,
   "risk_level": "high",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": null,
   "origin": {
     "kind": "public_repo",

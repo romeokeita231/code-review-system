@@ -194,13 +194,25 @@ function reviewStatusOf(results: SourceResult[], skipped: boolean, skipReason: R
 
 type ThresholdKind = "block" | "warn";
 
-function thresholdFor(ctx: ReviewContext, kind: ThresholdKind): (cwe: string | null) => number {
+/**
+ * A calibrated operating point, or the third state: the artifact exists but
+ * could not certify one (`fit_negatives = 0`). `unfittable` is deliberately not
+ * a number - substituting a constant here would be indistinguishable from a
+ * fitted threshold.
+ */
+type Threshold = number | "unfittable";
+
+function thresholdFor(ctx: ReviewContext, kind: ThresholdKind): (cwe: string | null) => Threshold {
   return (cwe) => {
     const perCategory = cwe ? ctx.artifact?.thresholds.perCategory[cwe] : undefined;
     const fitted = perCategory ? perCategory[kind] : null;
     if (fitted !== null && fitted !== undefined) return fitted;
     const global = ctx.artifact?.thresholds.global[kind];
-    return global ?? ctx.config.thresholds[kind];
+    if (global !== null && global !== undefined) return global;
+    // No artifact at all: calibration is off for this run, and the config's
+    // declared threshold is the policy rather than a substitute for a fit.
+    if (ctx.artifact === null) return ctx.config.thresholds[kind];
+    return "unfittable";
   };
 }
 
@@ -341,9 +353,14 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
     semgrepFindings.length > 0
       ? Math.max(...semgrepFindings.map(probabilityOf))
       : null;
-  const triggering = semgrepFindings.filter(
-    (finding) => finding.certified !== false && probabilityOf(finding) >= blockThreshold(finding.cwe ?? null),
-  );
+  const triggering = semgrepFindings.filter((finding) => {
+    if (finding.certified === false) return false;
+    const threshold = blockThreshold(finding.cwe ?? null);
+    // `unfittable` is not "a low threshold": the block face is gated by rule
+    // certification, so a certified rule still blocks when no calibrated
+    // probability threshold exists. Only the probability gate is dropped.
+    return threshold === "unfittable" || probabilityOf(finding) >= threshold;
+  });
 
   let preDecision: Disposition["preDecision"] = semgrepResult ? "allow" : "not_run";
   let blockLoop = false;
@@ -415,11 +432,14 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       );
     }
   } else if (change.phase === "post" && pFused !== null) {
-    const eligible = merged.filter(
-      (finding) =>
-        finding.evidenceSources.length > 0 &&
-        finding.confidence >= warnThreshold(finding.cwe ?? null),
-    );
+    const eligible = merged.filter((finding) => {
+      if (finding.evidenceSources.length === 0) return false;
+      const threshold = warnThreshold(finding.cwe ?? null);
+      // A warning is a precision claim. With no fitted warn threshold there is
+      // nothing to claim, and 0.7 would be exactly the invented constant that
+      // calibration exists to replace.
+      return threshold !== "unfittable" && finding.confidence >= threshold;
+    });
     if (eligible.length > 0) {
       postDecision = "inject_warn";
       text = formatMessage("[CRS-WARN]", eligible);

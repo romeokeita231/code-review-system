@@ -27,7 +27,7 @@ export interface PlannedSample {
   path: string;
   /** Staged text the agent copies verbatim. */
   staged: string;
-  kind: "positive" | "low-risk" | "dep-probe";
+  kind: "positive" | "low-risk" | "control" | "dep-probe";
 }
 
 export interface CoveragePlan {
@@ -47,6 +47,11 @@ export interface CoveragePlan {
 export interface DrillPlan {
   positives: PlannedSample[];
   lowRisk: PlannedSample[];
+  /**
+   * Defect-free rows staged as line 1's false-positive denominator. Separate
+   * from `lowRisk`, which exists for line 4's B4/B4g pairing.
+   */
+  controls: PlannedSample[];
   probe: PlannedSample;
   coverage: CoveragePlan;
   warnings: string[];
@@ -89,6 +94,7 @@ function livePath(sample: DatasetSample): string {
 export interface PlanOptions {
   limitPositives?: number;
   lowRiskCount?: number;
+  controlCount?: number;
   rulesTablePath?: string;
   /** Stage only this language; default is the one the eval positives use. */
   language?: string;
@@ -115,6 +121,7 @@ const hashOf = (sampleId: string): string => createHash("sha256").update(sampleI
 export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillPlan {
   const limitPositives = options.limitPositives ?? 20;
   const lowRiskCount = options.lowRiskCount ?? 8;
+  const controlCount = options.controlCount ?? 8;
   const tablePath = options.rulesTablePath ?? RULES_TABLE;
   const loaded = loadDatasetSync(datasetDir, options.language);
   const coverage = declaredCoverage(loadRulesTable(tablePath), loaded.language);
@@ -187,6 +194,23 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     kind: "low-risk" as const,
   }));
 
+  // Line 1's false-positive denominator is *defect-free*, not *low-risk*:
+  // `risk_level` describes the change (§9), and every ds-2 negative is `high`,
+  // so a `low` filter would stage none and precision would report `na`.
+  // Low-risk rows remain what line 4 needs (B4 vs B4g pairing).
+  const controls = loaded.samples
+    .filter((sample) => sample.labels.length === 0 && !chosen.has(sample.sample_id))
+    .filter((sample) => !lowRiskPicks.some((pick) => pick.sample_id === sample.sample_id))
+    .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)))
+    .slice(0, controlCount)
+    .map((sample) => ({
+      sampleId: sample.sample_id,
+      cwe: sample.cwe,
+      path: livePath(sample),
+      staged: stagedOf(sample),
+      kind: "control" as const,
+    }));
+
   const warnings: string[] = [];
   if (loaded.skipped > 0) {
     warnings.push(
@@ -208,17 +232,21 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     );
   }
   if (lowRisk.length < lowRiskCount) {
-    warnings.push(`only ${lowRisk.length} low-risk samples available (wanted ${lowRiskCount})`);
-  }
-  if (lowRiskPicks.length < lowRiskCount || lowRiskPicks.some((sample) => sample.labels.length > 0)) {
     warnings.push(
-      "some low-risk slots are defective samples: line1's precision denominator is thinner than 8",
+      `only ${lowRisk.length} low-risk samples available (${lowRiskCount} wanted for line4's B4/B4g pairs)`,
     );
+  }
+  if (lowRiskPicks.some((sample) => sample.labels.length > 0)) {
+    warnings.push("some low-risk slots are defective samples: line4's pairs are not defect-free");
+  }
+  if (controls.length === 0) {
+    warnings.push("no defect-free row staged: line1 precision has no false-positive denominator");
   }
 
   return {
     positives,
     lowRisk,
+    controls,
     probe: { ...DEP_PROBE },
     coverage: {
       table: tablePath,
@@ -290,7 +318,7 @@ function loadDatasetSync(datasetDir: string, requestedLanguage?: string): Loaded
 }
 
 export function allSamples(plan: DrillPlan): PlannedSample[] {
-  return [...plan.positives, ...plan.lowRisk, plan.probe];
+  return [...plan.positives, ...plan.lowRisk, ...plan.controls, plan.probe];
 }
 
 export interface StageOptions {
@@ -596,58 +624,8 @@ export async function preflight(profile: string, options: PreflightOptions = {})
       detail:
         "semgrep cannot scan here; line1 has no mechanical-block evidence until this is fixed (see the crash above)",
     });
-  } else if (options.plan !== undefined && options.ruleset !== undefined) {
-    const sampleHits = await semgrepDetectable(
-      options.datasetDir ?? "datasets/self-built",
-      options.plan,
-      options.ruleset,
-      5,
-    );
-    const covered = Object.values(options.plan.coverage.declared).filter((count) => count > 0).length;
-    checks.push({
-      name: "dataset detectability",
-      ok: sampleHits.hits > 0,
-      detail:
-        `${sampleHits.hits}/${sampleHits.scanned} planned positives match ${sampleHits.ruleset}; ` +
-        `declared coverage ${covered}/${Object.keys(options.plan.coverage.declared).length} classes` +
-        (sampleHits.hits === 0
-          ? " - the ruleset does not back expected_detectable_by, so line1 cannot pass until the dataset is rebuilt"
-          : ""),
-    });
   }
   return { ok: checks.every((check) => check.ok), checks };
-}
-
-/** Scan the first planned positives with the ruleset the baseline config pins. */
-async function semgrepDetectable(
-  datasetDir: string,
-  plan: DrillPlan,
-  ruleset: string,
-  limit: number,
-): Promise<{ hits: number; scanned: number; ruleset: string }> {
-  const dir = join(tmpdir(), `crs-dataset-probe-${Date.now()}`);
-  await mkdir(dir, { recursive: true });
-  let hits = 0;
-  const scanned = Math.min(limit, plan.positives.length);
-  for (const sample of plan.positives.slice(0, scanned)) {
-    const raw = JSON.parse(
-      readFileSync(join(datasetDir, "samples", `${sample.sampleId}.json`), "utf8"),
-    ) as { after: string };
-    const file = join(dir, `${sample.sampleId}.ts`);
-    await writeFile(file, raw.after, "utf8");
-    const result = await execa(
-      "semgrep",
-      ["--config", resolve(ruleset), "--json", "--metrics", "off", "--disable-version-check", file],
-      { env: { ...process.env, PATH: toolPath() }, reject: false, timeout: 60_000 },
-    );
-    try {
-      const parsed = JSON.parse(`${result.stdout}`) as { results?: unknown[] };
-      if ((parsed.results ?? []).length > 0) hits += 1;
-    } catch {
-      // An unparseable envelope already fails the semgrep check above.
-    }
-  }
-  return { hits, scanned, ruleset };
 }
 
 export async function runTask(options: RunOptions, prompt: string): Promise<{ stdout: string; sessionId: string | null }> {
@@ -725,6 +703,7 @@ export function toAcceptanceRows(
       sources: row.sources.map((source) => ({
         source: source.source,
         status: source.status,
+        errorKind: source.errorKind ?? null,
         findings: source.findings.map((finding) => ({
           file: finding.file,
           cwe: finding.cwe,
@@ -734,6 +713,7 @@ export function toAcceptanceRows(
       tokens: row.tokens,
       latency_ms: row.latency_ms,
       change_event: { sessionId: row.change_event.sessionId, ts: row.change_event.ts, phase: row.change_event.phase },
+      review_skip_reason: row.review_skip_reason,
     } as AcceptanceRowLike);
   }
   return out;
@@ -800,7 +780,8 @@ async function main(): Promise<void> {
   const allowShort = process.argv.includes("--allow-short");
 
   process.stdout.write(
-    `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk, 1 probe ` +
+    `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk, ` +
+      `${plan.controls.length} controls, 1 probe ` +
       `(rules ${ruleset}, ${plan.coverage.language})\n` +
       `coverage declared: ${Object.entries(plan.coverage.declared)
         .map(([cwe, count]) => `${cwe}=${count}`)

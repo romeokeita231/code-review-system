@@ -17,7 +17,7 @@
   "rationale": "domain 取自启动配置，非请求输入",
   "expected_detectable_by": null,
   "risk_level": "high",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": null,
   "origin": {
     "kind": "public_repo",

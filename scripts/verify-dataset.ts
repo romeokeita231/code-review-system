@@ -28,6 +28,8 @@ export const MIN_PER_CLASS = 3;
 export const SPLIT_BAND = [0.5, 0.7] as const;
 /** The upstream directory that must never be sampled (issue #41 ruling). */
 export const CODEFIXES = "data/static/codefixes/";
+/** §10: at or above this many stars a teaching app sits in every training corpus. */
+export const STAR_THRESHOLD = 1000;
 
 const sha256 = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 
@@ -258,7 +260,7 @@ interface ManifestView {
   raw: Record<string, unknown>;
   kind: "self" | "aacr";
   version: string;
-  sources: Record<string, { commit: string; pedagogical: boolean }>;
+  sources: Record<string, { commit: string; pedagogical: boolean; stars: number }>;
   entries: Map<string, Record<string, unknown>>;
   root: string | null;
 }
@@ -267,12 +269,13 @@ function readManifest(raw: Record<string, unknown>): ManifestView {
   const kindText = str(raw["kind"]);
   const kind: "self" | "aacr" = kindText === "aacr" || raw["dataset_version"] !== undefined ? "aacr" : "self";
   const sourcesRaw = asRecord(raw["sources"]);
-  const sources: Record<string, { commit: string; pedagogical: boolean }> = {};
+  const sources: Record<string, { commit: string; pedagogical: boolean; stars: number }> = {};
   for (const [name, value] of Object.entries(sourcesRaw)) {
     const source = asRecord(value);
     sources[name] = {
       commit: str(source["commit"]) ?? "",
       pedagogical: source["pedagogical"] === true,
+      stars: typeof source["stars"] === "number" ? source["stars"] : 0,
     };
   }
   const entries = new Map<string, Record<string, unknown>>();
@@ -409,9 +412,10 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
         add("origin", id, `origin.kind ${String(origin["kind"])} != public_repo`);
       }
 
-      // Ruling: `defect_origin` is non-null exactly when the row has defects,
-      // and it follows the source: a deliberately vulnerable application
-      // plants its defects, so its rows are `injected`.
+      // Ruling: `defect_origin` is non-null exactly when the row has defects.
+      // It follows the *bytes*, not the source's intent: `after` is the pinned
+      // upstream blob byte for byte, so a self positive is a `real` defect and
+      // the project only authored the `before` side.
       const defectOrigin = row["defect_origin"] ?? null;
       if (populated !== (defectOrigin !== null)) {
         add(
@@ -420,9 +424,15 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
           populated ? "row has defects but defect_origin=null" : "row has no defects but carries defect_origin",
         );
       }
-      const expectedOrigin = manifest.sources[repo]?.pedagogical === true ? "injected" : "real";
-      if (defectOrigin !== null && defectOrigin !== expectedOrigin) {
-        add("defect_origin", id, `${String(defectOrigin)} != ${expectedOrigin} for ${repo}`);
+      if (defectOrigin !== null) {
+        const pinned = origin["kind"] === "public_repo" && str(origin["blob_sha"]) !== null;
+        if (defectOrigin !== "real" || !pinned) {
+          add(
+            "defect_origin",
+            id,
+            `${String(defectOrigin)} != real for a row whose after is a pinned upstream blob`,
+          );
+        }
       }
 
       // Ruling: `rationale` is required on every self row (positive included),
@@ -442,10 +452,23 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
       }
     }
 
-    if (str(row["contamination_risk"]) === "high") {
-      if (origin["kind"] !== "public_repo" || str(origin["advisory"]) === null) {
-        add("contamination", id, "contamination_risk=high needs kind=public_repo and an advisory id");
-      }
+    // §10: contamination is derived, not filled. `high` iff the row is public
+    // and either carries an advisory, or comes from a pedagogical source that
+    // is popular enough to sit in a training corpus; else `low`.
+    const declaredContamination = str(row["contamination_risk"]);
+    const advisory = str(origin["advisory"]) !== null;
+    const declaredSource = manifest.sources[str(row["repo"]) ?? ""];
+    const expectedContamination =
+      origin["kind"] === "public_repo" &&
+      (advisory || (declaredSource?.pedagogical === true && (declaredSource?.stars ?? 0) >= STAR_THRESHOLD))
+        ? "high"
+        : "low";
+    if (declaredContamination !== null && declaredContamination !== expectedContamination) {
+      add(
+        "contamination",
+        id,
+        `contamination_risk ${declaredContamination} != §10 derivation ${expectedContamination}`,
+      );
     }
 
     // Defect spans: derived id, ascending by first changed line, tight span.
