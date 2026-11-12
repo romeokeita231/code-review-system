@@ -1,0 +1,38 @@
+{
+  "sample_id": "ts-cwe022-0002",
+  "schema_version": 2,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "self",
+  "group_id": "ts-cwe022-0002",
+  "repo": "juice-shop",
+  "file_path": "routes/fileServer.ts",
+  "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport path from 'node:path'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nimport * as security from '../lib/insecurity'\nimport { challenges } from '../data/datacache'\nimport * as challengeUtils from '../lib/challengeUtils'\n\nexport function servePublicFiles () {\n  return ({ params, query }: Request, res: Response, next: NextFunction) => {\n    const file = params.file\n\n    if (!file.includes('/')) {\n      verify(file, res, next)\n    } else {\n      res.status(403)\n      next(new Error('File names cannot contain forward slashes!'))\n    }\n  }\n\n  function verify (file: string, res: Response, next: NextFunction) {\n    if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {\n      file = security.cutOffPoisonNullByte(file)\n\n      challengeUtils.solveIf(challenges.directoryListingChallenge, () => { return file.toLowerCase() === 'acquisitions.md' })\n      verifySuccessfulPoisonNullByteExploit(file)\n\n      res.sendFile(path.resolve('ftp/', path.basename(file)))\n    } else {\n      res.status(403)\n      next(new Error('Only .md and .pdf files are allowed!'))\n    }\n  }\n\n  function verifySuccessfulPoisonNullByteExploit (file: string) {\n    challengeUtils.solveIf(challenges.easterEggLevelOneChallenge, () => { return file.toLowerCase() === 'eastere.gg' })\n    challengeUtils.solveIf(challenges.forgottenDevBackupChallenge, () => { return file.toLowerCase() === 'package.json.bak' })\n    challengeUtils.solveIf(challenges.forgottenBackupChallenge, () => { return file.toLowerCase() === 'coupons_2013.md.bak' })\n    challengeUtils.solveIf(challenges.misplacedSignatureFileChallenge, () => { return file.toLowerCase() === 'suspicious_errors.yml' })\n\n    challengeUtils.solveIf(challenges.nullByteChallenge, () => {\n      const previouslySolvedViaPoisonNullByte = [\n        challenges.easterEggLevelOneChallenge.solved,\n        challenges.forgottenDevBackupChallenge.solved,\n        challenges.forgottenBackupChallenge.solved,\n        challenges.misplacedSignatureFileChallenge.solved\n      ].some(Boolean)\n      return previouslySolvedViaPoisonNullByte || file.toLowerCase() === 'encrypt.pyc'\n    })\n  }\n\n  function endsWithAllowlistedFileType (param: string) {\n    return param.endsWith('.md') || param.endsWith('.pdf')\n  }\n}\n",
+  "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport path from 'node:path'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nimport * as security from '../lib/insecurity'\nimport { challenges } from '../data/datacache'\nimport * as challengeUtils from '../lib/challengeUtils'\n\nexport function servePublicFiles () {\n  return ({ params, query }: Request, res: Response, next: NextFunction) => {\n    const file = params.file\n\n    if (!file.includes('/')) {\n      verify(file, res, next)\n    } else {\n      res.status(403)\n      next(new Error('File names cannot contain forward slashes!'))\n    }\n  }\n\n  function verify (file: string, res: Response, next: NextFunction) {\n    if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {\n      file = security.cutOffPoisonNullByte(file)\n\n      challengeUtils.solveIf(challenges.directoryListingChallenge, () => { return file.toLowerCase() === 'acquisitions.md' })\n      verifySuccessfulPoisonNullByteExploit(file)\n\n      res.sendFile(path.resolve('ftp/', file))\n    } else {\n      res.status(403)\n      next(new Error('Only .md and .pdf files are allowed!'))\n    }\n  }\n\n  function verifySuccessfulPoisonNullByteExploit (file: string) {\n    challengeUtils.solveIf(challenges.easterEggLevelOneChallenge, () => { return file.toLowerCase() === 'eastere.gg' })\n    challengeUtils.solveIf(challenges.forgottenDevBackupChallenge, () => { return file.toLowerCase() === 'package.json.bak' })\n    challengeUtils.solveIf(challenges.forgottenBackupChallenge, () => { return file.toLowerCase() === 'coupons_2013.md.bak' })\n    challengeUtils.solveIf(challenges.misplacedSignatureFileChallenge, () => { return file.toLowerCase() === 'suspicious_errors.yml' })\n\n    challengeUtils.solveIf(challenges.nullByteChallenge, () => {\n      const previouslySolvedViaPoisonNullByte = [\n        challenges.easterEggLevelOneChallenge.solved,\n        challenges.forgottenDevBackupChallenge.solved,\n        challenges.forgottenBackupChallenge.solved,\n        challenges.misplacedSignatureFileChallenge.solved\n      ].some(Boolean)\n      return previouslySolvedViaPoisonNullByte || file.toLowerCase() === 'encrypt.pyc'\n    })\n  }\n\n  function endsWithAllowlistedFileType (param: string) {\n    return param.endsWith('.md') || param.endsWith('.pdf')\n  }\n}\n",
+  "changed_lines": 2,
+  "label": 1,
+  "defects": [
+    {
+      "defect_id": "ts-cwe022-0002#d1",
+      "cwe": "CWE-22",
+      "file": "routes/fileServer.ts",
+      "line_start": 32,
+      "line_end": 32,
+      "symbol": null,
+      "evidence": "file 取自路由参数，endsWithAllowlistedFileType 与 cutOffPoisonNullByte 都挡不住 ../"
+    }
+  ],
+  "sample_cwe": "CWE-22",
+  "variant_of": null,
+  "rationale": "路径包含校验：path.basename 剥离分隔符",
+  "expected_detectable_by": "semgrep_only",
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "defect_origin": "injected",
+  "origin": {
+    "kind": "self_rewritten",
+    "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/fileServer.ts",
+    "advisory": null
+  },
+  "annotator": "self"
+}

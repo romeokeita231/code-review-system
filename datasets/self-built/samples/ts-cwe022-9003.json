@@ -1,0 +1,28 @@
+{
+  "sample_id": "ts-cwe022-9003",
+  "schema_version": 2,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "self",
+  "group_id": "ts-cwe022-9003",
+  "repo": "juice-shop",
+  "file_path": "routes/keyServer.ts",
+  "before": "",
+  "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport path from 'node:path'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nexport function serveKeyFiles () {\n  return ({ params }: Request, res: Response, next: NextFunction) => {\n    const file = params.file\n\n    if (!file.includes('/')) {\n      res.sendFile(path.resolve('encryptionkeys/', file))\n    } else {\n      res.status(403)\n      next(new Error('File names cannot contain forward slashes!'))\n    }\n  }\n}\n",
+  "changed_lines": 20,
+  "label": 0,
+  "defects": [],
+  "sample_cwe": null,
+  "variant_of": null,
+  "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "defect_origin": "real",
+  "origin": {
+    "kind": "public_repo",
+    "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/keyServer.ts",
+    "advisory": null
+  },
+  "annotator": "self"
+}

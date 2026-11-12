@@ -1,0 +1,38 @@
+{
+  "sample_id": "ts-cwe079-0004",
+  "schema_version": 2,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "self",
+  "group_id": "ts-cwe079-0004",
+  "repo": "juice-shop",
+  "file_path": "frontend/src/app/track-result/track-result.component.ts",
+  "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { ActivatedRoute } from '@angular/router'\nimport { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatHeaderCell, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table'\nimport { Component, type OnInit, inject, ChangeDetectionStrategy } from '@angular/core'\nimport { TrackOrderService } from '../Services/track-order.service'\nimport { DomSanitizer } from '@angular/platform-browser'\nimport { library } from '@fortawesome/fontawesome-svg-core'\nimport { faHome, faSync, faTruck, faTruckLoading, faWarehouse } from '@fortawesome/free-solid-svg-icons'\n\nimport { TranslateModule } from '@ngx-translate/core'\nimport { MatCardModule } from '@angular/material/card'\n\nlibrary.add(faWarehouse, faSync, faTruckLoading, faTruck, faHome)\n\nexport enum Status {\n  New,\n  Packing,\n  Transit,\n  Delivered\n}\n\n@Component({\n  changeDetection: ChangeDetectionStrategy.Eager,\n  selector: 'app-track-result',\n  templateUrl: './track-result.component.html',\n  styleUrls: ['./track-result.component.scss'],\n  imports: [MatCardModule, TranslateModule, MatTable, MatColumnDef, MatHeaderCellDef, MatHeaderCell, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow]\n})\nexport class TrackResultComponent implements OnInit {\n  private readonly route = inject(ActivatedRoute)\n  private readonly trackOrderService = inject(TrackOrderService)\n  private readonly sanitizer = inject(DomSanitizer)\n\n  public displayedColumns = ['product', 'price', 'quantity', 'total price']\n  public dataSource = new MatTableDataSource()\n  public orderId?: string\n  public results: any = {}\n  public status: Status = Status.New\n  public Status = Status\n\n  ngOnInit (): void {\n    this.orderId = this.route.snapshot.queryParams.id\n    this.trackOrderService.find(this.orderId).subscribe((results) => {\n\n      this.results.orderNo = this.sanitizer.bypassSecurityTrustHtml(`<code>${String(results.data[0].orderId).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`)\n      this.results.email = results.data[0].email\n      this.results.totalPrice = results.data[0].totalPrice\n      this.results.products = results.data[0].products\n      this.results.eta = results.data[0].eta !== undefined ? results.data[0].eta : '?'\n      this.results.bonus = results.data[0].bonus\n      this.dataSource.data = this.results.products\n      if (results.data[0].delivered) {\n        this.status = Status.Delivered\n      } else if (this.route.snapshot.data.type) {\n        this.status = Status.New\n      } else if (this.results.eta > 2) {\n        this.status = Status.Packing\n      } else {\n        this.status = Status.Transit\n      }\n    })\n  }\n}\n",
+  "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { ActivatedRoute } from '@angular/router'\nimport { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatHeaderCell, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table'\nimport { Component, type OnInit, inject, ChangeDetectionStrategy } from '@angular/core'\nimport { TrackOrderService } from '../Services/track-order.service'\nimport { DomSanitizer } from '@angular/platform-browser'\nimport { library } from '@fortawesome/fontawesome-svg-core'\nimport { faHome, faSync, faTruck, faTruckLoading, faWarehouse } from '@fortawesome/free-solid-svg-icons'\n\nimport { TranslateModule } from '@ngx-translate/core'\nimport { MatCardModule } from '@angular/material/card'\n\nlibrary.add(faWarehouse, faSync, faTruckLoading, faTruck, faHome)\n\nexport enum Status {\n  New,\n  Packing,\n  Transit,\n  Delivered\n}\n\n@Component({\n  changeDetection: ChangeDetectionStrategy.Eager,\n  selector: 'app-track-result',\n  templateUrl: './track-result.component.html',\n  styleUrls: ['./track-result.component.scss'],\n  imports: [MatCardModule, TranslateModule, MatTable, MatColumnDef, MatHeaderCellDef, MatHeaderCell, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow]\n})\nexport class TrackResultComponent implements OnInit {\n  private readonly route = inject(ActivatedRoute)\n  private readonly trackOrderService = inject(TrackOrderService)\n  private readonly sanitizer = inject(DomSanitizer)\n\n  public displayedColumns = ['product', 'price', 'quantity', 'total price']\n  public dataSource = new MatTableDataSource()\n  public orderId?: string\n  public results: any = {}\n  public status: Status = Status.New\n  public Status = Status\n\n  ngOnInit (): void {\n    this.orderId = this.route.snapshot.queryParams.id\n    this.trackOrderService.find(this.orderId).subscribe((results) => {\n\n      this.results.orderNo = this.sanitizer.bypassSecurityTrustHtml(`<code>${results.data[0].orderId}</code>`)\n      this.results.email = results.data[0].email\n      this.results.totalPrice = results.data[0].totalPrice\n      this.results.products = results.data[0].products\n      this.results.eta = results.data[0].eta !== undefined ? results.data[0].eta : '?'\n      this.results.bonus = results.data[0].bonus\n      this.dataSource.data = this.results.products\n      if (results.data[0].delivered) {\n        this.status = Status.Delivered\n      } else if (this.route.snapshot.data.type) {\n        this.status = Status.New\n      } else if (this.results.eta > 2) {\n        this.status = Status.Packing\n      } else {\n        this.status = Status.Transit\n      }\n    })\n  }\n}\n",
+  "changed_lines": 2,
+  "label": 1,
+  "defects": [
+    {
+      "defect_id": "ts-cwe079-0004#d1",
+      "cwe": "CWE-79",
+      "file": "frontend/src/app/track-result/track-result.component.ts",
+      "line_start": 49,
+      "line_end": 49,
+      "symbol": null,
+      "evidence": "orderId 来自接口回包"
+    }
+  ],
+  "sample_cwe": "CWE-79",
+  "variant_of": null,
+  "rationale": "输出编码：插值前转义 HTML 元字符",
+  "expected_detectable_by": "semgrep_only",
+  "risk_level": "low",
+  "contamination_risk": "low",
+  "defect_origin": "injected",
+  "origin": {
+    "kind": "self_rewritten",
+    "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:frontend/src/app/track-result/track-result.component.ts",
+    "advisory": null
+  },
+  "annotator": "self"
+}
