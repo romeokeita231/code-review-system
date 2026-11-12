@@ -307,6 +307,12 @@ const invokedDirectly = (): boolean => {
  *
  * Conformance validates against the spec text instead of the dataset's current
  * shape. It is meant to fail, loudly, until the dataset is rebuilt (P2).
+ *
+ * The `noop` / `rationale` / `variant` / `version` rules are the #7 errata ("D1"
+ * in #41): a sample has to be a real change, a safe variant has to name the
+ * control that makes it safe, and the rebuilt set is schema_version 2 / `ds-2`.
+ * Without them the negatives are free to be no-op writes, which is how the old
+ * set produced a precision denominator that was true by construction.
  * ---------------------------------------------------------------------- */
 
 /** §6: the seven annotated classes. CWE-502 is not one of them. */
@@ -326,13 +332,14 @@ const DefectSpec = z.object({
   evidence: z.string().min(1),
 });
 
-/** §13 sample row, strict: an unexpected key is drift, not a tolerated extra. */
+/** ConformanceSample row. `schema_version` 1 is the drifted set, 2 is the #7
+ * errata shape (real diff + named control on every safe variant). */
 export const ConformanceSample = z
   .object({
     sample_id: z.string().min(1),
-    schema_version: z.literal(1),
+    schema_version: z.union([z.literal(1), z.literal(2)]),
     unit: z.literal("file_write"),
-    language: z.literal("ts"),
+    language: z.enum(["ts", "js", "tsx", "jsx"]),
     sample_set: z.enum(["self", "aacr", "securityeval", "cwebench", "cwebrench"]),
     group_id: z.string().min(1),
     repo: z.string().min(1),
@@ -343,6 +350,8 @@ export const ConformanceSample = z
     defects: z.array(DefectSpec),
     sample_cwe: z.string().regex(/^CWE-\d+$/).nullable(),
     variant_of: z.string().nullable(),
+    /** §13 errata: required on `variant_of` rows; must name the control. */
+    rationale: z.string().nullable().optional(),
     expected_detectable_by: z.enum(["both", "semgrep_only", "aor_only"]).nullable(),
     risk_level: z.enum(["low", "high"]),
     contamination_risk: z.enum(["low", "high"]),
@@ -378,7 +387,10 @@ export interface ConformanceResult {
 const RULE_ORDER = [
   "json",
   "schema",
+  "version",
   "sample_id",
+  "noop",
+  "rationale",
   "risk_level",
   "defects",
   "variant",
@@ -392,6 +404,50 @@ const str = (value: unknown): string | null => (typeof value === "string" ? valu
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+/** Lines that carry no behaviour: comments and blanks. */
+const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|\*\/|#)/;
+
+/**
+ * D1: a diff must touch at least one line that is not a comment or blank.
+ *
+ * Compared on the changed window only (common prefix/suffix stripped), so a
+ * reformat that only moves a comment around is still called out.
+ */
+export function substantiveChange(before: string, after: string): boolean {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+  let endA = a.length - 1;
+  let endB = b.length - 1;
+  while (endA >= start && endB >= start && a[endA] === b[endB]) {
+    endA -= 1;
+    endB -= 1;
+  }
+  const changed = [...a.slice(start, endA + 1), ...b.slice(start, endB + 1)];
+  return changed.some((line) => line.trim().length > 0 && !COMMENT_LINE.test(line));
+}
+
+/** Things people write when they have not identified a control. */
+const NOT_A_CONTROL = new RegExp(
+  "^(?:已?修改|已?修复|已?调整|已?变更|已?改动|改好了|" +
+    "changed?|modified|fixed|updated|patched|refactored|tweak(?:ed)?|adjusted|" +
+    "no[-\\s]?op|no[-\\s]?change|none|n/?a|todo|misc|same|safe(?:\\s+version)?|变体)$",
+  "i",
+);
+
+/**
+ * D1: `rationale` must be a control name (参数化 / 路径包含校验 / 转义 / 白名单 /
+ * 移除 sink), not "已修改". Only the degenerate answers are machine-detectable;
+ * whether the named control actually holds is the annotator's job (§5).
+ */
+export function isControlName(text: string): boolean {
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (normalized.length < 3) return false;
+  if (NOT_A_CONTROL.test(normalized)) return false;
+  return /\p{L}/u.test(normalized);
+}
 
 /**
  * The spec's `sample_cwe`, read with a fallback to the pre-spec name `cwe`.
@@ -421,15 +477,16 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     violations.push({ rule, sample, detail });
   };
 
-  // Read the manifest leniently: `split` is the only thing conformance needs
-  // from it, and validating it against the *current* contract schema would make
-  // this check inherit the very drift it is meant to catch.
-  let manifest: { samples: Array<{ sample_id: string; split?: string }> };
+  // Read the manifest leniently: `split` and `version` are the only things
+  // conformance needs from it, and validating it against the *current* contract
+  // schema would make this check inherit the very drift it is meant to catch.
+  let manifest: { version: string; samples: Array<{ sample_id: string; split?: string }> };
   try {
     const parsed = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")) as unknown;
     const samples = asRecord(parsed)["samples"];
     if (!Array.isArray(samples)) throw new Error("manifest has no `samples` array");
     manifest = {
+      version: str(asRecord(parsed)["version"]) ?? "",
       samples: samples.map((entry) => ({
         sample_id: str(asRecord(entry)["sample_id"]) ?? "",
         split: str(asRecord(entry)["split"]) ?? undefined,
@@ -489,12 +546,42 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
 
     defectsById.set(id, asList(raw["defects"]).length);
 
+    // #7 errata: schema_version 1 is the drifted shape; the rebuilt set is 2.
+    const schemaVersion = raw["schema_version"];
+    if (sampleSet === "self" && schemaVersion !== 2) {
+      add("version", id, `self row schema_version=${String(schemaVersion)} != 2`);
+    }
+    if (sampleSet !== "self" && schemaVersion !== 1) {
+      add("version", id, `external row schema_version=${String(schemaVersion)} != 1`);
+    }
+
     const before = str(raw["before"]) ?? "";
     const after = str(raw["after"]) ?? "";
     const changedLines = diffCount(
       before.endsWith("\n") ? before.slice(0, -1).split("\n") : before.split("\n"),
       after.endsWith("\n") ? after.slice(0, -1).split("\n") : after.split("\n"),
     );
+
+    // D1: a sample has to be a real change. All 210 old "safe variants" were
+    // no-op writes (`before === after`), which makes the precision denominator
+    // vacuously true - the FP half of line 1 measured nothing.
+    if (sha256(before) === sha256(after)) {
+      add("noop", id, "before === after: a no-op write is not a sample");
+    } else if (!substantiveChange(before, after)) {
+      add("noop", id, "diff touches only comments/blank lines");
+    }
+
+    // D1: a safe variant must name the control that makes it safe.
+    const variantId = str(raw["variant_of"]);
+    if (variantId !== null) {
+      const rationale = str(raw["rationale"]);
+      if (rationale === null) {
+        add("rationale", id, "variant row is missing `rationale`");
+      } else if (!isControlName(rationale)) {
+        add("rationale", id, `rationale "${rationale}" names no control`);
+      }
+    }
+
     const sampleCwe = sampleCweOf(raw);
     const declaredRisk = str(raw["risk_level"]);
     if (declaredRisk !== null) {
@@ -573,6 +660,23 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     if (splits.get(variant) !== splits.get(id)) {
       add("variant", id, `variant_of ${variant} sits in another split (${String(splits.get(variant))} vs ${String(splits.get(id))})`);
     }
+    const main = records.get(variant)!;
+    // D1: a variant that drifted onto another file or class is not the same
+    // defect with a control added - it is a different sample wearing the label.
+    if (str(main["file_path"]) !== str(raw["file_path"])) {
+      add(
+        "variant",
+        id,
+        `variant_of ${variant} sits on another file (${String(raw["file_path"])} != ${String(main["file_path"])})`,
+      );
+    }
+    if (sampleCweOf(main) !== sampleCweOf(raw)) {
+      add(
+        "variant",
+        id,
+        `variant_of ${variant} has sample_cwe ${String(sampleCweOf(raw))} != ${String(sampleCweOf(main))}`,
+      );
+    }
     if ((defectsById.get(id) ?? 0) > 0) add("variant", id, "a paired safe variant must have defects=[]");
     if ((defectsById.get(variant) ?? 0) === 0) add("variant", id, `variant_of ${variant} is not a defective row`);
   }
@@ -582,6 +686,11 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
   // import) has no CWE and no per-class split, so those rules do not apply to
   // it - they are skipped rather than reported as a hundred violations.
   if (selfRecords.length > 0) {
+    // #7 errata: the rebuilt self-built set is `ds-2`. A manifest still on the
+    // old version cannot be the set these rules describe.
+    if (!manifest.version.startsWith("ds-2")) {
+      add("version", null, `self-built manifest version "${manifest.version}" is not ds-2`);
+    }
     const classes = new Set(
       selfRecords.map(([, raw]) => {
         const cwe = sampleCweOf(raw);

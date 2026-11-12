@@ -93,7 +93,7 @@ async function conformantDataset(): Promise<string> {
   tempDirs.push(root);
   const dir = join(root, "dataset");
   await mkdir(join(dir, "samples"), { recursive: true });
-  const manifest = { version: "ds-test", content_sha256_root: "unused", samples: [] as unknown[] };
+  const manifest = { version: "ds-2", content_sha256_root: "unused", samples: [] as unknown[] };
   let seq = 1;
 
   for (const cwe of SPEC_CWES) {
@@ -105,7 +105,7 @@ async function conformantDataset(): Promise<string> {
       seq += 2;
       const risk = LOW_RISK_CLASSES.has(cwe) ? "low" : "high";
       const base = {
-        schema_version: 1,
+        schema_version: 2,
         unit: "file_write",
         language: "ts",
         sample_set: "self",
@@ -142,6 +142,8 @@ async function conformantDataset(): Promise<string> {
         sample_id: safeId,
         defects: [],
         variant_of: id,
+        // D1: a safe variant has to name the control that makes it safe.
+        rationale: "参数化：占位符绑定代替字符串拼接",
         origin: { kind: "self_rewritten", ref: id, advisory: null },
       };
       for (const row of [positive, safe]) {
@@ -171,8 +173,102 @@ describe("verifyConformance", () => {
     expect(rules).toContain("risk_level");
     expect(rules).toContain("classes");
     expect(rules).toContain("split_ratio");
+    // D1: the 210 "safe variants" are no-op writes and the set predates ds-2.
+    expect(rules).toContain("noop");
+    expect(rules).toContain("version");
     const schema = result.summary.find((group) => group.rule === "schema");
     expect(schema?.examples.join("\n")).toMatch(/unrecognized keys: .*paired_safe/);
+  });
+
+  it("reports a no-op write as a violation, not as a safe variant", async () => {
+    const dir = await conformantDataset();
+    const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+    const safeName = names.find((name) => name.endsWith("-0002.json"))!;
+    const sample = await readJson<Record<string, unknown>>(join(dir, "samples", safeName));
+    sample.before = sample.after;
+    await writeJson(join(dir, "samples", safeName), sample);
+
+    const result = await verifyConformance(dir);
+    expect(result.summary.map((group) => group.rule)).toContain("noop");
+    expect(
+      result.violations.some((violation) => violation.rule === "noop" && /before === after/.test(violation.detail)),
+    ).toBe(true);
+  });
+
+  it("reports a comment-only diff as no change at all", async () => {
+    const dir = await conformantDataset();
+    const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+    const safeName = names.find((name) => name.endsWith("-0002.json"))!;
+    const sample = await readJson<Record<string, unknown>>(join(dir, "samples", safeName));
+    sample.before = "export function run(input: string) {\n  return query(input);\n}\n";
+    sample.after = "export function run(input: string) {\n  // 参数化\n  return query(input);\n}\n";
+    await writeJson(join(dir, "samples", safeName), sample);
+
+    const result = await verifyConformance(dir);
+    expect(
+      result.violations.some((violation) => violation.rule === "noop" && /comments/.test(violation.detail)),
+    ).toBe(true);
+  });
+
+  it("rejects a rationale that names no control", async () => {
+    const dir = await conformantDataset();
+    const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+    const safeName = names.find((name) => name.endsWith("-0002.json"))!;
+    const sample = await readJson<Record<string, unknown>>(join(dir, "samples", safeName));
+
+    delete sample.rationale;
+    await writeJson(join(dir, "samples", safeName), sample);
+    let result = await verifyConformance(dir);
+    expect(
+      result.violations.some((violation) => violation.rule === "rationale" && /missing/.test(violation.detail)),
+    ).toBe(true);
+
+    sample.rationale = "已修改";
+    await writeJson(join(dir, "samples", safeName), sample);
+    result = await verifyConformance(dir);
+    expect(
+      result.violations.some((violation) => violation.rule === "rationale" && /names no control/.test(violation.detail)),
+    ).toBe(true);
+
+    sample.rationale = "移除 sink：改用参数化查询";
+    await writeJson(join(dir, "samples", safeName), sample);
+    result = await verifyConformance(dir);
+    expect(result.violations.filter((violation) => violation.rule === "rationale")).toEqual([]);
+  });
+
+  it("rejects a variant that drifted onto another file or class", async () => {
+    const dir = await conformantDataset();
+    const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+    const safeName = names.find((name) => name.endsWith("-0002.json"))!;
+    const sample = await readJson<Record<string, unknown>>(join(dir, "samples", safeName));
+    sample.file_path = "src/somewhere-else.ts";
+    sample.sample_cwe = "CWE-918";
+    await writeJson(join(dir, "samples", safeName), sample);
+
+    const result = await verifyConformance(dir);
+    const variant = result.violations.filter((violation) => violation.rule === "variant");
+    expect(variant.some((violation) => /another file/.test(violation.detail))).toBe(true);
+    expect(variant.some((violation) => /sample_cwe/.test(violation.detail))).toBe(true);
+  });
+
+  it("rejects a pre-ds-2 row and a manifest that is not ds-2", async () => {
+    const dir = await conformantDataset();
+    const names = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+    const sampleName = names.find((name) => name.endsWith("-0001.json"))!;
+    const sample = await readJson<Record<string, unknown>>(join(dir, "samples", sampleName));
+    sample.schema_version = 1;
+    await writeJson(join(dir, "samples", sampleName), sample);
+
+    const manifestPath = join(dir, "manifest.json");
+    const manifest = await readJson<{ version: string }>(manifestPath);
+    manifest.version = "1.0.0";
+    await writeJson(manifestPath, manifest);
+
+    const result = await verifyConformance(dir);
+    const version = result.violations.filter((violation) => violation.rule === "version");
+    expect(version.length).toBe(2);
+    expect(version.some((violation) => /!= 2/.test(violation.detail))).toBe(true);
+    expect(version.some((violation) => /is not ds-2/.test(violation.detail))).toBe(true);
   });
 
   it("accepts a spec-shaped dataset", async () => {

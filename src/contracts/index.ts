@@ -360,15 +360,44 @@ export const DatasetManifest = z.object({
 });
 export type DatasetManifest = z.infer<typeof DatasetManifest>;
 
-export const CALIBRATION_CATEGORIES = [
-  "CWE-78",
-  "CWE-79",
-  "CWE-89",
-  "CWE-94",
-  "CWE-22",
-  "CWE-502",
-  "CWE-798",
-] as const;
+/**
+ * A calibration category is `CWE-<n>`, unpadded — the spelling findings already
+ * use (`src/l3/semgrep.ts` normalises to `CWE-22`, and `sample_cwe` is
+ * `/^CWE-\d+$/`). `CWE-022`, `022` and `CWE-22: Improper ...` all land on `CWE-22`.
+ */
+export function cweCategory(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  const labelled = /CWE-(\d{1,4})/i.exec(text);
+  const digits = labelled?.[1] ?? (/^\d{1,4}$/.test(text) ? text : undefined);
+  return digits === undefined ? null : `CWE-${Number(digits)}`;
+}
+
+/**
+ * The classes calibration is allowed to fit, derived rather than listed.
+ *
+ * #7 D2: `categories = (数据集 manifest 的 sample_cwe 集合) ∩ (规则表声明的 CWE 集合)`.
+ * The old hand-written list (`CWE-502` present, `CWE-918` missing, wrong order)
+ * silently kept a `CWE-502: n=15` grid alive after the classes changed, and a
+ * calibration artifact that names a class the dataset no longer has is worse
+ * than no artifact: it applies a threshold nobody fitted.
+ */
+export function calibrationCategories(
+  datasetCwes: Iterable<string | null | undefined>,
+  rulesetCwes: Iterable<string | null | undefined>,
+): string[] {
+  const declared = new Set<string>();
+  for (const raw of rulesetCwes) {
+    const key = cweCategory(raw);
+    if (key !== null) declared.add(key);
+  }
+  const out = new Set<string>();
+  for (const raw of datasetCwes) {
+    const key = cweCategory(raw);
+    if (key !== null && declared.has(key)) out.add(key);
+  }
+  return [...out].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
 
 export const CalibrationGrid = z.object({
   source: SourceName,
@@ -386,6 +415,12 @@ export type CalibrationGrid = z.infer<typeof CalibrationGrid>;
 
 export const CalibrationArtifact = z.object({
   version: z.string().min(1),
+  /** Which dataset version these thresholds were fitted on. */
+  dataset_version: z.string().min(1),
+  /** sha256 of the coverage source (`rules_table.json`) that declares the classes. */
+  ruleset_fingerprint: z.string().min(1),
+  /** `calibrationCategories(dataset, ruleset)` at fit time, sorted. */
+  categories: z.array(z.string().min(1)),
   pPrior: z.number().gt(0).lt(1),
   shrinkageN0: z.number().positive(),
   pMax: z.number().gt(0).lte(1),

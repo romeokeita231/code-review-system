@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { assertLadderConsistent, configHash, ConfigError, parseConfig, stableStringify } from "../../src/config/index.js";
-import type { RunConfig } from "../../src/contracts/index.js";
+import {
+  assertCalibrationMatches,
+  assertLadderConsistent,
+  configHash,
+  ConfigError,
+  parseConfig,
+  stableStringify,
+} from "../../src/config/index.js";
+import { calibrationCategories, type CalibrationArtifact, type RunConfig } from "../../src/contracts/index.js";
 
 const raw = (name: string): unknown => JSON.parse(readFileSync(`configs/${name}.json`, "utf8"));
 const load = (name: string): RunConfig => parseConfig(raw(name));
@@ -55,5 +62,104 @@ describe("config", () => {
     const base = load("b4");
     const drifted = parseConfig({ ...base, calibration: { ...base.calibration, version: "calib-v2" } });
     expect(configHash(drifted)).not.toBe(configHash(base));
+  });
+});
+
+describe("calibration provenance (#7 D2)", () => {
+  const artifact = (over: Partial<CalibrationArtifact> = {}): CalibrationArtifact => ({
+    version: "calib-test",
+    dataset_version: "ds-2",
+    ruleset_fingerprint: "fp",
+    categories: ["CWE-22", "CWE-89"],
+    pPrior: 0.3,
+    shrinkageN0: 10,
+    pMax: 0.95,
+    fitRoot: "root",
+    grids: [],
+    thresholds: { global: { block: null, warn: null }, perCategory: {}, skipped: [] },
+    ...over,
+  });
+
+  it("derives categories as dataset ∩ ruleset", () => {
+    expect(calibrationCategories(["CWE-22", "CWE-502", "CWE-89"], ["022", "089", "918"])).toEqual([
+      "CWE-22",
+      "CWE-89",
+    ]);
+  });
+
+  it("normalises zero padding and long CWE labels on both sides", () => {
+    expect(
+      calibrationCategories(
+        ["CWE-022"],
+        ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"],
+      ),
+    ).toEqual(["CWE-22"]);
+    expect(calibrationCategories([null, "not-a-cwe"], ["022"])).toEqual([]);
+  });
+
+  it("returns an empty set when the dataset and the ruleset share no class", () => {
+    expect(calibrationCategories(["CWE-502"], ["022", "089"])).toEqual([]);
+  });
+
+  it("accepts an artifact fitted on the same dataset and ruleset", () => {
+    expect(() =>
+      assertCalibrationMatches(artifact(), {
+        datasetVersion: "ds-2",
+        rulesetFingerprint: "fp",
+        categories: ["CWE-89", "CWE-22"],
+      }),
+    ).not.toThrow();
+  });
+
+  it("hard-fails on a dataset version mismatch", () => {
+    expect(() => assertCalibrationMatches(artifact(), { datasetVersion: "ds-3" })).toThrow(
+      /dataset ds-2, expected ds-3/,
+    );
+  });
+
+  it("hard-fails on a ruleset fingerprint mismatch", () => {
+    expect(() => assertCalibrationMatches(artifact(), { rulesetFingerprint: "other" })).toThrow(
+      /ruleset/,
+    );
+  });
+
+  it("hard-fails when the artifact still carries a class the dataset lost", () => {
+    expect(() =>
+      assertCalibrationMatches(artifact({ categories: ["CWE-22", "CWE-502"] }), {
+        categories: ["CWE-22", "CWE-89"],
+      }),
+    ).toThrow(/unfitted CWE-502/);
+  });
+
+  it("hard-fails when a declared class has no fitted grid", () => {
+    expect(() =>
+      assertCalibrationMatches(artifact({ categories: ["CWE-22"] }), {
+        categories: ["CWE-22", "CWE-89"],
+      }),
+    ).toThrow(/missing CWE-89/);
+  });
+
+  it("recomputes the committed artifact's categories from the dataset and rules table", () => {
+    const dataset = JSON.parse(readFileSync("datasets/self-built/manifest.json", "utf8")) as {
+      samples: Array<{ cwe: string | null }>;
+    };
+    const table = JSON.parse(
+      readFileSync("research/semgrep-bench/snapshot/rules_table.json", "utf8"),
+    ) as { rules: Array<{ languages: string[]; cwe: string[] | null }> };
+    const rulesetCwes = table.rules
+      .filter((rule) => rule.languages.includes("typescript"))
+      .flatMap((rule) => rule.cwe ?? []);
+    const committed = JSON.parse(readFileSync("artifacts/calibration.json", "utf8")) as {
+      categories: string[];
+    };
+    expect(committed.categories).toEqual(
+      calibrationCategories(
+        dataset.samples.map((sample) => sample.cwe),
+        rulesetCwes,
+      ),
+    );
+    // The drifted set is CWE-502; the ruleset never declared it, so it must not
+    // survive in the artifact even though 75 recorded findings still carry it.
+    expect(committed.categories).not.toContain("CWE-502");
   });
 });

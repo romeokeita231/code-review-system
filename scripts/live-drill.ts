@@ -5,6 +5,8 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
+import { calibrationCategories } from "../src/contracts/index.js";
+import { assertCalibrationMatches, loadCalibration, sha256 } from "../src/config/index.js";
 import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
 import { collectJsonl, evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
@@ -494,6 +496,39 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     });
   }
   await run("code-review-graph", "code-review-graph", ["--help"]);
+  // #7 D2: the calibration artifact must have been fitted on *this* dataset and
+  // ruleset. A stale artifact silently applies a per-class threshold that was
+  // fitted on another class set (the old one still carried CWE-502).
+  try {
+    const artifact = await loadCalibration(resolve("artifacts/calibration.json"));
+    const rulesTablePath = resolve(RULES_TABLE);
+    const rulesetFingerprint = sha256(await readFile(rulesTablePath, "utf8"));
+    const manifestRaw = JSON.parse(
+      await readFile(resolve("datasets/self-built/manifest.json"), "utf8"),
+    ) as { version?: unknown; samples?: Array<{ cwe?: unknown }> };
+    const categories = calibrationCategories(
+      (manifestRaw.samples ?? []).map((sample) =>
+        typeof sample.cwe === "string" ? sample.cwe : null,
+      ),
+      [...declaredCoverage(loadRulesTable(rulesTablePath), "typescript").perCwe.keys()],
+    );
+    assertCalibrationMatches(artifact, {
+      datasetVersion: typeof manifestRaw.version === "string" ? manifestRaw.version : undefined,
+      rulesetFingerprint,
+      categories,
+    });
+    checks.push({
+      name: "calibration artifact",
+      ok: true,
+      detail: `categories ${categories.join(" ")}`,
+    });
+  } catch (error) {
+    checks.push({
+      name: "calibration artifact",
+      ok: false,
+      detail: (error as Error).message.slice(-400),
+    });
+  }
   const profileCheck = await execa(process.execPath, [dshBinPath(), "plugin", "--profile", profile, "list"], {
     env,
     reject: false,

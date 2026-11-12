@@ -5,6 +5,17 @@
     "CalibrationArtifact": {
       "additionalProperties": false,
       "properties": {
+        "categories": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dataset_version": {
+          "minLength": 1,
+          "type": "string"
+        },
         "fitRoot": {
           "minLength": 1,
           "type": "string"
@@ -74,6 +85,10 @@
           "exclusiveMaximum": 1,
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "ruleset_fingerprint": {
+          "minLength": 1,
+          "type": "string"
         },
         "shrinkageN0": {
           "exclusiveMinimum": 0,
@@ -190,6 +205,9 @@
       },
       "required": [
         "version",
+        "dataset_version",
+        "ruleset_fingerprint",
+        "categories",
         "pPrior",
         "shrinkageN0",
         "pMax",

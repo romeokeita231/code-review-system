@@ -67,6 +67,55 @@ export async function loadCalibration(path: string): Promise<CalibrationArtifact
   return parsed.data;
 }
 
+export interface CalibrationExpectation {
+  datasetVersion?: string;
+  rulesetFingerprint?: string;
+  /** The categories derived for *this* dataset + ruleset; compared exactly. */
+  categories?: string[];
+}
+
+/**
+ * #7 D2: a calibration artifact is only valid for the dataset and ruleset it was
+ * fitted on. A mismatched version, fingerprint, or category list is a hard
+ * failure, not a warning: the artifact carries per-category thresholds, so a
+ * stale one silently applies a threshold that was fitted on another class set
+ * (the old artifact still had `CWE-502`, which §6 replaced with `CWE-918`).
+ */
+export function assertCalibrationMatches(
+  artifact: CalibrationArtifact,
+  expected: CalibrationExpectation,
+): void {
+  if (
+    expected.datasetVersion !== undefined &&
+    artifact.dataset_version !== expected.datasetVersion
+  ) {
+    throw new ConfigError(
+      `calibration artifact fitted on dataset ${artifact.dataset_version}, expected ${expected.datasetVersion}`,
+    );
+  }
+  if (
+    expected.rulesetFingerprint !== undefined &&
+    artifact.ruleset_fingerprint !== expected.rulesetFingerprint
+  ) {
+    throw new ConfigError(
+      `calibration artifact fitted on ruleset ${artifact.ruleset_fingerprint.slice(0, 12)}, ` +
+        `expected ${expected.rulesetFingerprint.slice(0, 12)}`,
+    );
+  }
+  if (expected.categories !== undefined) {
+    const want = [...expected.categories].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const got = [...artifact.categories].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const missing = want.filter((c) => !got.includes(c));
+    const extra = got.filter((c) => !want.includes(c));
+    if (missing.length > 0 || extra.length > 0) {
+      const parts: string[] = [];
+      if (missing.length > 0) parts.push(`missing ${missing.join(", ")}`);
+      if (extra.length > 0) parts.push(`unfitted ${extra.join(", ")}`);
+      throw new ConfigError(`calibration categories do not match the dataset: ${parts.join("; ")}`);
+    }
+  }
+}
+
 export interface LadderShape {
   semgrep: boolean;
   aor: boolean;

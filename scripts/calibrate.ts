@@ -1,10 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { CalibrationArtifact, SourceResult } from "../src/contracts/index.js";
-import { loadConfig, sha256, stableStringify } from "../src/config/index.js";
+import { calibrationCategories, cweCategory, type CalibrationArtifact, type SourceResult } from "../src/contracts/index.js";
+import { assertCalibrationMatches, loadConfig, sha256, stableStringify } from "../src/config/index.js";
 import { fitArtifactThresholds, fitCalibration, applyCalibration, fuse } from "../src/l4/index.js";
 import { loadDataset, loadRecorded } from "../src/l5/index.js";
+import { declaredCoverage, loadRulesTable } from "./coverage.js";
 import { arg } from "./shared.js";
+
+const DEFAULT_RULES_TABLE = "research/semgrep-bench/snapshot/rules_table.json";
 
 interface Span {
   startLine: number;
@@ -35,10 +38,29 @@ async function main(): Promise<void> {
   const recordedDir = resolve(arg("--recorded", "tests/fixtures/replay"));
   const outPath = resolve(arg("--out", "artifacts/calibration.json"));
   const configPath = resolve(arg("--config", "configs/b4.json"));
+  const rulesTablePath = resolve(arg("--rules-table", DEFAULT_RULES_TABLE));
 
   const config = await loadConfig(configPath);
   const dataset = await loadDataset(datasetDir);
   const recorded = await loadRecorded(recordedDir);
+
+  // #7 D2: the category set is derived, never hand-written. The ruleset side is
+  // "every CWE the frozen rules table declares for a language this config
+  // actually scans"; the dataset side is the `sample_cwe` values on the rows.
+  const rulesTableText = await readFile(rulesTablePath, "utf8");
+  const rulesetFingerprint = sha256(rulesTableText);
+  const rulesTable = loadRulesTable(rulesTablePath);
+  const scannedLanguages = [
+    ...new Set(config.sources.semgrep.subsets.flatMap((subset) => subset.langs)),
+  ];
+  const declaredCwes = scannedLanguages.flatMap((language) => [
+    ...declaredCoverage(rulesTable, language).perCwe.keys(),
+  ]);
+  const datasetVersion = dataset.manifest.version;
+  const categories = calibrationCategories(
+    dataset.samples.map((sample) => sample.cwe),
+    declaredCwes,
+  );
 
   const synthetic = Object.values(recorded).some((results) =>
     results.some((result) => result.synthetic === true),
@@ -83,13 +105,36 @@ async function main(): Promise<void> {
     }
   }
 
+  // Anything the derived category set does not cover is dropped *and reported*:
+  // the recorded fixtures still carry CWE-502 findings from the drifted dataset,
+  // and a 502 grid surviving in the artifact is exactly the silent mis-fit #7
+  // D2 is about. `unknown` (null CWE) is a source-level bucket, not a class.
+  const allowedCategories = new Set([...categories, "unknown"]);
+  const droppedCategories = new Map<string, number>();
+  const keep = (category: string): boolean => {
+    // Findings spell classes the same way `calibrationCategories` does, but
+    // normalise anyway: a stray `CWE-022` must not fall through as "unfitted".
+    if (allowedCategories.has(cweCategory(category) ?? category)) return true;
+    droppedCategories.set(category, (droppedCategories.get(category) ?? 0) + 1);
+    return false;
+  };
+  const keptSamples = calibrationSamples.filter((item) => keep(item.category));
+  const keptScored = scored.filter((item) => keep(item.category));
+
   const artifact = fitCalibration(
-    calibrationSamples,
-    { pPrior: config.prior.pPrior, shrinkageN0: 10, pMax: 0.95 },
+    keptSamples,
+    {
+      pPrior: config.prior.pPrior,
+      shrinkageN0: 10,
+      pMax: 0.95,
+      datasetVersion,
+      rulesetFingerprint,
+      categories,
+    },
     fitRoot,
   );
 
-  const calibrated = scored.map((item) => ({
+  const calibrated = keptScored.map((item) => ({
     source: item.source,
     score: applyCalibration(
       { source: item.source, cwe: item.category === "unknown" ? null : item.category, confidence: item.score },
@@ -109,6 +154,8 @@ async function main(): Promise<void> {
     const results = recorded[sample.sample_id] ?? [];
     if (results.length === 0) continue;
     for (const finding of fuse({ sources: results, config, artifact }).findings) {
+      const category = finding.cwe ?? "unknown";
+      if (!keep(category)) continue;
       postSamples.push({
         score: finding.confidence,
         label: labelOf(sample.labels, {
@@ -116,7 +163,7 @@ async function main(): Promise<void> {
           endLine: finding.endLine,
           cwe: finding.cwe ?? null,
         }),
-        category: finding.cwe ?? "unknown",
+        category,
       });
     }
   }
@@ -149,13 +196,22 @@ async function main(): Promise<void> {
     synthetic,
   };
 
+  // Self-check before writing: the artifact we are about to persist must match
+  // the dataset and ruleset it was fitted on, or the next load fails anyway.
+  assertCalibrationMatches(fitted, { datasetVersion, rulesetFingerprint, categories });
+
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, `${stableStringify(fitted)}\n`, "utf8");
   process.stdout.write(
     `${JSON.stringify({
       out: outPath,
       fitRoot,
+      dataset_version: datasetVersion,
+      ruleset_fingerprint: rulesetFingerprint,
+      categories,
+      categories_dropped: Object.fromEntries([...droppedCategories].sort()),
       samples: calibrationSamples.length,
+      samples_fitted: keptSamples.length,
       grids: fitted.grids.length,
       thresholds: fitted.thresholds,
     })}\n`,
