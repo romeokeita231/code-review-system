@@ -51,6 +51,49 @@ The evaluator applies the same rule to the rows it reads (`line1 denominator by 
 at the end of `report.md`), so a class the ruleset cannot see gets its own row marked
 `outside line1` with its declared rule count.
 
+## Line 1's block facet is Python-only (design conclusion, 2026-11-13)
+
+Line 1 splits into a detectability facet and a *mechanical block* facet. Block can only
+happen at `pre-execute`, on a fact the pinned ruleset certified as a block rule
+(`src/l3/semgrep.ts` marks a finding `certified` iff its id is in the subset's
+`blockRules`). `py-block` has 6 certified ids; `ts-dedup` has none, so **every TS
+finding is `certified: false`** and no TS sample can ever be blocked. Reporting a TS
+block precision/recall would be a 0/0 value of the same kind as the old `tp/tp = 1.0`.
+
+Extending the block guarantee to TS was gated on three conjunctive criteria (issue #41,
+step 0). The first one already has an empty domain:
+
+| Criterion | Result |
+| --- | --- |
+| (a) same `upstream_id` family as a certified py rule (a language variant of the same rule) | **0 of 95** TS-applicable rules |
+| (b) zero hits on negatives | not evaluated — no candidate |
+| (c) `criterion_iii` per-rule hit record | not evaluated — no candidate |
+
+Criterion (a) is empty because all six certified rules are Python-only sinks
+(`os.system`, `subprocess`, a DB cursor, `open()`): the javascript/typescript rule
+directories contain no variant of any of those ids. Cross-language twins *do* exist in
+the ruleset (`tainted-sql-string`, `raw-html-format`, `mysql-sqli`,
+`tainted-html-response`, `tainted-html-string`) — they are simply not in the certified
+set. So the block guarantee cannot be extended by transcription; it would need a fresh
+criterion i/ii/iii certification, which is a spec decision, not a measurement.
+
+Latency was not the blocker. `research/semgrep-bench/ts_block_bench.json` (n=10 real
+`.ts` files, 5.0–48.0 KiB, `ts_dedup.yaml` sha256 `42e5be0c…`):
+
+| Invocation | p50 | p95 | p99 | vs 1.2 s |
+| --- | --- | --- | --- | --- |
+| `semgrep-core -rules … -targets … -json` (the shape the 1.2 s criterion was certified against) | 343.0 ms | 574.3 ms | 651.3 ms | pass |
+| `semgrep scan --config …` (**what `src/l3/semgrep.ts` actually spawns**) | 3139.2 ms | 3240.3 ms | 3254.9 ms | fail |
+
+The second row is worth stating in the paper: the pre stage's 1.2 s budget describes a
+`semgrep-core` invocation the implementation does not make. The full CLI still lands
+inside `timeoutsMs.callMs` (5000 ms), so facts do arrive in time for `pre-execute`; but
+a 1.2 s number may only be quoted with the invocation shape attached.
+
+How to report it: line 1's block facet goes out as `na` with `n=0 / k=<positives>`, and
+the verdict text says the mechanical block is Python-only. Do not substitute a
+detectability number for it.
+
 ## Run
 
 ```bash

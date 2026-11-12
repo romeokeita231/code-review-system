@@ -1,0 +1,160 @@
+{
+ "ticket": "#41 第 0 步 —— TS 小档 block 侧延迟 + blockRules 认证前提",
+ "debt": "#25 recert 只测了 ts 5.5-8.7 KiB（ts_small_core），ADR-0007 承诺的 5-50 KiB 段未覆盖；本轮补 p99",
+ "date": "2026-11-12",
+ "host": {
+  "os": "Windows (PowerShell 7, Defender real-time on)",
+  "semgrep": "1.184.0",
+  "semgrep_core": "semgrep-core version: 1.184.0 (ec0383d093-dirty)",
+  "semgrep_core_env": "uv tool venv: %APPDATA%/uv/tools/semgrep"
+ },
+ "ruleset": {
+  "path": "research/semgrep-bench/snapshot/ts_dedup.yaml",
+  "sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+  "bytes": 187654,
+  "rows": 92,
+  "unique_ids": 92,
+  "taint": 42,
+  "classes": {
+   "798": 5,
+   "918": 19,
+   "022": 3,
+   "078": 7,
+   "079": 35,
+   "089": 10,
+   "094": 13
+  },
+  "composition_note": "ts_all.yaml（95 行）去掉 detect-child-process.lang / hardcoded-jwt-secret.jsonwebtoken / tainted-sql-string.express 后即本轮实测体；去掉的三个 id 是改名前的重名残留，其中 detect-child-process.lang 正是 256 KiB 合成样本上 811 命中的密度反例（ts_all 23.5 s / 811 命中，ts_dedup 4.2 s / 0 命中）。排除它是想要的效果，但文件命名把它讲成\"去重\"，口径需要写清。",
+  "ts_all_sha256": "15b3066b90f55f17a1f7357deeac4d009a871b3b33169bb5a426643ecb5d4878"
+ },
+ "samples": [
+  {
+   "rel": "postcss/lib/input.d.ts",
+   "bytes": 5126,
+   "sha256": "e5bab5f871ef708d52d47b3e5d0aa72a08ee7a152f33931d9a60809711a2a9a3"
+  },
+  {
+   "rel": "zod/src/v4/mini/tests/recursive-types.test.ts",
+   "bytes": 5640,
+   "sha256": "22f8601e69b4e2b1c5be67e16110007543d77229b3cb93ee82db5f9aac0465e1"
+  },
+  {
+   "rel": "zod/v3/ZodError.d.ts",
+   "bytes": 6412,
+   "sha256": "54f6ec6ea75acea6eb23635617252d249145edbc7bcd9d53f2d70280d2aef953"
+  },
+  {
+   "rel": "zod/src/v4/classic/tests/catch.test.ts",
+   "bytes": 7224,
+   "sha256": "a6c49071dbdb2ccda9fc440b756c48d25cbd875d69a645d815818e73490702e8"
+  },
+  {
+   "rel": "expect-type/dist/utils.d.ts",
+   "bytes": 8434,
+   "sha256": "dd51e53752b310bd20c9b1a87bbf12b1fe2be7fe40f505b43199496481096275"
+  },
+  {
+   "rel": "postcss/lib/postcss.d.ts",
+   "bytes": 11654,
+   "sha256": "354a7f8e1287d9d6b7561bc97fdd8cbc2f7c1dd79e4cb37b942e8a5cfaff1085"
+  },
+  {
+   "rel": "zod/src/v4/classic/tests/object.test.ts",
+   "bytes": 15999,
+   "sha256": "ad4cf34a3db6643b7ee1072f0a3e7a4a0036152c981b1e249a74a855a913c759"
+  },
+  {
+   "rel": "@types/node/buffer.buffer.d.ts",
+   "bytes": 22839,
+   "sha256": "3af97acf03cc97de58a3a4bc91f8f616408099bc4233f6d0852e72a8ffb91ac9"
+  },
+  {
+   "rel": "zod/src/v4/core/to-json-schema.ts",
+   "bytes": 32423,
+   "sha256": "2c05bc179ea78f49de8f7db082c90ec1ba952a00b18471ca20380bb3b37bc547"
+  },
+  {
+   "rel": "@types/node/net.d.ts",
+   "bytes": 49205,
+   "sha256": "a6f137d651076822d4fe884287e68fd61785a0d3d1fdb250a5059b691fa897db"
+  }
+ ],
+ "protocol": {
+  "measure": "调用一次即计时一次（含进程创建），墙钟；每个真实文件 1 次；1 次 warmup 丢弃",
+  "n": 10,
+  "sample_pool": "node_modules 下真实第三方 .ts（5-50 KiB），按体积升序取 10 个等距点",
+  "percentile": "线性插值，与 results.json / recert_after_rename.json 同法",
+  "core_shape": "semgrep-core -rules ts_dedup.yaml -targets <targets.json> -json（与 criterion_i 认证 py block 时同形态）",
+  "cli_shape": "semgrep scan --config <ruleFile> --json --no-git-ignore --x-semgrepignore-filename .semgrepignore <rel>（与 src/l3/semgrep.ts 实际形态逐字一致）",
+  "bench": "research/semgrep-bench/ts_block_bench.py"
+ },
+ "results": {
+  "core_direct": {
+   "n": 10,
+   "failures": 0,
+   "results_total": 0,
+   "p50_ms": 343,
+   "p95_ms": 574.3,
+   "p99_ms": 651.3,
+   "min_ms": 301.7,
+   "max_ms": 670.5,
+   "limit_ms": 1200,
+   "verdict": "pass"
+  },
+  "full_cli": {
+   "n": 10,
+   "failures": 0,
+   "results_total": 0,
+   "p50_ms": 3139.2,
+   "p95_ms": 3240.3,
+   "p99_ms": 3254.9,
+   "min_ms": 3101.6,
+   "max_ms": 3258.6,
+   "limit_ms": 1200,
+   "verdict": "fail"
+  }
+ },
+ "block_rule_audit": {
+  "criterion_a": {
+   "definition": "与已认证 py 6 条同 upstream_id 家族的规则方可迁移认证（同规则的语言变体）",
+   "py_certified_ids": [
+    "command-injection-os-system",
+    "dangerous-subprocess-use",
+    "subprocess-shell-true",
+    "formatted-sql-query",
+    "sql-injection-db-cursor-execute",
+    "path-traversal-open"
+   ],
+   "py_certified_families": [
+    "command-injection-os-system",
+    "dangerous-subprocess-use",
+    "formatted-sql-query",
+    "path-traversal-open",
+    "sql-injection-db-cursor-execute",
+    "subprocess-shell-true"
+   ],
+   "ts_applicable_rules": 95,
+   "ts_rules_in_family": 0,
+   "verdict": "0/95 —— 判定域为空：py 认证的 6 条全部是 Python 专有 sink（os.system / subprocess / db cursor / open()），semgrep-rules 在 javascript/typescript 目录下不存在这些 upstream_id 的任何变体"
+  },
+  "cross_language_twins_exist": {
+   "note": "跨语言孪生规则确实存在，只是不在认证集里 —— 说明 (a) 的空集是认证集选样所致，不是规则库没有孪生机制",
+   "upstream_ids": [
+    "mysql-sqli",
+    "raw-html-format",
+    "tainted-html-response",
+    "tainted-html-string",
+    "tainted-sql-string"
+   ]
+  },
+  "criterion_b_zero_hits_on_negatives": "未评估（无候选，判定域空）",
+  "criterion_c_criterion_iii_per_rule_hits": "未评估（无候选，判定域空）"
+ },
+ "verdict": {
+  "latency_core_shape": "p99 651.3 ms <= 1200 ms —— 通过",
+  "latency_cli_shape": "p99 3254.9 ms > 1200 ms —— 超 1.2 s，但 < b4.json timeoutsMs.callMs 5000，生产 pre 阶段仍能拿到 facts",
+  "block_rules": "维持空集；TS block 分面记 na",
+  "reason": "延迟侧过，规则侧不过。(a) 先于 (b)(c) 判死：迁移认证在 TS 侧无对象，na 的原因是规则身份而非耗时。不得为了让 TS 能 block 而放宽 (a)。",
+  "adr_correction": "ADR-0007「ts 阻断只在 5-50 KiB 保证」与本次结论冲突：95 条 TS 规则无一可认证为 block，TS 事实只能进 post 阶段的 warn，不存在 block 保证。ADR 需勘误，且 5-50 KiB 这个区间承诺随之失效。"
+ }
+}
