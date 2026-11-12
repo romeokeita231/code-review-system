@@ -295,15 +295,369 @@ const invokedDirectly = (): boolean => {
   return resolve(entry).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase();
 };
 
-if (invokedDirectly()) {
-  const dir = process.argv[2] ?? fileURLToPath(new URL("../datasets/self-built", import.meta.url));
+/* -------------------------------------------------------------------------
+ * Annotation-spec conformance (issue #7 §13)
+ *
+ * `verifyDataset` above validates the dataset against its own manifest: hashes,
+ * counts, pairing, split leakage. That is *self*-consistency, and a dataset
+ * whose schema drifted from the spec passes it perfectly - which is exactly the
+ * failure this repo hit: `cwe` instead of `sample_cwe`, `paired_safe` instead
+ * of `variant_of`, `medium` risk levels, an `expected_detectable_by` array, and
+ * CWE-502 living where §6 says CWE-918 should be.
+ *
+ * Conformance validates against the spec text instead of the dataset's current
+ * shape. It is meant to fail, loudly, until the dataset is rebuilt (P2).
+ * ---------------------------------------------------------------------- */
+
+/** §6: the seven annotated classes. CWE-502 is not one of them. */
+export const SPEC_CWES = ["022", "078", "079", "089", "094", "798", "918"] as const;
+
+/** §13: `sample_set` enum. The spec spells CWE-Bench "cwebrench" in two
+ * places; both readings are accepted so the typo does not mask real drift. */
+export const SPEC_SAMPLE_SETS = ["self", "aacr", "securityeval", "cwebench", "cwebrench"];
+
+const DefectSpec = z.object({
+  defect_id: z.string().min(1),
+  cwe: z.string().nullable(),
+  file: z.string().min(1),
+  line_start: z.number().int().positive(),
+  line_end: z.number().int().positive(),
+  symbol: z.string().nullable(),
+  evidence: z.string().min(1),
+});
+
+/** §13 sample row, strict: an unexpected key is drift, not a tolerated extra. */
+export const ConformanceSample = z
+  .object({
+    sample_id: z.string().min(1),
+    schema_version: z.literal(1),
+    unit: z.literal("file_write"),
+    language: z.literal("ts"),
+    sample_set: z.enum(["self", "aacr", "securityeval", "cwebench", "cwebrench"]),
+    group_id: z.string().min(1),
+    repo: z.string().min(1),
+    file_path: z.string().min(1),
+    before: z.string(),
+    after: z.string(),
+    label: z.union([z.literal(0), z.literal(1)]).optional(),
+    defects: z.array(DefectSpec),
+    sample_cwe: z.string().regex(/^CWE-\d+$/).nullable(),
+    variant_of: z.string().nullable(),
+    expected_detectable_by: z.enum(["both", "semgrep_only", "aor_only"]).nullable(),
+    risk_level: z.enum(["low", "high"]),
+    contamination_risk: z.enum(["low", "high"]),
+    origin: z.object({
+      kind: z.enum(["public_repo", "self_rewritten", "aacr", "securityeval", "cwebrench", "cwebench"]),
+      ref: z.string().min(1),
+      advisory: z.string().nullable(),
+    }),
+    annotator: z.enum(["self", "advisor"]).nullable(),
+  })
+  .strict();
+export type ConformanceSample = z.infer<typeof ConformanceSample>;
+
+export interface Violation {
+  rule: string;
+  sample: string | null;
+  detail: string;
+}
+
+export interface ConformanceSummary {
+  rule: string;
+  count: number;
+  examples: string[];
+}
+
+export interface ConformanceResult {
+  ok: boolean;
+  samples: number;
+  violations: Violation[];
+  summary: ConformanceSummary[];
+}
+
+const RULE_ORDER = [
+  "json",
+  "schema",
+  "sample_id",
+  "risk_level",
+  "defects",
+  "variant",
+  "contamination",
+  "annotator",
+  "classes",
+  "split_ratio",
+] as const;
+
+const str = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+/**
+ * The spec's `sample_cwe`, read with a fallback to the pre-spec name `cwe`.
+ * Diagnostics (risk derivation, class table, split ratio) still work on a
+ * drifted dataset; the strict schema reports the rename separately, so the
+ * fallback never hides it - it just lets the other rules keep running.
+ */
+const sampleCweOf = (raw: Record<string, unknown>): string | null =>
+  str(raw["sample_cwe"]) ?? str(raw["cwe"]);
+
+/** §9: low iff the class is 079/798 and the change is at most 30 lines, else high. */
+export function specRiskLevel(sampleCwe: string | null, changedLines: number): "low" | "high" {
+  const key = sampleCwe === null ? null : sampleCwe.replace(/^CWE-/i, "").padStart(3, "0");
+  const low = (key === "079" || key === "798") && changedLines <= 30;
+  return low ? "low" : "high";
+}
+
+/** §13: `{lang}-cwe{NNN}-{seq}`, or `aacr-{lang}-{seq}` for AACR rows. */
+export function specSampleId(id: string, sampleSet: string): boolean {
+  if (sampleSet === "aacr") return /^aacr-(ts|js|tsx|jsx)-\d{4}$/.test(id);
+  return /^(ts|js|tsx|jsx)-cwe\d{3}-\d{4}$/.test(id);
+}
+
+export async function verifyConformance(dir: string): Promise<ConformanceResult> {
+  const violations: Violation[] = [];
+  const add = (rule: Violation["rule"], sample: string | null, detail: string): void => {
+    violations.push({ rule, sample, detail });
+  };
+
+  // Read the manifest leniently: `split` is the only thing conformance needs
+  // from it, and validating it against the *current* contract schema would make
+  // this check inherit the very drift it is meant to catch.
+  let manifest: { samples: Array<{ sample_id: string; split?: string }> };
+  try {
+    const parsed = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")) as unknown;
+    const samples = asRecord(parsed)["samples"];
+    if (!Array.isArray(samples)) throw new Error("manifest has no `samples` array");
+    manifest = {
+      samples: samples.map((entry) => ({
+        sample_id: str(asRecord(entry)["sample_id"]) ?? "",
+        split: str(asRecord(entry)["split"]) ?? undefined,
+      })),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      samples: 0,
+      violations: [{ rule: "json", sample: null, detail: `manifest: ${errorText(error)}` }],
+      summary: [{ rule: "json", count: 1, examples: [errorText(error)] }],
+    };
+  }
+
+  const splits = new Map(manifest.samples.map((entry) => [entry.sample_id, entry.split]));
+  const fileNames = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+  const records = new Map<string, Record<string, unknown>>();
+  const defectsById = new Map<string, number>();
+
+  for (const name of fileNames) {
+    let raw: Record<string, unknown>;
+    try {
+      raw = asRecord(JSON.parse(await readFile(join(dir, "samples", name), "utf8")));
+    } catch (error) {
+      add("json", name, errorText(error));
+      continue;
+    }
+    const id = str(raw["sample_id"]) ?? name.replace(/\.json$/, "");
+    records.set(id, raw);
+    if (name !== `${id}.json`) add("sample_id", id, `filename ${name} does not match sample_id`);
+
+    const parsed = ConformanceSample.safeParse(raw);
+    if (!parsed.success) {
+      // Renamed or leftover fields are the sharpest drift signal, so surface
+      // them before the "missing field" noise they inevitably cause.
+      const unknown = parsed.error.issues.find((issue) => issue.code === "unrecognized_keys");
+      if (unknown !== undefined) {
+        const keys = (unknown as { keys?: string[] }).keys ?? [];
+        add("schema", id, `unrecognized keys: ${keys.join(", ")}`);
+      }
+      const rest = parsed.error.issues.filter((issue) => issue.code !== "unrecognized_keys");
+      // One row can be wrong in eight ways; three examples are enough to name
+      // the drift, and the count is reported in the summary either way.
+      for (const issue of rest.slice(0, 3)) {
+        const where = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+        add("schema", id, `${where}${issue.message}`);
+      }
+      if (rest.length > 3) {
+        add("schema", id, `(+${rest.length - 3} more schema issues)`);
+      }
+    }
+
+    const sampleSet = str(raw["sample_set"]) ?? "self";
+    if (!specSampleId(id, sampleSet)) {
+      add("sample_id", id, `id ${id} does not match the §13 pattern for sample_set=${sampleSet}`);
+    }
+
+    defectsById.set(id, asList(raw["defects"]).length);
+
+    const before = str(raw["before"]) ?? "";
+    const after = str(raw["after"]) ?? "";
+    const changedLines = diffCount(
+      before.endsWith("\n") ? before.slice(0, -1).split("\n") : before.split("\n"),
+      after.endsWith("\n") ? after.slice(0, -1).split("\n") : after.split("\n"),
+    );
+    const sampleCwe = sampleCweOf(raw);
+    const declaredRisk = str(raw["risk_level"]);
+    if (declaredRisk !== null) {
+      const derived = specRiskLevel(sampleCwe, changedLines);
+      if (declaredRisk !== derived) {
+        add("risk_level", id, `${declaredRisk} != §9 derivation ${derived} (cwe=${sampleCwe ?? "null"} lines=${changedLines})`);
+      }
+    }
+
+    // §13: `label` exists only on AACR rows and must agree with `defects`.
+    const hasLabel = raw["label"] !== undefined;
+    if (sampleSet !== "aacr" && hasLabel) add("defects", id, "non-AACR row carries `label`");
+    if (sampleSet === "aacr") {
+      if (!hasLabel) add("defects", id, "AACR row is missing `label`");
+      else {
+        const label = raw["label"];
+        const populated = asList(raw["defects"]).length > 0;
+        if ((label === 1) !== populated) add("defects", id, `label ${String(label)} disagrees with defects`);
+      }
+      if (sampleCwe !== null) add("defects", id, `AACR row must have sample_cwe=null, got ${sampleCwe}`);
+    } else if (sampleCwe === null) {
+      add("defects", id, "non-AACR row must carry sample_cwe");
+    }
+
+    const afterCount = after.endsWith("\n") ? after.split("\n").length - 1 : after.split("\n").length;
+    const filePath = str(raw["file_path"]);
+    for (const [index, defectRaw] of asList(raw["defects"]).entries()) {
+      const defect = asRecord(defectRaw);
+      const defectId = str(defect["defect_id"]) ?? "";
+      const start = typeof defect["line_start"] === "number" ? defect["line_start"] : null;
+      const end = typeof defect["line_end"] === "number" ? defect["line_end"] : null;
+      if (defectId !== `${id}#d${index + 1}`) {
+        add("defects", id, `defect_id ${defectId || "(missing)"} should be ${id}#d${index + 1}`);
+      }
+      if (defect["file"] !== filePath) add("defects", id, `defect ${defectId} file != file_path`);
+      if (start === null || end === null || end < start) {
+        add("defects", id, `defect ${defectId} has an unusable span ${String(start)}-${String(end)}`);
+        continue;
+      }
+      // §13: the span is the smallest syntactic unit; > 3 lines is a lazy label.
+      if (end - start + 1 > 3) add("defects", id, `defect ${defectId} spans ${end - start + 1} lines (> 3)`);
+      if (start < 1 || end > afterCount) {
+        add("defects", id, `defect ${defectId} span ${start}-${end} outside after bounds 1-${afterCount}`);
+      }
+      if (sampleSet !== "aacr" && defect["cwe"] !== sampleCwe) {
+        add("defects", id, `defect ${defectId} cwe != sample_cwe`);
+      }
+    }
+
+    const origin = asRecord(raw["origin"]);
+    const contamination = str(raw["contamination_risk"]);
+    if (contamination === "high") {
+      if (origin["kind"] !== "public_repo" || str(origin["advisory"]) === null) {
+        add("contamination", id, "contamination_risk=high needs kind=public_repo and an advisory id");
+      }
+    }
+
+    const annotator = raw["annotator"];
+    if (sampleSet !== "self" && annotator !== null) {
+      add("annotator", id, `external row must have annotator=null, got ${String(annotator)}`);
+    }
+  }
+
+  for (const [id, raw] of records) {
+    const variant = str(raw["variant_of"]);
+    if (variant === null) continue;
+    if (!records.has(variant)) {
+      add("variant", id, `variant_of ${variant} does not exist`);
+      continue;
+    }
+    if (splits.get(variant) !== splits.get(id)) {
+      add("variant", id, `variant_of ${variant} sits in another split (${String(splits.get(variant))} vs ${String(splits.get(id))})`);
+    }
+    if ((defectsById.get(id) ?? 0) > 0) add("variant", id, "a paired safe variant must have defects=[]");
+    if ((defectsById.get(variant) ?? 0) === 0) add("variant", id, `variant_of ${variant} is not a defective row`);
+  }
+
+  const selfRecords = [...records].filter(([, raw]) => (str(raw["sample_set"]) ?? "self") === "self");
+  const classes = new Set(
+    selfRecords.map(([, raw]) => {
+      const cwe = sampleCweOf(raw);
+      return cwe === null ? "null" : cwe.replace(/^CWE-/i, "").padStart(3, "0");
+    }),
+  );
+  for (const cwe of SPEC_CWES) {
+    if (!classes.has(cwe)) add("classes", null, `§6 class CWE-${cwe} has no samples`);
+  }
+  for (const cwe of classes) {
+    if (!(SPEC_CWES as readonly string[]).includes(cwe)) {
+      add("classes", null, `CWE-${cwe} is not one of the §6 classes`);
+    }
+  }
+
+  const ratio = new Map<string, { fit: number; eval: number }>();
+  for (const [id, raw] of selfRecords) {
+    const cwe = sampleCweOf(raw);
+    if (cwe === null) continue;
+    const key = cwe.replace(/^CWE-/i, "").padStart(3, "0");
+    const bucket = ratio.get(key) ?? { fit: 0, eval: 0 };
+    const split = splits.get(id);
+    if (split === "fit") bucket.fit += 1;
+    else if (split === "eval") bucket.eval += 1;
+    ratio.set(key, bucket);
+  }
+  for (const [cwe, bucket] of [...ratio].sort(([a], [b]) => a.localeCompare(b))) {
+    const total = bucket.fit + bucket.eval;
+    // §7: each class splits 3:2; a class with no eval side can never be measured.
+    if (bucket.fit === 0 || bucket.eval === 0) {
+      add("split_ratio", null, `CWE-${cwe} is missing a split (fit=${bucket.fit} eval=${bucket.eval})`);
+    } else if (bucket.fit * 2 !== bucket.eval * 3) {
+      add("split_ratio", null, `CWE-${cwe} splits ${bucket.fit}:${bucket.eval} (${total} rows), expected 3:2`);
+    }
+  }
+
+  const summary: ConformanceSummary[] = RULE_ORDER.flatMap((rule) => {
+    const hits = violations.filter((violation) => violation.rule === rule);
+    if (hits.length === 0) return [];
+    return [
+      {
+        rule,
+        count: hits.length,
+        examples: hits.slice(0, 3).map((hit) => (hit.sample === null ? hit.detail : `${hit.sample}: ${hit.detail}`)),
+      },
+    ];
+  });
+
+  return { ok: violations.length === 0, samples: records.size, violations, summary };
+}
+
+function formatConformance(result: ConformanceResult): string {
+  const lines = [
+    `conformance: ${result.ok ? "PASS" : "FAIL"} - ${result.samples} samples, ` +
+      `${result.violations.length} violations across ${result.summary.length} rules`,
+  ];
+  for (const group of result.summary) {
+    lines.push(`  ${group.rule} (${group.count})`);
+    for (const example of group.examples) lines.push(`    - ${example}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const positional = argv.find((value) => !value.startsWith("--"));
+  const dir = resolve(positional ?? fileURLToPath(new URL("../datasets/self-built", import.meta.url)));
+
+  if (argv.includes("--conformance")) {
+    const result = await verifyConformance(dir);
+    process.stdout.write(formatConformance(result));
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+
   const result = await verifyDataset(dir);
   if (result.ok) {
     process.stdout.write(`dataset ok: ${EXPECTED_SAMPLE_COUNT} samples verified at ${dir}\n`);
-  } else {
-    for (const error of result.errors) {
-      process.stderr.write(`${error}\n`);
-    }
-    process.exit(1);
+    return;
   }
+  for (const error of result.errors) process.stderr.write(`${error}\n`);
+  process.exitCode = 1;
 }
+
+if (invokedDirectly()) {
+  await main();
+}
+

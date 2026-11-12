@@ -2,6 +2,7 @@ import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ReviewRow, RunRecord } from "../src/contracts/index.js";
+import { coverageCounts, cweKey, declaredCoverage, loadRulesTable } from "./coverage.js";
 import { arg } from "./shared.js";
 
 export interface LabelSpan {
@@ -16,8 +17,26 @@ export interface SampleTruth {
   split: string;
   risk_level: string;
   paired_safe: boolean;
+  /** Ground-truth class; decides whether the pinned ruleset can see it at all. */
+  sample_cwe: string | null;
   labels: LabelSpan[];
   expected_detectable_by: string[];
+}
+
+/**
+ * Declared rule coverage per CWE, from the frozen rules table. A class present
+ * with 0 rules is a ruleset hole, not a sample defect: its samples stay out of
+ * the recall denominator and get their own row in the results table.
+ */
+export interface RuleCoverage {
+  language: string;
+  perCwe: Record<string, number>;
+}
+
+export interface AcceptanceOptions {
+  minSamples?: number;
+  /** Absent means "coverage unknown" - then every labelled eval sample counts. */
+  coverage?: RuleCoverage;
 }
 
 export interface BlockGaps {
@@ -71,8 +90,12 @@ export async function loadTruth(datasetDir: string): Promise<Map<string, SampleT
   for (const entry of manifest.samples) {
     const sample = JSON.parse(
       await readFile(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
-    ) as SampleTruth;
-    truth.set(entry.sample_id, { ...sample, expected_detectable_by: entry.expected_detectable_by });
+    ) as Omit<SampleTruth, "sample_cwe"> & { cwe: string | null };
+    truth.set(entry.sample_id, {
+      ...sample,
+      sample_cwe: sample.cwe,
+      expected_detectable_by: entry.expected_detectable_by,
+    });
   }
   return truth;
 }
@@ -112,8 +135,10 @@ export function evaluateAcceptance(
   rows: AcceptanceRowLike[],
   truth: Map<string, SampleTruth>,
   gaps: BlockGaps | null,
-  minSamples = 20,
+  options: AcceptanceOptions = {},
 ): AcceptanceReport {
+  const minSamples = options.minSamples ?? 20;
+  const coverage = options.coverage;
   const modes = new Set(rows.map((row) => row.mode));
   if (modes.size > 1) throw new Error(`live and replay rows must not be mixed: ${[...modes].join(",")}`);
   const mode = [...modes][0] ?? "unknown";
@@ -128,15 +153,20 @@ export function evaluateAcceptance(
   const blockingRows = preRows.length > 0 ? preRows : ordered;
 
   const mainRows = blockingRows.filter((row) => row.baseline === "B4");
-  const positives = mainRows.filter((row) => {
+  const evalPositives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
-    return (
-      sample !== undefined &&
-      sample.split === "eval" &&
-      sample.labels.length > 0 &&
-      sample.expected_detectable_by.includes("semgrep")
-    );
+    return sample !== undefined && sample.split === "eval" && sample.labels.length > 0;
   });
+  // `expected_detectable_by` is a non-truth hint (annotation spec §6) and must
+  // not select the denominator. The ruleset's *declared* coverage does, and it
+  // is a fact about the pinned rules table, decidable before unblinding.
+  const covered = (row: AcceptanceRowLike): boolean => {
+    if (coverage === undefined) return true;
+    const key = cweKey(truth.get(row.sample)?.sample_cwe ?? null);
+    return key !== null && (coverage.perCwe[key] ?? 0) > 0;
+  };
+  const positives = evalPositives.filter(covered);
+  const excluded = evalPositives.filter((row) => !covered(row));
   const negatives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
     return sample !== undefined && sample.labels.length === 0;
@@ -148,7 +178,10 @@ export function evaluateAcceptance(
   const n = positives.length;
   const k = truePositive.length + falsePositive.length;
   const recall = n === 0 ? 0 : truePositive.length / n;
-  const precision = k === 0 ? 0 : truePositive.length / k;
+  // With no defect-free row in the run there is no false-positive denominator,
+  // and `tp / tp` would report a perfect 1.0 precision that measured nothing.
+  const precisionMeasurable = negatives.length > 0;
+  const precision = !precisionMeasurable || k === 0 ? 0 : truePositive.length / k;
   const gapSamples = new Set((gaps?.gaps ?? []).map((gap) => gap.sample_id));
   const predictedGap = mainRows.filter((row) => denied(row) && gapSamples.has(row.sample));
   const firstRun = ordered[0]?.change_event?.ts ?? null;
@@ -157,22 +190,29 @@ export function evaluateAcceptance(
     mode === "live" &&
     preregistered &&
     n >= minSamples &&
+    precisionMeasurable &&
     recall >= 0.7 &&
     precision >= 0.9 &&
     predictedGap.length === 0;
+  const excludedClasses = [...new Set(excluded.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"))];
   const line1: LineResult = {
-    name: "line1: block precision/recall on the semgrep-detectable subset",
+    name: "line1: block precision/recall on the covered eval positives",
     pass: line1Pass,
     detail:
-      `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} precision=${precision.toFixed(3)} ` +
+      `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} ` +
+      `precision=${precisionMeasurable ? precision.toFixed(3) : "na"} negatives=${negatives.length} ` +
+      `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
     metrics: {
       n,
       k,
       recall,
-      precision,
+      precision: precisionMeasurable ? precision : null,
       false_positive: falsePositive.length,
+      negatives: negatives.length,
       missed,
+      excluded: excluded.length,
+      excluded_classes: excludedClasses.join(","),
       preregistered: String(preregistered),
     },
   };
@@ -282,6 +322,29 @@ export function evaluateAcceptance(
     metrics: { warned: warned.length, anchored: anchored.length },
   };
 
+  // "禁静默丢弃": every class that appears in the eval positives gets a row,
+  // including the ones the ruleset cannot see, with its declared rule count.
+  const coverageRows: string[][] = [];
+  if (coverage !== undefined) {
+    const classes = [
+      ...new Set(
+        evalPositives.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"),
+      ),
+    ].sort();
+    for (const key of classes) {
+      const rowsInClass = evalPositives.filter(
+        (row) => (cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none") === key,
+      );
+      const declared = coverage.perCwe[key] ?? 0;
+      coverageRows.push([
+        key === "none" ? "(no CWE)" : `CWE-${key}`,
+        String(declared),
+        String(rowsInClass.length),
+        declared > 0 ? "no" : "yes - ruleset declares no rule",
+      ]);
+    }
+  }
+
   const resultsTable = [
     table(
       ["line", "pass", "detail"],
@@ -292,14 +355,29 @@ export function evaluateAcceptance(
       ["sample", "B4/B4g token ratio", "B4/B4g latency ratio"],
       pairs.map((pair) => [pair.sample, pair.tokenRatio?.toFixed(3) ?? "na", pair.latencyRatio.toFixed(3)]),
     ),
+    ...(coverageRows.length > 0
+      ? [
+          "",
+          `line1 denominator by class (declared ${coverage?.language ?? "?"} rules):`,
+          "",
+          table(["class", "declared rules", "eval rows", "outside line1"], coverageRows),
+        ]
+      : []),
   ].join("\n");
 
   const verdict = [
     `# 验收结论（${mode}）`,
     "",
-    `四条线：${[line1, line2, line3, line4, line5].filter((line) => line.pass).length}/5 通过。`,
+    `五条线：${[line1, line2, line3, line4, line5].filter((line) => line.pass).length}/5 通过。`,
     "",
     "结果表见 report.md；本文件只给结论，不把接口通过当质量结论。",
+    ...(coverage === undefined
+      ? []
+      : [
+          "",
+          `line1 分母口径：按钉定规则表声明的 ${coverage.language} 规则分面，` +
+            `${excluded.length} 条 eval 正样本因规则集无该类规则不在分母内（见结果表末表）。`,
+        ]),
     "",
   ].join("\n");
 
@@ -311,8 +389,12 @@ async function main(): Promise<void> {
   const datasetDir = resolve(arg("--dataset", "datasets/self-built"));
   const gapsPath = resolve(arg("--gaps", "artifacts/block-gaps.json"));
   const outDir = resolve(arg("--out", "artifacts/acceptance"));
+  const rulesPath = resolve(arg("--rules", "research/semgrep-bench/snapshot/rules_table.json"));
+  const declared = declaredCoverage(loadRulesTable(rulesPath), arg("--language", "ts"));
   const gaps = existsSync(gapsPath) ? (JSON.parse(await readFile(gapsPath, "utf8")) as BlockGaps) : null;
-  const report = evaluateAcceptance(await loadRuns(runsDir), await loadTruth(datasetDir), gaps);
+  const report = evaluateAcceptance(await loadRuns(runsDir), await loadTruth(datasetDir), gaps, {
+    coverage: { language: declared.language, perCwe: coverageCounts(declared) },
+  });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");
   await writeFile(join(outDir, "verdict.md"), report.verdict, "utf8");
