@@ -1,0 +1,35 @@
+{
+  "sample_id": "aacr-ts-0005",
+  "schema_version": 1,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "aacr",
+  "group_id": "aacr:google-gemini/gemini-cli",
+  "repo": "google-gemini/gemini-cli",
+  "file_path": "packages/cli/src/utils/commentJson.ts",
+  "before": "",
+  "after": "/**\n * @license\n * Copyright 2025 Google LLC\n * SPDX-License-Identifier: Apache-2.0\n */\n\nimport * as fs from 'node:fs';\nimport { parse, stringify } from 'comment-json';\n\ninterface EnvVarMapping {\n  path: string[];\n  originalValue: string;\n  resolvedValue: unknown;\n}\n\n/**\n * Updates a JSON file while preserving comments, formatting, and environment variable references.\n */\nexport function updateSettingsFilePreservingFormat(\n  filePath: string,\n  updates: Record<string, unknown>,\n  envVarMappings: EnvVarMapping[] = [],\n): void {\n  if (!fs.existsSync(filePath)) {\n    fs.writeFileSync(filePath, JSON.stringify(updates, null, 2), 'utf-8');\n    return;\n  }\n\n  const originalContent = fs.readFileSync(filePath, 'utf-8');\n\n  let parsed: Record<string, unknown>;\n  try {\n    parsed = parse(originalContent) as Record<string, unknown>;\n  } catch (error) {\n    console.error('Error parsing settings file:', error);\n    console.error(\n      'Settings file may be corrupted. Please check the JSON syntax.',\n    );\n    return;\n  }\n\n  const updatedStructure = applyUpdates(parsed, updates);\n  const restoredStructure = restoreEnvVarReferences(\n    updatedStructure,\n    envVarMappings,\n  );\n  const updatedContent = stringify(restoredStructure, null, 2);\n\n  fs.writeFileSync(filePath, updatedContent, 'utf-8');\n}\n\nfunction applyUpdates(\n  current: Record<string, unknown>,\n  updates: Record<string, unknown>,\n): Record<string, unknown> {\n  const result = current;\n\n  for (const [key, value] of Object.entries(updates)) {\n    // Prevent prototype pollution\n    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {\n      continue;\n    }\n    if (\n      typeof value === 'object' &&\n      value !== null &&\n      !Array.isArray(value) &&\n      typeof result[key] === 'object' &&\n      result[key] !== null &&\n      !Array.isArray(result[key])\n    ) {\n      result[key] = applyUpdates(\n        result[key] as Record<string, unknown>,\n        value as Record<string, unknown>,\n      );\n    } else {\n      result[key] = value;\n    }\n  }\n\n  return result;\n}\n\nfunction restoreEnvVarReferences(\n  obj: Record<string, unknown>,\n  envVarMappings: EnvVarMapping[],\n): Record<string, unknown> {\n  if (envVarMappings.length === 0) {\n    return obj;\n  }\n\n  const envVarMap = new Map<string, string>();\n  for (const mapping of envVarMappings) {\n    const pathStr = mapping.path.join('.');\n    envVarMap.set(pathStr, mapping.originalValue);\n  }\n\n  restoreEnvVarsRecursive(obj, [], envVarMap);\n  return obj;\n}\n\nfunction restoreEnvVarsRecursive(\n  obj: unknown,\n  currentPath: string[],\n  envVarMap: Map<string, string>,\n): void {\n  if (typeof obj !== 'object' || obj === null) {\n    return;\n  }\n\n  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {\n    const fullPath = [...currentPath, key];\n    const pathStr = fullPath.join('.');\n\n    const envVarReference = envVarMap.get(pathStr);\n    if (envVarReference && typeof value === 'string') {\n      (obj as Record<string, unknown>)[key] = envVarReference;\n    } else if (\n      typeof value === 'object' &&\n      value !== null &&\n      !Array.isArray(value)\n    ) {\n      restoreEnvVarsRecursive(value, fullPath, envVarMap);\n    }\n  }\n}\n\n/**\n * Track environment variable mappings during settings load.\n */\nexport function trackEnvVarMappings(\n  obj: unknown,\n  originalObj: unknown,\n  path: string[] = [],\n): EnvVarMapping[] {\n  const mappings: EnvVarMapping[] = [];\n\n  if (\n    typeof obj !== 'object' ||\n    obj === null ||\n    typeof originalObj !== 'object' ||\n    originalObj === null\n  ) {\n    return mappings;\n  }\n\n  for (const key in obj as Record<string, unknown>) {\n    const value = (obj as Record<string, unknown>)[key];\n    const originalValue = (originalObj as Record<string, unknown>)[key];\n    const currentPath = [...path, key];\n\n    if (typeof originalValue === 'string' && typeof value === 'string') {\n      const envVarPattern = /^\\$(?:(\\w+)|{([^}]+)})$/;\n      const match = originalValue.match(envVarPattern);\n\n      if (match && value !== originalValue) {\n        mappings.push({\n          path: currentPath,\n          originalValue,\n          resolvedValue: value,\n        });\n      }\n    } else if (typeof value === 'object' && value !== null) {\n      const nestedMappings = trackEnvVarMappings(\n        value,\n        originalValue,\n        currentPath,\n      );\n      mappings.push(...nestedMappings);\n    }\n  }\n\n  return mappings;\n}\n",
+  "label": 1,
+  "defects": [
+    {
+      "defect_id": "aacr-ts-0005#d1",
+      "cwe": null,
+      "file": "packages/cli/src/utils/commentJson.ts",
+      "line_start": 59,
+      "line_end": 59,
+      "symbol": null,
+      "evidence": "AACR comment anchor 59-59 (comment position, not defect range): Using `Object.entries` in `applyUpdates` introduces prototype pollution risk; replace with `Object.getOwnPropertyNames` to safely handle property iteration with"
+    }
+  ],
+  "sample_cwe": null,
+  "variant_of": null,
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "origin": {
+    "kind": "aacr",
+    "ref": "https://github.com/google-gemini/gemini-cli/pull/8154#packages/cli/src/utils/commentJson.ts:59-59",
+    "advisory": null
+  },
+  "annotator": null
+}

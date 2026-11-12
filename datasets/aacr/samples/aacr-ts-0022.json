@@ -1,0 +1,25 @@
+{
+  "sample_id": "aacr-ts-0022",
+  "schema_version": 1,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "aacr",
+  "group_id": "aacr:CherryHQ/cherry-studio",
+  "repo": "CherryHQ/cherry-studio",
+  "file_path": "src/renderer/src/middleware/extractReasoningMiddleware.ts",
+  "before": "",
+  "after": "// Modified from https://github.com/vercel/ai/blob/845080d80b8538bb9c7e527d2213acb5f33ac9c2/packages/ai/core/middleware/extract-reasoning-middleware.ts\n\nimport { getPotentialStartIndex } from '../utils/getPotentialIndex'\n\nexport interface ExtractReasoningMiddlewareOptions {\n  tagName: string\n  separator?: string\n  startWithReasoning?: boolean\n}\n\n// 支持泛型 T，默认 T = { type: string; textDelta: string }\nexport function extractReasoningMiddleware<T extends { type: string } = { type: string; textDelta: string }>({\n  tagName,\n  separator = '\\n',\n  startWithReasoning = false\n}: ExtractReasoningMiddlewareOptions) {\n  const openingTag = `<${tagName}>`\n  const closingTag = `</${tagName}>`\n\n  return {\n    wrapGenerate: async ({ doGenerate }: { doGenerate: () => Promise<{ text: string } & Record<string, any>> }) => {\n      const { text: rawText, ...rest } = await doGenerate()\n      if (rawText == null) {\n        return { text: rawText, ...rest }\n      }\n      const text = startWithReasoning ? openingTag + rawText : rawText\n      const regexp = new RegExp(`${openingTag}(.*?)${closingTag}`, 'gs')\n      const matches = Array.from(text.matchAll(regexp))\n      if (!matches.length) {\n        return { text, ...rest }\n      }\n      const reasoning = matches.map((match: RegExpMatchArray) => match[1]).join(separator)\n      let textWithoutReasoning = text\n      for (let i = matches.length - 1; i >= 0; i--) {\n        const match = matches[i] as RegExpMatchArray\n        const beforeMatch = textWithoutReasoning.slice(0, match.index as number)\n        const afterMatch = textWithoutReasoning.slice((match.index as number) + match[0].length)\n        textWithoutReasoning =\n          beforeMatch + (beforeMatch.length > 0 && afterMatch.length > 0 ? separator : '') + afterMatch\n      }\n      return { ...rest, text: textWithoutReasoning, reasoning }\n    },\n    wrapStream: async ({\n      doStream\n    }: {\n      doStream: () => Promise<{ stream: ReadableStream<T> } & Record<string, any>>\n    }) => {\n      const { stream, ...rest } = await doStream()\n      let isFirstReasoning = true\n      let isFirstText = true\n      let afterSwitch = false\n      let isReasoning = startWithReasoning\n      let buffer = ''\n      return {\n        stream: stream.pipeThrough(\n          new TransformStream<T, T>({\n            transform: (chunk, controller) => {\n              if (chunk.type !== 'text-delta') {\n                controller.enqueue(chunk)\n                return\n              }\n              // @ts-expect-error: textDelta 只在 text-delta/reasoning chunk 上\n              buffer += chunk.textDelta\n              function publish(text: string) {\n                if (text.length > 0) {\n                  const prefix = afterSwitch && (isReasoning ? !isFirstReasoning : !isFirstText) ? separator : ''\n                  controller.enqueue({\n                    ...chunk,\n                    type: isReasoning ? 'reasoning' : 'text-delta',\n                    textDelta: prefix + text\n                  })\n                  afterSwitch = false\n                  if (isReasoning) {\n                    isFirstReasoning = false\n                  } else {\n                    isFirstText = false\n                  }\n                }\n              }\n              while (true) {\n                const nextTag = isReasoning ? closingTag : openingTag\n                const startIndex = getPotentialStartIndex(buffer, nextTag)\n                if (startIndex == null) {\n                  publish(buffer)\n                  buffer = ''\n                  break\n                }\n                publish(buffer.slice(0, startIndex))\n                const foundFullMatch = startIndex + nextTag.length <= buffer.length\n                if (foundFullMatch) {\n                  buffer = buffer.slice(startIndex + nextTag.length)\n                  isReasoning = !isReasoning\n                  afterSwitch = true\n                } else {\n                  buffer = buffer.slice(startIndex)\n                  break\n                }\n              }\n            }\n          })\n        ),\n        ...rest\n      }\n    }\n  }\n}\n",
+  "label": 0,
+  "defects": [],
+  "sample_cwe": null,
+  "variant_of": null,
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "origin": {
+    "kind": "aacr",
+    "ref": "https://github.com/CherryHQ/cherry-studio/pull/5637#src/renderer/src/middleware/extractReasoningMiddleware.ts:32-32",
+    "advisory": null
+  },
+  "annotator": null
+}

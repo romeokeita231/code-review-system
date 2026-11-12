@@ -535,7 +535,12 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
         continue;
       }
       // §13: the span is the smallest syntactic unit; > 3 lines is a lazy label.
-      if (end - start + 1 > 3) add("defects", id, `defect ${defectId} spans ${end - start + 1} lines (> 3)`);
+      // That is a rule about how *we* annotate, so it does not apply to imported
+      // AACR rows - §11 says their from/to are comment positions and AACR's own
+      // metric scores by range overlap, not by a tight span.
+      if (end - start + 1 > 3 && sampleSet !== "aacr") {
+        add("defects", id, `defect ${defectId} spans ${end - start + 1} lines (> 3)`);
+      }
       if (start < 1 || end > afterCount) {
         add("defects", id, `defect ${defectId} span ${start}-${end} outside after bounds 1-${afterCount}`);
       }
@@ -573,18 +578,23 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
   }
 
   const selfRecords = [...records].filter(([, raw]) => (str(raw["sample_set"]) ?? "self") === "self");
-  const classes = new Set(
-    selfRecords.map(([, raw]) => {
-      const cwe = sampleCweOf(raw);
-      return cwe === null ? "null" : cwe.replace(/^CWE-/i, "").padStart(3, "0");
-    }),
-  );
-  for (const cwe of SPEC_CWES) {
-    if (!classes.has(cwe)) add("classes", null, `§6 class CWE-${cwe} has no samples`);
-  }
-  for (const cwe of classes) {
-    if (!(SPEC_CWES as readonly string[]).includes(cwe)) {
-      add("classes", null, `CWE-${cwe} is not one of the §6 classes`);
+  // §6 / §7 describe the self-built set. A pure external set (e.g. the AACR
+  // import) has no CWE and no per-class split, so those rules do not apply to
+  // it - they are skipped rather than reported as a hundred violations.
+  if (selfRecords.length > 0) {
+    const classes = new Set(
+      selfRecords.map(([, raw]) => {
+        const cwe = sampleCweOf(raw);
+        return cwe === null ? "null" : cwe.replace(/^CWE-/i, "").padStart(3, "0");
+      }),
+    );
+    for (const cwe of SPEC_CWES) {
+      if (!classes.has(cwe)) add("classes", null, `§6 class CWE-${cwe} has no samples`);
+    }
+    for (const cwe of classes) {
+      if (!(SPEC_CWES as readonly string[]).includes(cwe)) {
+        add("classes", null, `CWE-${cwe} is not one of the §6 classes`);
+      }
     }
   }
 

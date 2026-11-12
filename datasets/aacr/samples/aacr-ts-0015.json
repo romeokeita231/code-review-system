@@ -1,0 +1,25 @@
+{
+  "sample_id": "aacr-ts-0015",
+  "schema_version": 1,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "aacr",
+  "group_id": "aacr:immich-app/immich",
+  "repo": "immich-app/immich",
+  "file_path": "web/src/service-worker/index.ts",
+  "before": "",
+  "after": "/// <reference types=\"@sveltejs/kit\" />\n/// <reference no-default-lib=\"true\"/>\n/// <reference lib=\"esnext\" />\n/// <reference lib=\"webworker\" />\nimport { version } from '$service-worker';\n\nconst useCache = true;\nconst sw = globalThis as unknown as ServiceWorkerGlobalScope;\nconst pendingLoads = new Map<string, AbortController>();\n\n// Create a unique cache name for this deployment\nconst CACHE = `cache-${version}`;\n\nsw.addEventListener('install', (event) => {\n  event.waitUntil(sw.skipWaiting());\n});\n\nsw.addEventListener('activate', (event) => {\n  event.waitUntil(sw.clients.claim());\n  // Remove previous cached data from disk\n  event.waitUntil(deleteOldCaches());\n});\n\nsw.addEventListener('fetch', (event) => {\n  // ignore POST requests etc\n  if (event.request.method !== 'GET') {\n    return;\n  }\n  const url = new URL(event.request.url);\n  if (/^\\/api\\/assets\\/[a-f0-9-]+\\/(original|thumbnail)/.test(url.pathname)) {\n    event.respondWith(immichAsset(url));\n  }\n});\n\nasync function deleteOldCaches() {\n  for (const key of await caches.keys()) {\n    if (key !== CACHE) {\n      await caches.delete(key);\n    }\n  }\n}\n\nasync function immichAsset(url: URL) {\n  const cache = await caches.open(CACHE);\n  let response = useCache ? await cache.match(url) : undefined;\n  if (response) {\n    return response;\n  }\n  try {\n    const cancelToken = new AbortController();\n    const request = fetch(url, {\n      signal: cancelToken.signal,\n    });\n    pendingLoads.set(url.toString(), cancelToken);\n    response = await request;\n    if (!(response instanceof Response)) {\n      throw new TypeError('invalid response from fetch');\n    }\n    if (response.status === 200) {\n      cache.put(url, response.clone());\n    }\n    return response;\n  } catch {\n    return Response.error();\n  } finally {\n    pendingLoads.delete(url.toString());\n  }\n}\n\nconst broadcast = new BroadcastChannel('immich');\n// eslint-disable-next-line  unicorn/prefer-add-event-listener\nbroadcast.onmessage = (event) => {\n  if (!event.data) {\n    return;\n  }\n  if (event.data.type === 'cancel') {\n    const urlstring = event.data.url;\n    const url = new URL(urlstring, event.origin);\n\n    const pending = pendingLoads.get(url.toString());\n    if (pending) {\n      pending.abort();\n      pendingLoads.delete(url.toString());\n    }\n  } else if (event.data.type === 'preload') {\n    const urlstring = event.data.url;\n    const url = new URL(urlstring, event.origin);\n    immichAsset(url);\n  }\n};\n",
+  "label": 0,
+  "defects": [],
+  "sample_cwe": null,
+  "variant_of": null,
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "origin": {
+    "kind": "aacr",
+    "ref": "https://github.com/immich-app/immich/pull/16893#web/src/service-worker/index.ts:44-45",
+    "advisory": null
+  },
+  "annotator": null
+}

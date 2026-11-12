@@ -1,0 +1,25 @@
+{
+  "sample_id": "aacr-ts-0014",
+  "schema_version": 1,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "aacr",
+  "group_id": "aacr:n8n-io/n8n",
+  "repo": "n8n-io/n8n",
+  "file_path": "packages/testing/playwright/services/user-api-helper.ts",
+  "before": "",
+  "after": "import { customAlphabet } from 'nanoid';\n\nimport type { ApiHelpers } from './api-helper';\n\nconst nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8);\n\nexport interface TestUser {\n\tid: string;\n\temail: string;\n\tpassword: string;\n\tfirstName: string;\n\tlastName: string;\n\trole: 'global:owner' | 'global:admin' | 'global:member';\n}\n\n/**\n * Creates test users via n8n's invitation API.\n * Note: Using this with n8n.api will affect browser cookies. Use with the isolated api fixture instead unless you want to overwrite the existing user\n */\nexport class UserApiHelper {\n\tconstructor(private api: ApiHelpers) {}\n\n\t/**\n\t * Create and activate a test user\n\t */\n\tasync create(options: Partial<TestUser> = {}): Promise<TestUser> {\n\t\tconst user = {\n\t\t\temail: options.email?.toLowerCase() ?? `testuser${nanoid()}@test.com`,\n\t\t\tpassword: options.password ?? 'PlaywrightTest123',\n\t\t\tfirstName: options.firstName ?? 'Test',\n\t\t\tlastName: options.lastName ?? `User${nanoid()}`,\n\t\t\trole: options.role ?? 'global:member',\n\t\t};\n\n\t\t// Invite user\n\t\tconst inviteResponse = await this.api.request.post('/rest/invitations', {\n\t\t\tdata: [{ email: user.email, role: user.role }],\n\t\t});\n\t\tif (!inviteResponse.ok()) {\n\t\t\tthrow new Error(`Failed to invite user: ${inviteResponse.status()}`);\n\t\t}\n\t\tconst inviteData = await inviteResponse.json();\n\t\tconst { id, inviteAcceptUrl } = inviteData.data[0].user;\n\n\t\t// Accept invitation\n\t\tconst url = new URL(inviteAcceptUrl);\n\t\tconst inviterId = url.searchParams.get('inviterId');\n\t\tconst inviteeId = url.searchParams.get('inviteeId');\n\n\t\tconst acceptResponse = await this.api.request.post(`/rest/invitations/${inviteeId}/accept`, {\n\t\t\tdata: {\n\t\t\t\tinviterId,\n\t\t\t\tfirstName: user.firstName,\n\t\t\t\tlastName: user.lastName,\n\t\t\t\tpassword: user.password,\n\t\t\t},\n\t\t});\n\t\tif (!acceptResponse.ok()) {\n\t\t\tthrow new Error(`Failed to accept invitation: ${acceptResponse.status()}`);\n\t\t}\n\n\t\treturn { id, ...user };\n\t}\n\n\t/**\n\t * Delete a user\n\t */\n\tasync delete(userId: string): Promise<void> {\n\t\tawait this.api.request.delete(`/rest/users/${userId}`);\n\t}\n}\n",
+  "label": 0,
+  "defects": [],
+  "sample_cwe": null,
+  "variant_of": null,
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "origin": {
+    "kind": "aacr",
+    "ref": "https://github.com/n8n-io/n8n/pull/20210#packages/testing/playwright/services/user-api-helper.ts:29-29",
+    "advisory": null
+  },
+  "annotator": null
+}

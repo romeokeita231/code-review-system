@@ -1,0 +1,25 @@
+{
+  "sample_id": "aacr-ts-0020",
+  "schema_version": 1,
+  "unit": "file_write",
+  "language": "ts",
+  "sample_set": "aacr",
+  "group_id": "aacr:cline/cline",
+  "repo": "cline/cline",
+  "file_path": "src/core/controller/models/updateApiConfigurationProto.ts",
+  "before": "import type { Controller } from \"../index\"\nimport { Empty } from \"@shared/proto/common\"\nimport { UpdateApiConfigurationRequest } from \"@shared/proto/models\"\nimport { updateApiConfiguration } from \"../../storage/state\"\nimport { buildApiHandler } from \"@api/index\"\nimport { convertProtoToApiConfiguration } from \"@shared/proto-conversions/models/api-configuration-conversion\"\n\n/**\n * Updates API configuration\n * @param controller The controller instance\n * @param request The update API configuration request\n * @returns Empty response\n */\nexport async function updateApiConfigurationProto(\n\tcontroller: Controller,\n\trequest: UpdateApiConfigurationRequest,\n): Promise<Empty> {\n\ttry {\n\t\tif (!request.apiConfiguration) {\n\t\t\tconsole.log(\"[APICONFIG: updateApiConfigurationProto] API configuration is required\")\n\t\t\tthrow new Error(\"API configuration is required\")\n\t\t}\n\n\t\t// Convert proto ApiConfiguration to application ApiConfiguration\n\t\tconst appApiConfiguration = convertProtoToApiConfiguration(request.apiConfiguration)\n\n\t\t// Update the API configuration in storage\n\t\tawait updateApiConfiguration(controller.context, appApiConfiguration)\n\n\t\t// Update the task's API handler if there's an active task\n\t\tif (controller.task) {\n\t\t\tcontroller.task.api = buildApiHandler(appApiConfiguration)\n\t\t}\n\n\t\t// Post updated state to webview\n\t\tawait controller.postStateToWebview()\n\n\t\treturn Empty.create()\n\t} catch (error) {\n\t\tconsole.error(`Failed to update API configuration: ${error}`)\n\t\tthrow error\n\t}\n}\n",
+  "after": "import type { Controller } from \"../index\"\nimport { Empty } from \"@shared/proto/common\"\nimport { UpdateApiConfigurationRequest } from \"@shared/proto/models\"\nimport { updateApiConfiguration } from \"../../storage/state\"\nimport { buildApiHandler } from \"@api/index\"\nimport { convertProtoToApiConfiguration } from \"@shared/proto-conversions/models/api-configuration-conversion\"\n\n/**\n * Updates API configuration\n * @param controller The controller instance\n * @param request The update API configuration request\n * @returns Empty response\n */\nexport async function updateApiConfigurationProto(\n\tcontroller: Controller,\n\trequest: UpdateApiConfigurationRequest,\n): Promise<Empty> {\n\tconst startTime = performance.now()\n\tconsole.log(\"[PERF] updateApiConfigurationProto: Starting provider switch\")\n\n\ttry {\n\t\tif (!request.apiConfiguration) {\n\t\t\tconsole.log(\"[APICONFIG: updateApiConfigurationProto] API configuration is required\")\n\t\t\tthrow new Error(\"API configuration is required\")\n\t\t}\n\n\t\t// Convert proto ApiConfiguration to application ApiConfiguration\n\t\tconst conversionStart = performance.now()\n\t\tconst appApiConfiguration = convertProtoToApiConfiguration(request.apiConfiguration)\n\t\tconst conversionEnd = performance.now()\n\t\tconsole.log(`[PERF] Proto conversion took: ${conversionEnd - conversionStart}ms`)\n\n\t\t// Update the API configuration in storage\n\t\tconst storageStart = performance.now()\n\t\tawait updateApiConfiguration(controller.context, appApiConfiguration)\n\t\tconst storageEnd = performance.now()\n\t\tconsole.log(`[PERF] Storage update took: ${storageEnd - storageStart}ms`)\n\n\t\t// Update the task's API handler if there's an active task\n\t\tconst apiHandlerStart = performance.now()\n\t\tif (controller.task) {\n\t\t\tcontroller.task.api = buildApiHandler(appApiConfiguration)\n\t\t}\n\t\tconst apiHandlerEnd = performance.now()\n\t\tconsole.log(`[PERF] API handler update took: ${apiHandlerEnd - apiHandlerStart}ms`)\n\n\t\t// Post updated state to webview\n\t\tconst statePostStart = performance.now()\n\t\tawait controller.postStateToWebview()\n\t\tconst statePostEnd = performance.now()\n\t\tconsole.log(`[PERF] State post to webview took: ${statePostEnd - statePostStart}ms`)\n\n\t\tconst totalTime = performance.now() - startTime\n\t\tconsole.log(`[PERF] Total updateApiConfigurationProto took: ${totalTime}ms`)\n\n\t\treturn Empty.create()\n\t} catch (error) {\n\t\tconst totalTime = performance.now() - startTime\n\t\tconsole.error(`[PERF] Failed to update API configuration after ${totalTime}ms: ${error}`)\n\t\tthrow error\n\t}\n}\n",
+  "label": 0,
+  "defects": [],
+  "sample_cwe": null,
+  "variant_of": null,
+  "expected_detectable_by": null,
+  "risk_level": "high",
+  "contamination_risk": "low",
+  "origin": {
+    "kind": "aacr",
+    "ref": "https://github.com/cline/cline/pull/4676#src/core/controller/models/updateApiConfigurationProto.ts:18-18",
+    "advisory": null
+  },
+  "annotator": null
+}
