@@ -248,6 +248,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       review_status: disposition.reviewStatus,
       review_skip_reason: disposition.skipReason,
       block_loop: disposition.blockLoop,
+      gate: disposition.gate,
       text: disposition.text,
       tokens,
       latency_ms: elapsed,
@@ -338,7 +339,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
     }
   }
 
-  const postSources = ctx.sources.filter((source) => source.name !== "semgrep");
+  const postSources = change.phase === "post" ? ctx.sources.filter((source) => source.name !== "semgrep") : [];
   const runnable = postSources.filter((source) => !(source.name === "aor" && tier === 0));
 
   const postResults = await Promise.all(
@@ -404,7 +405,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
         })),
       );
     }
-  } else if (tier >= 1 && pFused !== null && pFused >= thresholds.warn) {
+  } else if (change.phase === "post" && tier >= 1 && pFused !== null && pFused >= thresholds.warn) {
     const eligible = merged.filter((finding) => finding.blockable);
     if (eligible.length > 0) {
       postDecision = "inject_warn";

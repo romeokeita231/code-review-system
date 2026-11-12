@@ -125,7 +125,12 @@ export function evaluateAcceptance(
     return sample !== undefined && sample.labels.length > 0 && sample.expected_detectable_by.length > 0;
   });
   const predicated = detectable.filter((row) => row.disposition.preDecision === "deny");
-  const truePositive = predicated.filter((row) => row.sample.length > 0);
+  const truePositive = predicated.filter((row) => {
+    const sample = truth.get(row.sample);
+    return sample !== undefined && sample.labels.length > 0;
+  });
+  const falsePositive = predicated.length - truePositive.length;
+  const missed = detectable.length - truePositive.length;
   const n = detectable.length;
   const k = predicated.length;
   const recall = n === 0 ? 0 : truePositive.length / n;
@@ -147,7 +152,7 @@ export function evaluateAcceptance(
     detail:
       `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} precision=${precision.toFixed(3)} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
-    metrics: { n, k, recall, precision, preregistered: String(preregistered) },
+    metrics: { n, k, recall, precision, false_positive: falsePositive, missed, preregistered: String(preregistered) },
   };
 
   const registryHits = ordered.filter((row) =>
@@ -167,13 +172,11 @@ export function evaluateAcceptance(
   const warned = ordered.filter((row) => row.disposition.postDecision === "inject_warn");
   const repeats: string[] = [];
   for (const row of warned) {
-    const session = row.change_event?.sessionId ?? "";
     const ts = row.change_event?.ts ?? 0;
     const classes = new Set(
       row.findings_merged.map((finding) => `${finding.file}\u0000${finding.cwe ?? "none"}`),
     );
     for (const later of ordered) {
-      if ((later.change_event?.sessionId ?? "") !== session) continue;
       if ((later.change_event?.ts ?? 0) <= ts) continue;
       for (const finding of later.findings_merged) {
         if (classes.has(`${finding.file}\u0000${finding.cwe ?? "none"}`)) {
@@ -190,28 +193,31 @@ export function evaluateAcceptance(
   };
 
   const lowRisk = [...truth.values()].filter((sample) => sample.risk_level === "low").slice(0, 8);
-  const pairs: Array<{ sample: string; ratio: number; tokenRatio: number | null }> = [];
+  const pairs: Array<{ sample: string; latencyRatio: number; tokenRatio: number | null }> = [];
   for (const sample of lowRisk) {
     const b4 = ordered.find((row) => row.sample === sample.sample_id && row.baseline === "B4");
     const b4g = ordered.find((row) => row.sample === sample.sample_id && row.baseline === "B4g");
     if (!b4 || !b4g) continue;
-    const latentB4 = b4.latency_ms;
-    const latentB4g = b4g.latency_ms;
-    const ratio = latentB4g === 0 ? Number.POSITIVE_INFINITY : latentB4 / latentB4g;
+    const latencyRatio = b4g.latency_ms === 0 ? Number.POSITIVE_INFINITY : b4.latency_ms / b4g.latency_ms;
     const t4 = tokensOf(b4);
     const t4g = tokensOf(b4g);
     pairs.push({
       sample: sample.sample_id,
-      ratio,
+      latencyRatio,
       tokenRatio: t4 !== null && t4g !== null && t4g !== 0 ? t4 / t4g : null,
     });
   }
-  const medianRatio = median(pairs.map((pair) => pair.ratio));
+  const medianLatency = median(pairs.map((pair) => pair.latencyRatio));
+  const medianTokens = median(
+    pairs.map((pair) => pair.tokenRatio).filter((value): value is number => value !== null),
+  );
   const line4: LineResult = {
-    name: "line4: B4 vs B4g paired ratios on 8 low-risk samples",
-    pass: pairs.length === 8 && medianRatio !== null && medianRatio >= 1,
-    detail: `pairs=${pairs.length} median_latency_ratio=${medianRatio?.toFixed(3) ?? "na"}`,
-    metrics: { pairs: pairs.length, median_latency_ratio: medianRatio },
+    name: "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
+    pass: pairs.length === 8 && medianTokens !== null && medianTokens <= 1,
+    detail:
+      `pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
+      `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"}`,
+    metrics: { pairs: pairs.length, median_token_ratio: medianTokens, median_latency_ratio: medianLatency },
   };
 
   const anchored = warned.filter(
@@ -234,8 +240,8 @@ export function evaluateAcceptance(
     ),
     "",
     table(
-      ["sample", "B4g/B4 latency ratio", "B4g/B4 token ratio"],
-      pairs.map((pair) => [pair.sample, pair.ratio.toFixed(3), pair.tokenRatio?.toFixed(3) ?? "na"]),
+      ["sample", "B4/B4g token ratio", "B4/B4g latency ratio"],
+      pairs.map((pair) => [pair.sample, pair.tokenRatio?.toFixed(3) ?? "na", pair.latencyRatio.toFixed(3)]),
     ),
   ].join("\n");
 

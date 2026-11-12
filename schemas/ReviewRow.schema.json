@@ -224,6 +224,26 @@
           },
           "type": "array"
         },
+        "gate": {
+          "additionalProperties": false,
+          "properties": {
+            "perFileTier": {
+              "additionalProperties": {
+                "enum": [
+                  0,
+                  1,
+                  2
+                ],
+                "type": "number"
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "perFileTier"
+          ],
+          "type": "object"
+        },
         "latency_ms": {
           "minimum": 0,
           "type": "number"

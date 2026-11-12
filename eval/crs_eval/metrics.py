@@ -1,9 +1,3 @@
-"""Row-level line-union metrics shared by the replay evaluation and the paper tables.
-
-All counting is performed on the union of the line intervals of a row; per-item
-accumulation is deliberately avoided.
-"""
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -71,7 +65,6 @@ def row_metrics(predicted: Iterable[Interval], gt: Iterable[Interval]) -> dict[s
 
 
 def assert_single_mode(rows: Iterable[Mapping[str, Any]]) -> None:
-    """Refuse to mix live and replay rows in one metric or report."""
     modes = {row.get("mode") for row in rows if row.get("mode")}
     if LIVE in modes and REPLAY in modes:
         raise ValueError("refusing to mix live and replay rows")

@@ -182,6 +182,7 @@ function anonymousRecord(
     findings_raw_ref: `raw/${options.runId}.json`,
     sources: [],
     disposition,
+    gate: disposition.gate,
     tokens: { total: null, input: null, output: null, cache_read: null, cache_write: null },
     latency_ms: 0,
     status,
@@ -310,6 +311,7 @@ export async function runBaseline(opts: RunBaselineOptions): Promise<RunRecord[]
       findings_raw_ref: `raw/${opts.runId}.json`,
       sources: row.sources,
       disposition,
+      gate: row.gate,
       tokens: {
         total: row.tokens,
         input: null,

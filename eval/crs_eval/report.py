@@ -1,5 +1,3 @@
-"""Markdown report generation from replay run JSONL rows."""
-
 from __future__ import annotations
 
 import hashlib
@@ -53,7 +51,6 @@ def _digest(value: Any) -> str:
 
 
 def load_truth(dataset_dir: Path) -> tuple[dict[str, list[dict[str, Any]]], set[str], set[str]]:
-    """Load gold spans and the vulnerable/detectable sample sets from the dataset."""
     dataset_dir = Path(dataset_dir)
     manifest = json.loads((dataset_dir / "manifest.json").read_text(encoding="utf-8"))
     labels: dict[str, list[dict[str, Any]]] = {}
@@ -77,7 +74,6 @@ def attach_truth(
     rows: Sequence[Mapping[str, Any]],
     labels: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> list[dict[str, Any]]:
-    """Join dataset labels onto rows so line-union metrics have a ground truth."""
     attached: list[dict[str, Any]] = []
     for row in rows:
         item = dict(row)
@@ -98,7 +94,6 @@ def validate_rows(
     rows: Sequence[Mapping[str, Any]],
     configs: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[str]:
-    """Validate hash/mode consistency and return the sorted config hash set."""
     assert_single_mode(rows)
     hashes: set[str] = set()
     seen: dict[tuple[Any, ...], str] = {}
@@ -391,7 +386,6 @@ def cache_table(rows: Sequence[Mapping[str, Any]]) -> str:
 
 
 def fit_cost(points: Sequence[tuple[float, float]]) -> dict[str, float | None]:
-    """Least-squares fit y = slope * x + intercept with R^2."""
     if len(points) < 2:
         return {"slope": None, "intercept": None, "r2": None, "n": float(len(points))}
     xs = [float(x) for x, _ in points]

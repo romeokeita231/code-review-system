@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     raw: number;
     label: 0 | 1;
   }>;
-  const scored = [] as Array<{ score: number; label: 0 | 1; category: string }>;
+  const scored = [] as Array<{ source: SourceResult["source"]; score: number; label: 0 | 1; category: string }>;
 
   for (const sample of fitSamples) {
     const results = recorded[sample.sample_id] ?? [];
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
           : 0;
         const category = finding.cwe ?? "unknown";
         calibrationSamples.push({ source: result.source, category, raw: finding.confidence, label });
-        scored.push({ score: finding.confidence, label, category });
+        scored.push({ source: result.source, score: finding.confidence, label, category });
       }
     }
   }
@@ -75,8 +75,9 @@ async function main(): Promise<void> {
   );
 
   const calibrated = scored.map((item) => ({
+    source: item.source,
     score: applyCalibration(
-      { source: "semgrep", cwe: item.category === "unknown" ? null : item.category, confidence: item.score },
+      { source: item.source, cwe: item.category === "unknown" ? null : item.category, confidence: item.score },
       artifact,
       config.prior.pPrior,
     ),

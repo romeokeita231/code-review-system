@@ -311,7 +311,9 @@ export class SemgrepSource implements SignalSource {
       }
 
       if (malformed) return blank("degraded", "result_shape", startedAt, 0, targets.length);
-      if (!sawEngine) return blank("degraded", "engine_contract", startedAt, 0, targets.length);
+      if (rawResults.length > 0 && !sawEngine) {
+        return blank("degraded", "engine_contract", startedAt, 0, targets.length);
+      }
 
       const findings: Finding[] = [];
       for (const item of coreResults) {

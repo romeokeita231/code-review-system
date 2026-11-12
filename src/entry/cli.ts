@@ -29,6 +29,9 @@ async function reviewCommand(values: Record<string, string | undefined>): Promis
   const event = await readEvent(resolve(values.event));
   const root = resolve(values.root ?? process.cwd());
   const artifact = await loadArtifact(resolve(values.artifact ?? config.calibration.artifactPath));
+  if (artifact === null && config.fusionStages.calibrate) {
+    throw new ConfigError(`calibration artifact is missing: ${config.calibration.artifactPath}`);
+  }
   const outcome = await review(event, {
     runId: values["run-id"] ?? `run-${event.id}`,
     config,
@@ -52,10 +55,14 @@ async function replayCommand(values: Record<string, string | undefined>): Promis
     .map((item) => item.trim())
     .filter(Boolean);
   const artifact = await loadArtifact(resolve(values.artifact ?? configured.calibration.artifactPath));
+  if (artifact === null && configured.fusionStages.calibrate) {
+    throw new ConfigError(`calibration artifact is missing: ${configured.calibration.artifactPath}`);
+  }
   await runReplay({
     datasetDir,
     config: configured,
     artifact,
+    repoRev: values["repo-rev"] ?? "datasets/self-built",
     baselines: baselines as Baseline[],
     outDir: resolve(values.out ?? "runs"),
     runIdPrefix: values["run-id"] ?? "replay",
@@ -77,6 +84,7 @@ async function main(): Promise<void> {
       out: { type: "string" },
       baselines: { type: "string" },
       recorded: { type: "string" },
+      "repo-rev": { type: "string" },
       "run-id": { type: "string" },
     },
   });

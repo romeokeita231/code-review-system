@@ -1,5 +1,3 @@
-"""Command line entry point: ``python -m crs_eval.cli``."""
-
 from __future__ import annotations
 
 import argparse

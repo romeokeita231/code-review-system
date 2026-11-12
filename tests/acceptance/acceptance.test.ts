@@ -60,8 +60,8 @@ describe("acceptance", () => {
     for (let index = 0; index < 8; index += 1) {
       const sample = `low-${index}`;
       truth.set(sample, truthOf(sample, "low", []));
-      rows.push(row({ sample, baseline: "B4g", ts: base + 500 + index, latency_ms: 400, tokens: 50 }));
-      rows.push(row({ sample, baseline: "B4", ts: base + 600 + index, latency_ms: 1000, tokens: 100 }));
+      rows.push(row({ sample, baseline: "B4g", ts: base + 500 + index, latency_ms: 400, tokens: 100 }));
+      rows.push(row({ sample, baseline: "B4", ts: base + 600 + index, latency_ms: 1000, tokens: 50 }));
     }
     rows.push(
       row({

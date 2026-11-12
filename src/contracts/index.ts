@@ -260,6 +260,7 @@ export const ReviewRow = z.object({
   review_status: ReviewStatus,
   review_skip_reason: ReviewSkipReason.nullable(),
   block_loop: z.boolean(),
+  gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),
   text: z.string().nullable(),
   tokens: z.number().int().nonnegative().nullable(),
   latency_ms: z.number().nonnegative(),
@@ -281,6 +282,7 @@ export const RunRecord = z.object({
   findings_raw_ref: z.string().min(1),
   sources: z.array(SourceResult),
   disposition: Disposition,
+  gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),
   tokens: z.object({
     total: z.number().int().nonnegative().nullable(),
     input: z.number().int().nonnegative().nullable(),

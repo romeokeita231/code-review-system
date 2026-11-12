@@ -1,10 +1,10 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import type { CalibrationArtifact, ReviewRow, RunConfig, SignalSource } from "../contracts/index.js";
-import { loadCalibration, loadConfig } from "../config/index.js";
+import { ConfigError, loadCalibration, loadConfig } from "../config/index.js";
 import { DshAdapter } from "../l1/index.js";
 import { DenyGuard, TurnBudgetLedger, ledgerFor, review, type TriageProvider } from "../l2/index.js";
 import { createSources, createTriage } from "../l3/index.js";
+import { appendRow } from "../l5/index.js";
 
 export interface PluginOptions {
   configPath: string;
@@ -48,6 +48,9 @@ export async function createRuntime(options: PluginOptions): Promise<PluginRunti
   } catch {
     artifact = null;
   }
+  if (artifact === null && config.fusionStages.calibrate) {
+    throw new ConfigError(`calibration artifact is missing: ${config.calibration.artifactPath}`);
+  }
   let counter = 0;
   return {
     config,
@@ -77,8 +80,7 @@ function guardFor(runtime: PluginRuntime, sessionId: string): DenyGuard {
 }
 
 async function persist(runtime: PluginRuntime, row: ReviewRow): Promise<void> {
-  await mkdir(dirname(runtime.jsonlPath), { recursive: true });
-  await appendFile(runtime.jsonlPath, `${JSON.stringify(row)}\n`, "utf8");
+  await appendRow(runtime.jsonlPath, row);
 }
 
 export async function preExecute(runtime: PluginRuntime, exec: HookExec): Promise<Decision> {

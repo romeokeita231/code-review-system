@@ -1,5 +1,3 @@
-"""Evaluation metrics and paper-table generation for the Code Review System."""
-
 from __future__ import annotations
 
 from .metrics import (

@@ -89,6 +89,7 @@ export class AorSource implements SignalSource {
 
     const chunks = Math.max(1, Math.ceil(targets.length / Math.max(1, config.concurrency)));
     const timeoutMinutes = Math.max(1, Math.floor(outerMs / 60000 / chunks));
+    const tokenBudget = input.tier === 1 ? config.tierTokens.tier1 : config.tierTokens.tier2;
 
     let result;
     try {
@@ -107,6 +108,9 @@ export class AorSource implements SignalSource {
           "--timeout",
           String(timeoutMinutes),
           "--no-summary",
+          "--max-tokens-budget",
+          String(tokenBudget),
+          ...(input.tier === 2 ? ["--max-tools", String(config.tier2MaxTools)] : []),
         ],
         cwd: this.root,
         timeoutMs: outerMs,
