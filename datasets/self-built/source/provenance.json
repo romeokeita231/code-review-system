@@ -1,0 +1,83 @@
+{
+  "sources": {
+    "juice-shop": {
+      "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
+      "url": "https://github.com/juice-shop/juice-shop",
+      "pedagogical": true
+    },
+    "goof": {
+      "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
+      "url": "https://github.com/snyk-labs/nodejs-goof",
+      "pedagogical": true
+    },
+    "dvna": {
+      "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
+      "url": "https://github.com/appsecco/dvna",
+      "pedagogical": true
+    }
+  },
+  "exhaustion": [
+    {
+      "cwe": "078",
+      "found": 2,
+      "required": 3,
+      "status": "insufficient_n",
+      "sources": [
+        {
+          "repo": "juice-shop",
+          "verdict": "no sink",
+          "detail": "0 child_process references in 664 .ts files; the app shells out nowhere."
+        },
+        {
+          "repo": "goof",
+          "verdict": "1 real sink",
+          "detail": "routes/index.js:174 exec(cmd) is the only real sink; routes/index.js:39 and :220 are mongoose Query.exec()."
+        },
+        {
+          "repo": "dvna",
+          "verdict": "1 real sink",
+          "detail": "core/appHandler.js:39 exec('ping -c 2 ' + req.body.address) is the only shell sink."
+        },
+        {
+          "repo": "nodegoat",
+          "verdict": "no sink",
+          "detail": "contributions.js uses eval(), which is CWE-94; there is no shell exec."
+        }
+      ]
+    },
+    {
+      "cwe": "918",
+      "found": 1,
+      "required": 3,
+      "status": "insufficient_n",
+      "sources": [
+        {
+          "repo": "juice-shop",
+          "verdict": "1 real sink",
+          "detail": "routes/profileImageUrlUpload.ts:24 fetch(url) with req.body.imageUrl."
+        },
+        {
+          "repo": "goof",
+          "verdict": "no sink",
+          "detail": "no outbound request built from user input."
+        },
+        {
+          "repo": "dvna",
+          "verdict": "no sink",
+          "detail": "no SSRF module at all: 0 matches for ssrf, no a*-ssrf view, no axios/fetch/http.request. res.redirect(req.query.url) is an open redirect (CWE-601) and is not counted."
+        },
+        {
+          "repo": "nodegoat",
+          "verdict": "no sink",
+          "detail": "no outbound request built from user input."
+        }
+      ]
+    }
+  ],
+  "retired": {
+    "set": "ds-1",
+    "samples": 420,
+    "groups": 210,
+    "reason": "issue #7 errata D1: every 'safe' half was a no-op write (before === after), ids were s-CWE-NN-MM, and no row named the control that made it safe. Retired by issue #41 step 3; git history keeps the files."
+  }
+}

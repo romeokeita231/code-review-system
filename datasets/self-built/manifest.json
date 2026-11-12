@@ -1,58 +1,131 @@
 {
   "version": "ds-2.0.0",
-  "content_sha256_root": "aee6e0f2caffe243563d158ebfe399681e3e4ac2c89f67cb983c35acc4fca0dd",
+  "kind": "self",
+  "content_sha256_root": "30e6747b43dc76badffa4f57924658560c97c3920966f114882956856273fa3a",
   "declared": {
     "samples": 33,
     "positives": 26,
     "negatives": 7,
-    "groups": 33,
+    "groups": 28,
     "min_per_class": 3,
     "per_class": {
-      "CWE-22": 5,
-      "CWE-78": 2,
-      "CWE-79": 7,
-      "CWE-89": 3,
-      "CWE-94": 4,
+      "CWE-022": 5,
+      "CWE-078": 2,
+      "CWE-079": 7,
+      "CWE-089": 3,
+      "CWE-094": 4,
       "CWE-798": 4,
       "CWE-918": 1
     },
     "per_class_status": {
-      "CWE-78": "insufficient_n",
+      "CWE-078": "insufficient_n",
       "CWE-918": "insufficient_n"
     },
-    "split_ratio": {
-      "fit": 15,
+    "split": {
+      "fit": 12,
+      "eval": 21,
       "total": 33
     },
-    "split_ratio_positives": {
-      "fit": 13,
-      "total": 23
-    }
+    "split_positives": {
+      "fit": 12,
+      "eval": 14,
+      "total": 26
+    },
+    "split_band": [
+      0.5,
+      0.7
+    ],
+    "split_band_basis": "positives",
+    "split_criterion": "groups keyed by repo:path, ordered by sha256(group_key), greedy fill to 0.6 eval; a group never crosses the split; negatives are held out in eval so the threshold cannot be tuned against them",
+    "negatives_split": "eval",
+    "defect_origin": "injected",
+    "defect_origin_basis": "every source is a deliberately vulnerable teaching application, so the defect is planted by design rather than observed in production code; real-field recall stays unmeasured",
+    "supply_exhausted": [
+      {
+        "cwe": "078",
+        "found": 2,
+        "required": 3,
+        "status": "insufficient_n",
+        "sources": [
+          {
+            "repo": "juice-shop",
+            "verdict": "no sink",
+            "detail": "0 child_process references in 664 .ts files; the app shells out nowhere."
+          },
+          {
+            "repo": "goof",
+            "verdict": "1 real sink",
+            "detail": "routes/index.js:174 exec(cmd) is the only real sink; routes/index.js:39 and :220 are mongoose Query.exec()."
+          },
+          {
+            "repo": "dvna",
+            "verdict": "1 real sink",
+            "detail": "core/appHandler.js:39 exec('ping -c 2 ' + req.body.address) is the only shell sink."
+          },
+          {
+            "repo": "nodegoat",
+            "verdict": "no sink",
+            "detail": "contributions.js uses eval(), which is CWE-94; there is no shell exec."
+          }
+        ]
+      },
+      {
+        "cwe": "918",
+        "found": 1,
+        "required": 3,
+        "status": "insufficient_n",
+        "sources": [
+          {
+            "repo": "juice-shop",
+            "verdict": "1 real sink",
+            "detail": "routes/profileImageUrlUpload.ts:24 fetch(url) with req.body.imageUrl."
+          },
+          {
+            "repo": "goof",
+            "verdict": "no sink",
+            "detail": "no outbound request built from user input."
+          },
+          {
+            "repo": "dvna",
+            "verdict": "no sink",
+            "detail": "no SSRF module at all: 0 matches for ssrf, no a*-ssrf view, no axios/fetch/http.request. res.redirect(req.query.url) is an open redirect (CWE-601) and is not counted."
+          },
+          {
+            "repo": "nodegoat",
+            "verdict": "no sink",
+            "detail": "no outbound request built from user input."
+          }
+        ]
+      }
+    ]
   },
   "retired": {
     "set": "ds-1",
     "samples": 420,
     "groups": 210,
-    "reason": "#7 errata D1: every 'safe' half was a no-op write (before === after), ids were s-CWE-NN-MM, and no row named the control that made it safe. Retired by #41 step 3; git history keeps the files."
+    "reason": "issue #7 errata D1: every 'safe' half was a no-op write (before === after), ids were s-CWE-NN-MM, and no row named the control that made it safe. Retired by issue #41 step 3; git history keeps the files."
   },
   "sources": {
     "juice-shop": {
       "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
-      "url": "https://github.com/"
+      "url": "https://github.com/juice-shop/juice-shop",
+      "pedagogical": true
     },
     "goof": {
       "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
-      "url": "https://github.com/"
+      "url": "https://github.com/snyk-labs/nodejs-goof",
+      "pedagogical": true
     },
     "dvna": {
       "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
-      "url": "https://github.com/"
+      "url": "https://github.com/appsecco/dvna",
+      "pedagogical": true
     }
   },
   "samples": [
     {
       "sample_id": "js-cwe078-0001",
-      "group_id": "js-cwe078-0001",
+      "group_id": "goof:routes/index.js",
       "split": "fit",
       "cwe": "CWE-78",
       "risk_level": "high",
@@ -67,7 +140,7 @@
     },
     {
       "sample_id": "js-cwe078-0002",
-      "group_id": "js-cwe078-0002",
+      "group_id": "dvna:core/appHandler.js",
       "split": "eval",
       "cwe": "CWE-78",
       "risk_level": "high",
@@ -82,8 +155,8 @@
     },
     {
       "sample_id": "js-cwe089-0003",
-      "group_id": "js-cwe089-0003",
-      "split": "fit",
+      "group_id": "dvna:core/appHandler.js",
+      "split": "eval",
       "cwe": "CWE-89",
       "risk_level": "high",
       "paired_safe": false,
@@ -97,7 +170,7 @@
     },
     {
       "sample_id": "js-cwe798-0002",
-      "group_id": "js-cwe798-0002",
+      "group_id": "goof:app.js",
       "split": "fit",
       "cwe": "CWE-798",
       "risk_level": "low",
@@ -112,7 +185,7 @@
     },
     {
       "sample_id": "js-cwe798-0003",
-      "group_id": "js-cwe798-0003",
+      "group_id": "goof:app.js",
       "split": "fit",
       "cwe": "CWE-798",
       "risk_level": "low",
@@ -127,7 +200,7 @@
     },
     {
       "sample_id": "js-cwe798-0004",
-      "group_id": "js-cwe798-0004",
+      "group_id": "goof:mongoose-db.js",
       "split": "eval",
       "cwe": "CWE-798",
       "risk_level": "low",
@@ -135,15 +208,15 @@
       "language": "js",
       "path": "mongoose-db.js",
       "changed_lines": 2,
-      "content_sha256": "49a48c8589e5e74a79e499f942ddd7c27189f2b8c36a9e6d0c0f5faad612cd70",
+      "content_sha256": "f3f302e0951011c3f30d211311a71c667d3b01fe39e349acd56a1c041fd0352a",
       "expected_detectable_by": [
         "semgrep"
       ]
     },
     {
       "sample_id": "ts-cwe022-0001",
-      "group_id": "ts-cwe022-0001",
-      "split": "fit",
+      "group_id": "juice-shop:routes/dataErasure.ts",
+      "split": "eval",
       "cwe": "CWE-22",
       "risk_level": "high",
       "paired_safe": false,
@@ -157,8 +230,8 @@
     },
     {
       "sample_id": "ts-cwe022-0002",
-      "group_id": "ts-cwe022-0002",
-      "split": "fit",
+      "group_id": "juice-shop:routes/fileServer.ts",
+      "split": "eval",
       "cwe": "CWE-22",
       "risk_level": "high",
       "paired_safe": false,
@@ -172,7 +245,7 @@
     },
     {
       "sample_id": "ts-cwe022-0003",
-      "group_id": "ts-cwe022-0003",
+      "group_id": "juice-shop:routes/vulnCodeSnippet.ts",
       "split": "fit",
       "cwe": "CWE-22",
       "risk_level": "high",
@@ -187,8 +260,8 @@
     },
     {
       "sample_id": "ts-cwe022-0004",
-      "group_id": "ts-cwe022-0004",
-      "split": "eval",
+      "group_id": "juice-shop:routes/vulnCodeFixes.ts",
+      "split": "fit",
       "cwe": "CWE-22",
       "risk_level": "high",
       "paired_safe": false,
@@ -202,8 +275,8 @@
     },
     {
       "sample_id": "ts-cwe022-0005",
-      "group_id": "ts-cwe022-0005",
-      "split": "eval",
+      "group_id": "juice-shop:routes/fileUpload.ts",
+      "split": "fit",
       "cwe": "CWE-22",
       "risk_level": "high",
       "paired_safe": false,
@@ -217,7 +290,7 @@
     },
     {
       "sample_id": "ts-cwe022-9001",
-      "group_id": "ts-cwe022-9001",
+      "group_id": "juice-shop:routes/logfileServer.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -230,7 +303,7 @@
     },
     {
       "sample_id": "ts-cwe022-9002",
-      "group_id": "ts-cwe022-9002",
+      "group_id": "juice-shop:routes/quarantineServer.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -243,7 +316,7 @@
     },
     {
       "sample_id": "ts-cwe022-9003",
-      "group_id": "ts-cwe022-9003",
+      "group_id": "juice-shop:routes/keyServer.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -256,7 +329,7 @@
     },
     {
       "sample_id": "ts-cwe022-9008",
-      "group_id": "ts-cwe022-9008",
+      "group_id": "juice-shop:routes/videoHandler.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -269,7 +342,7 @@
     },
     {
       "sample_id": "ts-cwe079-0001",
-      "group_id": "ts-cwe079-0001",
+      "group_id": "juice-shop:frontend/src/app/search-result/search-result.component.ts",
       "split": "fit",
       "cwe": "CWE-79",
       "risk_level": "low",
@@ -284,7 +357,7 @@
     },
     {
       "sample_id": "ts-cwe079-0002",
-      "group_id": "ts-cwe079-0002",
+      "group_id": "juice-shop:frontend/src/app/search-result/search-result.component.ts",
       "split": "fit",
       "cwe": "CWE-79",
       "risk_level": "low",
@@ -299,8 +372,8 @@
     },
     {
       "sample_id": "ts-cwe079-0003",
-      "group_id": "ts-cwe079-0003",
-      "split": "fit",
+      "group_id": "juice-shop:frontend/src/app/data-export/data-export.component.ts",
+      "split": "eval",
       "cwe": "CWE-79",
       "risk_level": "low",
       "paired_safe": false,
@@ -314,8 +387,8 @@
     },
     {
       "sample_id": "ts-cwe079-0004",
-      "group_id": "ts-cwe079-0004",
-      "split": "fit",
+      "group_id": "juice-shop:frontend/src/app/track-result/track-result.component.ts",
+      "split": "eval",
       "cwe": "CWE-79",
       "risk_level": "low",
       "paired_safe": false,
@@ -329,7 +402,7 @@
     },
     {
       "sample_id": "ts-cwe079-0005",
-      "group_id": "ts-cwe079-0005",
+      "group_id": "juice-shop:frontend/src/app/administration/administration.component.ts",
       "split": "eval",
       "cwe": "CWE-79",
       "risk_level": "low",
@@ -344,7 +417,7 @@
     },
     {
       "sample_id": "ts-cwe079-0006",
-      "group_id": "ts-cwe079-0006",
+      "group_id": "juice-shop:frontend/src/app/administration/administration.component.ts",
       "split": "eval",
       "cwe": "CWE-79",
       "risk_level": "low",
@@ -359,7 +432,7 @@
     },
     {
       "sample_id": "ts-cwe079-0007",
-      "group_id": "ts-cwe079-0007",
+      "group_id": "juice-shop:frontend/src/app/last-login-ip/last-login-ip.component.ts",
       "split": "eval",
       "cwe": "CWE-79",
       "risk_level": "low",
@@ -374,7 +447,7 @@
     },
     {
       "sample_id": "ts-cwe079-9005",
-      "group_id": "ts-cwe079-9005",
+      "group_id": "juice-shop:frontend/src/app/score-board/score-board.component.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -387,7 +460,7 @@
     },
     {
       "sample_id": "ts-cwe089-0001",
-      "group_id": "ts-cwe089-0001",
+      "group_id": "juice-shop:routes/search.ts",
       "split": "fit",
       "cwe": "CWE-89",
       "risk_level": "high",
@@ -402,8 +475,8 @@
     },
     {
       "sample_id": "ts-cwe089-0002",
-      "group_id": "ts-cwe089-0002",
-      "split": "eval",
+      "group_id": "juice-shop:routes/login.ts",
+      "split": "fit",
       "cwe": "CWE-89",
       "risk_level": "high",
       "paired_safe": false,
@@ -417,7 +490,7 @@
     },
     {
       "sample_id": "ts-cwe094-0001",
-      "group_id": "ts-cwe094-0001",
+      "group_id": "juice-shop:routes/userProfile.ts",
       "split": "fit",
       "cwe": "CWE-94",
       "risk_level": "high",
@@ -432,8 +505,8 @@
     },
     {
       "sample_id": "ts-cwe094-0002",
-      "group_id": "ts-cwe094-0002",
-      "split": "fit",
+      "group_id": "juice-shop:routes/b2bOrder.ts",
+      "split": "eval",
       "cwe": "CWE-94",
       "risk_level": "high",
       "paired_safe": false,
@@ -447,8 +520,8 @@
     },
     {
       "sample_id": "ts-cwe094-0003",
-      "group_id": "ts-cwe094-0003",
-      "split": "eval",
+      "group_id": "juice-shop:routes/fileUpload.ts",
+      "split": "fit",
       "cwe": "CWE-94",
       "risk_level": "high",
       "paired_safe": false,
@@ -462,7 +535,7 @@
     },
     {
       "sample_id": "ts-cwe094-0004",
-      "group_id": "ts-cwe094-0004",
+      "group_id": "juice-shop:lib/xml.ts",
       "split": "eval",
       "cwe": "CWE-94",
       "risk_level": "high",
@@ -477,7 +550,7 @@
     },
     {
       "sample_id": "ts-cwe094-9004",
-      "group_id": "ts-cwe094-9004",
+      "group_id": "juice-shop:routes/captcha.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",
@@ -490,7 +563,7 @@
     },
     {
       "sample_id": "ts-cwe798-0001",
-      "group_id": "ts-cwe798-0001",
+      "group_id": "juice-shop:lib/insecurity.ts",
       "split": "eval",
       "cwe": "CWE-798",
       "risk_level": "low",
@@ -505,8 +578,8 @@
     },
     {
       "sample_id": "ts-cwe918-0001",
-      "group_id": "ts-cwe918-0001",
-      "split": "fit",
+      "group_id": "juice-shop:routes/profileImageUrlUpload.ts",
+      "split": "eval",
       "cwe": "CWE-918",
       "risk_level": "high",
       "paired_safe": false,
@@ -520,7 +593,7 @@
     },
     {
       "sample_id": "ts-cwe918-9007",
-      "group_id": "ts-cwe918-9007",
+      "group_id": "juice-shop:lib/startup/validatePreconditions.ts",
       "split": "eval",
       "cwe": null,
       "risk_level": "high",

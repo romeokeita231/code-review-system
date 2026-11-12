@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe079-0003",
+  "group_id": "juice-shop:frontend/src/app/data-export/data-export.component.ts",
   "repo": "juice-shop",
   "file_path": "frontend/src/app/data-export/data-export.component.ts",
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { Component, type OnInit, inject, ChangeDetectionStrategy } from '@angular/core'\nimport { UntypedFormControl, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms'\nimport { ImageCaptchaService } from '../Services/image-captcha.service'\nimport { DataSubjectService } from '../Services/data-subject.service'\nimport { DomSanitizer } from '@angular/platform-browser'\nimport { MatButtonModule } from '@angular/material/button'\nimport { MatInputModule } from '@angular/material/input'\nimport { MatLabel, MatFormFieldModule, MatHint, MatError } from '@angular/material/form-field'\nimport { MatRadioGroup, MatRadioButton } from '@angular/material/radio'\n\nimport { TranslateModule } from '@ngx-translate/core'\nimport { MatCardModule } from '@angular/material/card'\n\nimport { MatIconModule } from '@angular/material/icon'\n\n@Component({\n  changeDetection: ChangeDetectionStrategy.Eager,\n  selector: 'app-data-export',\n  templateUrl: './data-export.component.html',\n  styleUrls: ['./data-export.component.scss'],\n  imports: [MatCardModule, TranslateModule, MatRadioGroup, FormsModule, ReactiveFormsModule, MatLabel, MatRadioButton, MatFormFieldModule, MatInputModule, MatHint, MatError, MatButtonModule, MatIconModule]\n})\nexport class DataExportComponent implements OnInit {\n  sanitizer = inject(DomSanitizer)\n  private readonly imageCaptchaService = inject(ImageCaptchaService)\n  private readonly dataSubjectService = inject(DataSubjectService)\n\n  public captchaControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, Validators.minLength(5)])\n  public formatControl: UntypedFormControl = new UntypedFormControl('', [Validators.required])\n  public captcha: any\n  private dataRequest: any = undefined\n  public confirmation: any\n  public error: any\n  public lastSuccessfulTry: any\n  public presenceOfCaptcha = false\n  public userData: any\n  ngOnInit (): void {\n    this.needCaptcha()\n    this.dataRequest = {}\n  }\n\n  needCaptcha () {\n    const nowTime = new Date()\n    const timeOfCaptcha = localStorage.getItem('lstdtxprt') ? new Date(JSON.parse(String(localStorage.getItem('lstdtxprt')))) : new Date(0)\n    if (nowTime.getTime() - timeOfCaptcha.getTime() < 300000) {\n      this.getNewCaptcha()\n      this.presenceOfCaptcha = true\n    }\n  }\n\n  getNewCaptcha () {\n    this.imageCaptchaService.getCaptcha().subscribe((data: any) => {\n      this.captcha = this.sanitizer.bypassSecurityTrustHtml(data.image)\n    })\n  }\n\n  save () {\n    if (this.presenceOfCaptcha) {\n      this.dataRequest.answer = this.captchaControl.value\n    }\n    this.dataRequest.format = this.formatControl.value\n    this.dataSubjectService.dataExport(this.dataRequest).subscribe({\n      next: (data: any) => {\n        this.error = null\n        this.confirmation = data.confirmation\n        this.userData = data.userData\n        window.open('', '_blank', 'width=500')?.document.write(String(this.userData).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))\n        this.lastSuccessfulTry = new Date()\n        localStorage.setItem('lstdtxprt', JSON.stringify(this.lastSuccessfulTry))\n        this.ngOnInit()\n        this.resetForm()\n      },\n      error: (error) => {\n        this.error = error.error\n        this.confirmation = null\n        this.resetFormError()\n      }\n    })\n  }\n\n  resetForm () {\n    this.captchaControl.markAsUntouched()\n    this.captchaControl.markAsPristine()\n    this.captchaControl.setValue('')\n    this.formatControl.markAsUntouched()\n    this.formatControl.markAsPristine()\n    this.formatControl.setValue('')\n  }\n\n  resetFormError () {\n    this.captchaControl.markAsUntouched()\n    this.captchaControl.markAsPristine()\n    this.captchaControl.setValue('')\n  }\n}\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "ts-cwe079-0003#d1",
+      "defect_id": "ts-cwe079-0003:d1",
       "cwe": "CWE-79",
       "file": "frontend/src/app/data-export/data-export.component.ts",
       "line_start": 72,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:frontend/src/app/data-export/data-export.component.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "82735652d2852acab8852c6517597483536f37e9"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "eval"
 }

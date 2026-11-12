@@ -1,418 +1,164 @@
+/**
+ * Dataset gate.
+ *
+ * Two dataset kinds, two schemas, chosen by the manifest's `kind` - no version
+ * negotiation: `ds-1` is retired and its shape is gone, so a file that still
+ * looks like it fails loudly instead of being read through a compatibility
+ * layer.
+ *
+ *   --conformance   report spec conformance as structured violations
+ *   (default)       run the gate; exit 1 on any violation
+ *
+ * The gate is offline on purpose: it checks the committed tree against itself
+ * (hashes, provenance, labels, splits) and never calls a detector or a network.
+ */
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { DatasetManifest, SourceName } from "../src/contracts/index.js";
-import { CWES, diffCount, riskOf, type Cwe } from "./shared.js";
 
-const EXPECTED_SAMPLE_COUNT = 420;
-const EXPECTED_GROUPS = 210;
-const EXPECTED_PER_CWE = 30;
+/** §6: the seven annotated classes, padded. CWE-502 is not one of them. */
+export const SPEC_CWES = ["022", "078", "079", "089", "094", "798", "918"] as const;
+export type SpecCwe = (typeof SPEC_CWES)[number];
 
-const Label = z.object({
-  path: z.string().min(1),
-  startLine: z.number().int().positive(),
-  endLine: z.number().int().positive(),
-  cwe: z.string().regex(/^CWE-\d+$/).nullable(),
-});
-
-export const SampleFile = z.object({
-  sample_id: z.string().min(1),
-  group_id: z.string().min(1),
-  split: z.enum(["fit", "eval"]),
-  cwe: z.string().regex(/^CWE-\d+$/).nullable(),
-  risk_level: z.enum(["low", "medium", "high"]),
-  paired_safe: z.boolean(),
-  language: z.string().min(1),
-  path: z.string().min(1),
-  before: z.string(),
-  after: z.string(),
-  changed_lines: z.number().int().nonnegative(),
-  expected_detectable_by: z.array(SourceName),
-  labels: z.array(Label),
-});
-export type SampleFile = z.infer<typeof SampleFile>;
+/** A class below this many rows is reported but excluded from per-class claims. */
+export const MIN_PER_CLASS = 3;
+/** Eval share of the positives. */
+export const SPLIT_BAND = [0.5, 0.7] as const;
+/** The upstream directory that must never be sampled (issue #41 ruling). */
+export const CODEFIXES = "data/static/codefixes/";
 
 const sha256 = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
-
-const isCwe = (value: string | null): value is Cwe => value !== null && (CWES as readonly string[]).includes(value);
-
-function lineCount(text: string): number {
-  const parts = text.split("\n");
-  return text.endsWith("\n") ? parts.length - 1 : parts.length;
-}
-
-interface Loaded {
-  file: SampleFile;
-  hash: string;
-}
-
-export interface VerifyResult {
-  ok: boolean;
-  errors: string[];
-}
-
-const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
-export async function verifyDataset(dir: string): Promise<VerifyResult> {
-  const errors: string[] = [];
-  const manifestPath = join(dir, "manifest.json");
-  const samplesDir = join(dir, "samples");
-
-  let manifest: DatasetManifest;
-  try {
-    const parsed = DatasetManifest.safeParse(JSON.parse(await readFile(manifestPath, "utf8")));
-    if (!parsed.success) {
-      return {
-        ok: false,
-        errors: [`manifest: schema validation failed: ${parsed.error.issues[0]?.message ?? "unknown"}`],
-      };
-    }
-    manifest = parsed.data;
-  } catch (error) {
-    return { ok: false, errors: [`manifest: cannot read ${manifestPath}: ${errorText(error)}`] };
-  }
-
-  let fileNames: string[];
-  try {
-    fileNames = (await readdir(samplesDir)).filter((name) => name.endsWith(".json")).sort();
-  } catch (error) {
-    return { ok: false, errors: [`samples: cannot read ${samplesDir}: ${errorText(error)}`] };
-  }
-
-  const loaded = new Map<string, Loaded>();
-  for (const name of fileNames) {
-    let data: unknown;
-    try {
-      data = JSON.parse(await readFile(join(samplesDir, name), "utf8"));
-    } catch (error) {
-      errors.push(`samples/${name}: invalid JSON: ${errorText(error)}`);
-      continue;
-    }
-    const parsed = SampleFile.safeParse(data);
-    if (!parsed.success) {
-      errors.push(`samples/${name}: schema invalid: ${parsed.error.issues[0]?.message ?? "unknown"}`);
-      continue;
-    }
-    const file = parsed.data;
-    if (name !== `${file.sample_id}.json`) {
-      errors.push(`samples/${name}: filename does not match sample_id ${file.sample_id}`);
-    }
-    if (loaded.has(file.sample_id)) {
-      errors.push(`duplicate sample_id ${file.sample_id}`);
-    }
-    loaded.set(file.sample_id, { file, hash: sha256(`${file.before}\u0000${file.after}`) });
-  }
-
-  if (fileNames.length !== EXPECTED_SAMPLE_COUNT) {
-    errors.push(`sample count: expected ${EXPECTED_SAMPLE_COUNT} files, got ${fileNames.length}`);
-  }
-  if (loaded.size !== EXPECTED_SAMPLE_COUNT) {
-    errors.push(`sample count: expected ${EXPECTED_SAMPLE_COUNT} parsed samples, got ${loaded.size}`);
-  }
-
-  for (const { file } of loaded.values()) {
-    if (file.before.includes("\r") || file.after.includes("\r")) {
-      errors.push(`${file.sample_id}: content must use LF line endings`);
-    }
-    if (!file.before.endsWith("\n") || !file.after.endsWith("\n")) {
-      errors.push(`${file.sample_id}: content must end with a trailing LF`);
-    }
-    if (file.language !== "ts") {
-      errors.push(`${file.sample_id}: language must be "ts"`);
-    }
-    if (file.expected_detectable_by.length === 0) {
-      errors.push(`${file.sample_id}: expected_detectable_by must not be empty`);
-    }
-    if (file.paired_safe ? file.labels.length !== 0 : file.labels.length !== 1) {
-      errors.push(`${file.sample_id}: labels must be exactly one entry for main samples and none for safe samples`);
-    }
-    const beforeLines = file.before.endsWith("\n") ? file.before.slice(0, -1).split("\n") : file.before.split("\n");
-    const afterLines = file.after.endsWith("\n") ? file.after.slice(0, -1).split("\n") : file.after.split("\n");
-    const actualChanged = diffCount(beforeLines, afterLines);
-    if (actualChanged !== file.changed_lines) {
-      errors.push(`${file.sample_id}: changed_lines ${file.changed_lines} != actual ${actualChanged}`);
-    }
-    if (isCwe(file.cwe)) {
-      const expectedRisk = riskOf(file.cwe, file.changed_lines);
-      if (expectedRisk !== file.risk_level) {
-        errors.push(`${file.sample_id}: risk_level ${file.risk_level} != derived ${expectedRisk}`);
-      }
-    } else {
-      errors.push(`${file.sample_id}: cwe ${String(file.cwe)} is not an annotated category`);
-    }
-    const limit = lineCount(file.after);
-    for (const label of file.labels) {
-      if (label.path !== file.path) {
-        errors.push(`${file.sample_id}: label path ${label.path} != sample path ${file.path}`);
-      }
-      if (label.cwe !== file.cwe) {
-        errors.push(`${file.sample_id}: label cwe ${String(label.cwe)} != sample cwe ${String(file.cwe)}`);
-      }
-      if (label.startLine < 1 || label.endLine < label.startLine || label.endLine > limit) {
-        errors.push(
-          `${file.sample_id}: label ${label.startLine}-${label.endLine} outside file bounds 1-${limit}`,
-        );
-      }
-    }
-  }
-
-  const manifestIds = new Set(manifest.samples.map((sample) => sample.sample_id));
-  if (manifest.samples.length !== EXPECTED_SAMPLE_COUNT) {
-    errors.push(`manifest: expected ${EXPECTED_SAMPLE_COUNT} entries, got ${manifest.samples.length}`);
-  }
-  for (const sample of manifest.samples) {
-    if (!loaded.has(sample.sample_id)) {
-      errors.push(`manifest: missing sample file for ${sample.sample_id}`);
-    }
-  }
-  for (const id of loaded.keys()) {
-    if (!manifestIds.has(id)) {
-      errors.push(`manifest: sample file ${id} is not listed`);
-    }
-  }
-
-  const rootLines: string[] = [];
-  for (const entry of manifest.samples) {
-    const record = loaded.get(entry.sample_id);
-    if (!record) continue;
-    if (record.hash !== entry.content_sha256) {
-      errors.push(
-        `content hash mismatch for ${entry.sample_id}: manifest ${entry.content_sha256} != actual ${record.hash}`,
-      );
-    }
-    const fields = [
-      "group_id",
-      "split",
-      "cwe",
-      "risk_level",
-      "paired_safe",
-      "language",
-      "path",
-      "changed_lines",
-      "expected_detectable_by",
-    ] as const;
-    for (const field of fields) {
-      if (JSON.stringify(record.file[field]) !== JSON.stringify(entry[field])) {
-        errors.push(`manifest/file mismatch for ${entry.sample_id}: ${field}`);
-      }
-    }
-    rootLines.push(`${entry.sample_id}:${record.hash}`);
-  }
-
-  rootLines.sort();
-  const actualRoot = sha256(rootLines.join("\n"));
-  if (actualRoot !== manifest.content_sha256_root) {
-    errors.push(
-      `root hash drift: manifest ${manifest.content_sha256_root} != actual ${actualRoot}`,
-    );
-  }
-  const declaredRoot = sha256(
-    manifest.samples
-      .map((sample) => `${sample.sample_id}:${sample.content_sha256}`)
-      .sort()
-      .join("\n"),
-  );
-  if (declaredRoot !== manifest.content_sha256_root) {
-    errors.push(`root hash mismatch: declared entries hash to ${declaredRoot}`);
-  }
-
-  const groups = new Map<string, SampleFile[]>();
-  for (const { file } of loaded.values()) {
-    const bucket = groups.get(file.group_id) ?? [];
-    bucket.push(file);
-    groups.set(file.group_id, bucket);
-  }
-  if (groups.size !== EXPECTED_GROUPS) {
-    errors.push(`group count: expected ${EXPECTED_GROUPS}, got ${groups.size}`);
-  }
-  for (const [groupId, bucket] of groups) {
-    if (bucket.length !== 2) {
-      errors.push(`group ${groupId}: expected 2 samples, got ${bucket.length}`);
-      continue;
-    }
-    const main = bucket.find((sample) => !sample.paired_safe);
-    const safe = bucket.find((sample) => sample.paired_safe);
-    if (!main || !safe) {
-      errors.push(`group ${groupId}: missing main or paired safe variant`);
-      continue;
-    }
-    if (safe.sample_id !== `${main.sample_id}-safe`) {
-      errors.push(`group ${groupId}: safe sample_id ${safe.sample_id} is not ${main.sample_id}-safe`);
-    }
-    if (main.cwe !== safe.cwe) {
-      errors.push(`group ${groupId}: main/safe cwe differ`);
-    }
-    if (safe.labels.length !== 0) {
-      errors.push(`group ${groupId}: paired safe variant carries labels`);
-    }
-    if (main.split !== safe.split) {
-      errors.push(`split leakage in group ${groupId}: main=${main.split} safe=${safe.split}`);
-    }
-  }
-
-  const perCwe = new Map<Cwe, { fit: number; eval: number }>();
-  for (const { file } of loaded.values()) {
-    if (file.paired_safe || !isCwe(file.cwe)) continue;
-    const bucket = perCwe.get(file.cwe) ?? { fit: 0, eval: 0 };
-    bucket[file.split] += 1;
-    perCwe.set(file.cwe, bucket);
-  }
-  let totalFit = 0;
-  let totalGroups = 0;
-  for (const cwe of CWES) {
-    const bucket = perCwe.get(cwe);
-    if (!bucket) {
-      errors.push(`split: ${cwe} has no samples`);
-      continue;
-    }
-    if (bucket.fit === 0 || bucket.eval === 0) {
-      errors.push(`split: ${cwe} is missing a split (fit=${bucket.fit} eval=${bucket.eval})`);
-    }
-    if (bucket.fit + bucket.eval !== EXPECTED_PER_CWE) {
-      errors.push(`split: ${cwe} has ${bucket.fit + bucket.eval} groups, expected ${EXPECTED_PER_CWE}`);
-    }
-    if (bucket.fit < 6 || bucket.eval < 6) {
-      errors.push(`per-CWE split ratio out of band for ${cwe}: fit=${bucket.fit} eval=${bucket.eval}`);
-    }
-    totalFit += bucket.fit;
-    totalGroups += bucket.fit + bucket.eval;
-  }
-  if (totalGroups > 0) {
-    const share = totalFit / totalGroups;
-    if (share < 0.54 || share > 0.66) {
-      errors.push(`global fit/eval ratio out of band: fit=${totalFit} total=${totalGroups}`);
-    }
-  }
-
-  return { ok: errors.length === 0, errors };
-}
-
-const invokedDirectly = (): boolean => {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  return resolve(entry).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase();
-};
-
-/* -------------------------------------------------------------------------
- * Annotation-spec conformance (issue #7 §13)
- *
- * `verifyDataset` above validates the dataset against its own manifest: hashes,
- * counts, pairing, split leakage. That is *self*-consistency, and a dataset
- * whose schema drifted from the spec passes it perfectly - which is exactly the
- * failure this repo hit: `cwe` instead of `sample_cwe`, `paired_safe` instead
- * of `variant_of`, `medium` risk levels, an `expected_detectable_by` array, and
- * CWE-502 living where §6 says CWE-918 should be.
- *
- * Conformance validates against the spec text instead of the dataset's current
- * shape. It is meant to fail, loudly, until the dataset is rebuilt (P2).
- *
- * The `noop` / `rationale` / `variant` / `version` rules are the #7 errata ("D1"
- * in #41): a sample has to be a real change, a safe variant has to name the
- * control that makes it safe, and the rebuilt set is schema_version 2 / `ds-2`.
- * Without them the negatives are free to be no-op writes, which is how the old
- * set produced a precision denominator that was true by construction.
- * ---------------------------------------------------------------------- */
-
-/** §6: the seven annotated classes. CWE-502 is not one of them. */
-export const SPEC_CWES = ["022", "078", "079", "089", "094", "798", "918"] as const;
-
-/** §13: `sample_set` enum. The spec spells CWE-Bench "cwebrench" in two
- * places; both readings are accepted so the typo does not mask real drift. */
-export const SPEC_SAMPLE_SETS = ["self", "aacr", "securityeval", "cwebench", "cwebrench"];
-
-const DefectSpec = z.object({
-  defect_id: z.string().min(1),
-  cwe: z.string().nullable(),
-  file: z.string().min(1),
-  line_start: z.number().int().positive(),
-  line_end: z.number().int().positive(),
-  symbol: z.string().nullable(),
-  evidence: z.string().min(1),
-});
-
-/** ConformanceSample row. `schema_version` 1 is the drifted set, 2 is the #7
- * errata shape (real diff + named control on every safe variant). */
-export const ConformanceSample = z
-  .object({
-    sample_id: z.string().min(1),
-    schema_version: z.union([z.literal(1), z.literal(2)]),
-    unit: z.literal("file_write"),
-    language: z.enum(["ts", "js", "tsx", "jsx"]),
-    sample_set: z.enum(["self", "aacr", "securityeval", "cwebench", "cwebrench"]),
-    group_id: z.string().min(1),
-    repo: z.string().min(1),
-    file_path: z.string().min(1),
-    before: z.string(),
-    after: z.string(),
-    label: z.union([z.literal(0), z.literal(1)]).optional(),
-    defects: z.array(DefectSpec),
-    sample_cwe: z.string().regex(/^CWE-\d+$/).nullable(),
-    variant_of: z.string().nullable(),
-    /** §13 errata: required on `variant_of` rows; must name the control. */
-    rationale: z.string().nullable().optional(),
-    expected_detectable_by: z.enum(["both", "semgrep_only", "aor_only"]).nullable(),
-    risk_level: z.enum(["low", "high"]),
-    contamination_risk: z.enum(["low", "high"]),
-    origin: z.object({
-      kind: z.enum(["public_repo", "self_rewritten", "aacr", "securityeval", "cwebrench", "cwebench"]),
-      ref: z.string().min(1),
-      advisory: z.string().nullable(),
-    }),
-    annotator: z.enum(["self", "advisor"]).nullable(),
-  })
-  .strict();
-export type ConformanceSample = z.infer<typeof ConformanceSample>;
-
-export interface Violation {
-  rule: string;
-  sample: string | null;
-  detail: string;
-}
-
-export interface ConformanceSummary {
-  rule: string;
-  count: number;
-  examples: string[];
-}
-
-export interface ConformanceResult {
-  ok: boolean;
-  samples: number;
-  violations: Violation[];
-  summary: ConformanceSummary[];
-}
-
-const RULE_ORDER = [
-  "json",
-  "schema",
-  "version",
-  "sample_id",
-  "noop",
-  "rationale",
-  "risk_level",
-  "defects",
-  "variant",
-  "contamination",
-  "annotator",
-  "classes",
-  "split_ratio",
-] as const;
 
 const str = (value: unknown): string | null => (typeof value === "string" ? value : null);
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+export function lineCount(text: string): number {
+  const parts = text.split("\n");
+  return text.endsWith("\n") ? parts.length - 1 : parts.length;
+}
+
+export function diffCount(a: string[], b: string[]): number {
+  const n = a.length;
+  const m = b.length;
+  let previous = new Array<number>(n + 1).fill(0);
+  for (let i = 1; i <= m; i += 1) {
+    const current = new Array<number>(n + 1).fill(0);
+    for (let j = 1; j <= n; j += 1) {
+      current[j] = a[j - 1] === b[i - 1] ? previous[j - 1]! + 1 : Math.max(previous[j]!, current[j - 1]!);
+    }
+    previous = current;
+  }
+  return n + m - 2 * previous[n]!;
+}
+
+/** 1-based inclusive window of `after` lines that differ from `before`. */
+export function changedWindow(after: string, before: string): { start: number; end: number } {
+  const a = after.split("\n");
+  const b = before === "" ? [] : before.split("\n");
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p += 1;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s += 1;
+  return { start: p + 1, end: Math.max(p + 1, a.length - s) };
+}
+
+/** §9: low iff the class is 079/798 and the change is at most 30 lines, else high. */
+export function specRiskLevel(sampleCwe: string | null, changedLines: number): "low" | "high" {
+  const key = sampleCwe === null ? null : sampleCwe.replace(/^CWE-/i, "").padStart(3, "0");
+  return (key === "079" || key === "798") && changedLines <= 30 ? "low" : "high";
+}
+
+/** §13: `{lang}-cwe{NNN}-{seq}`, or `aacr-{lang}-{seq}` for AACR rows. */
+export function specSampleId(id: string, sampleSet: string): boolean {
+  if (sampleSet === "aacr") return /^aacr-(ts|js|tsx|jsx)-\d{4}$/.test(id);
+  return /^(ts|js|tsx|jsx)-cwe\d{3}-\d{4}$/.test(id);
+}
+
+/** `CWE-22` / `CWE-022` / `022` all normalise to `022`; null stays null. */
+export function classKey(sampleCwe: string | null): SpecCwe | null {
+  if (sampleCwe === null) return null;
+  const digits = /CWE-(\d+)/i.exec(sampleCwe)?.[1] ?? sampleCwe;
+  const padded = digits.padStart(3, "0");
+  return (SPEC_CWES as readonly string[]).includes(padded) ? (padded as SpecCwe) : null;
+}
+
+/* ------------------------------------------------------------------ schema */
+
+const Defect = z
+  .object({
+    defect_id: z.string().min(1),
+    cwe: z.string().regex(/^CWE-\d+$/).nullable(),
+    file: z.string().min(1),
+    line_start: z.number().int().positive(),
+    line_end: z.number().int().positive(),
+    symbol: z.string().nullable(),
+    evidence: z.string().min(1),
+  })
+  .strict();
+
+const Shared = {
+  sample_id: z.string().min(1),
+  unit: z.literal("file_write"),
+  language: z.enum(["ts", "js", "tsx", "jsx"]),
+  group_id: z.string().min(1),
+  repo: z.string().min(1),
+  file_path: z.string().min(1),
+  before: z.string(),
+  after: z.string(),
+  label: z.union([z.literal(0), z.literal(1)]),
+  defects: z.array(Defect),
+  sample_cwe: z.string().regex(/^CWE-\d+$/).nullable(),
+  variant_of: z.string().nullable(),
+  expected_detectable_by: z.enum(["both", "semgrep_only", "aor_only"]).nullable(),
+  risk_level: z.enum(["low", "high"]),
+  contamination_risk: z.enum(["low", "high"]),
+  origin: z
+    .object({
+      kind: z.enum(["public_repo", "self_rewritten", "aacr", "securityeval", "cwebrench", "cwebench"]),
+      ref: z.string().min(1),
+      advisory: z.string().nullable(),
+      blob_sha: z.string().regex(/^[0-9a-f]{40}$/).nullable().optional(),
+    })
+    .strict(),
+  annotator: z.enum(["self", "advisor"]).nullable(),
+};
+
+/** Self-built (`ds-2`) row: every field is derived by `build-ds2.ts`. */
+export const SelfSample = z
+  .object({
+    ...Shared,
+    schema_version: z.literal(2),
+    sample_set: z.literal("self"),
+    changed_lines: z.number().int().nonnegative(),
+    rationale: z.string(),
+    /** Planted by design, or observed in production code. */
+    defect_origin: z.enum(["real", "injected"]).nullable(),
+    split: z.enum(["fit", "eval"]),
+  })
+  .strict();
+export type SelfSample = z.infer<typeof SelfSample>;
+
+/** Imported AACR row: no authored control, so no rationale and no blob pin. */
+export const AacrSample = z
+  .object({
+    ...Shared,
+    schema_version: z.literal(1),
+    sample_set: z.literal("aacr"),
+  })
+  .strict();
+
+/* ------------------------------------------------------------- rule helpers */
 
 /** Lines that carry no behaviour: comments and blanks. */
 const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|\*\/|#)/;
 
 /**
  * D1: a diff must touch at least one line that is not a comment or blank.
- *
- * Compared on the changed window only (common prefix/suffix stripped), so a
- * reformat that only moves a comment around is still called out.
+ * Compared on the changed window only, so a reformat that only moves a comment
+ * is still called out.
  */
 export function substantiveChange(before: string, after: string): boolean {
   const a = before.split("\n");
@@ -437,11 +183,7 @@ const NOT_A_CONTROL = new RegExp(
   "i",
 );
 
-/**
- * D1: `rationale` must be a control name (参数化 / 路径包含校验 / 转义 / 白名单 /
- * 移除 sink), not "已修改". Only the degenerate answers are machine-detectable;
- * whether the named control actually holds is the annotator's job (§5).
- */
+/** A `rationale` must name a control, not say "changed". */
 export function isControlName(text: string): boolean {
   const normalized = text.trim().replace(/\s+/g, " ");
   if (normalized.length < 3) return false;
@@ -449,286 +191,56 @@ export function isControlName(text: string): boolean {
   return /\p{L}/u.test(normalized);
 }
 
-/**
- * The spec's `sample_cwe`, read with a fallback to the pre-spec name `cwe`.
- * Diagnostics (risk derivation, class table, split ratio) still work on a
- * drifted dataset; the strict schema reports the rename separately, so the
- * fallback never hides it - it just lets the other rules keep running.
- */
-const sampleCweOf = (raw: Record<string, unknown>): string | null =>
-  str(raw["sample_cwe"]) ?? str(raw["cwe"]);
-
-/** §9: low iff the class is 079/798 and the change is at most 30 lines, else high. */
-export function specRiskLevel(sampleCwe: string | null, changedLines: number): "low" | "high" {
-  const key = sampleCwe === null ? null : sampleCwe.replace(/^CWE-/i, "").padStart(3, "0");
-  const low = (key === "079" || key === "798") && changedLines <= 30;
-  return low ? "low" : "high";
+export interface Violation {
+  rule: string;
+  sample: string | null;
+  detail: string;
 }
 
-/** §13: `{lang}-cwe{NNN}-{seq}`, or `aacr-{lang}-{seq}` for AACR rows. */
-export function specSampleId(id: string, sampleSet: string): boolean {
-  if (sampleSet === "aacr") return /^aacr-(ts|js|tsx|jsx)-\d{4}$/.test(id);
-  return /^(ts|js|tsx|jsx)-cwe\d{3}-\d{4}$/.test(id);
+export interface ConformanceSummary {
+  rule: string;
+  count: number;
+  examples: string[];
 }
 
-export async function verifyConformance(dir: string): Promise<ConformanceResult> {
-  const violations: Violation[] = [];
-  const add = (rule: Violation["rule"], sample: string | null, detail: string): void => {
-    violations.push({ rule, sample, detail });
-  };
+export interface ConformanceResult {
+  ok: boolean;
+  samples: number;
+  violations: Violation[];
+  summary: ConformanceSummary[];
+}
 
-  // Read the manifest leniently: `split` and `version` are the only things
-  // conformance needs from it, and validating it against the *current* contract
-  // schema would make this check inherit the very drift it is meant to catch.
-  let manifest: { version: string; samples: Array<{ sample_id: string; split?: string }> };
-  try {
-    const parsed = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")) as unknown;
-    const samples = asRecord(parsed)["samples"];
-    if (!Array.isArray(samples)) throw new Error("manifest has no `samples` array");
-    manifest = {
-      version: str(asRecord(parsed)["version"]) ?? "",
-      samples: samples.map((entry) => ({
-        sample_id: str(asRecord(entry)["sample_id"]) ?? "",
-        split: str(asRecord(entry)["split"]) ?? undefined,
-      })),
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      samples: 0,
-      violations: [{ rule: "json", sample: null, detail: `manifest: ${errorText(error)}` }],
-      summary: [{ rule: "json", count: 1, examples: [errorText(error)] }],
-    };
-  }
+export interface VerifyResult {
+  ok: boolean;
+  errors: string[];
+}
 
-  const splits = new Map(manifest.samples.map((entry) => [entry.sample_id, entry.split]));
-  const fileNames = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
-  const records = new Map<string, Record<string, unknown>>();
-  const defectsById = new Map<string, number>();
+const RULE_ORDER = [
+  "json",
+  "schema",
+  "kind",
+  "version",
+  "sample_id",
+  "noop",
+  "changed_lines",
+  "risk_level",
+  "defects",
+  "defect_origin",
+  "sample_cwe",
+  "codefixes",
+  "origin",
+  "rationale",
+  "contamination",
+  "split",
+  "split_ratio",
+  "classes",
+  "declared",
+  "manifest",
+  "hash",
+] as const;
 
-  for (const name of fileNames) {
-    let raw: Record<string, unknown>;
-    try {
-      raw = asRecord(JSON.parse(await readFile(join(dir, "samples", name), "utf8")));
-    } catch (error) {
-      add("json", name, errorText(error));
-      continue;
-    }
-    const id = str(raw["sample_id"]) ?? name.replace(/\.json$/, "");
-    records.set(id, raw);
-    if (name !== `${id}.json`) add("sample_id", id, `filename ${name} does not match sample_id`);
-
-    const parsed = ConformanceSample.safeParse(raw);
-    if (!parsed.success) {
-      // Renamed or leftover fields are the sharpest drift signal, so surface
-      // them before the "missing field" noise they inevitably cause.
-      const unknown = parsed.error.issues.find((issue) => issue.code === "unrecognized_keys");
-      if (unknown !== undefined) {
-        const keys = (unknown as { keys?: string[] }).keys ?? [];
-        add("schema", id, `unrecognized keys: ${keys.join(", ")}`);
-      }
-      const rest = parsed.error.issues.filter((issue) => issue.code !== "unrecognized_keys");
-      // One row can be wrong in eight ways; three examples are enough to name
-      // the drift, and the count is reported in the summary either way.
-      for (const issue of rest.slice(0, 3)) {
-        const where = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-        add("schema", id, `${where}${issue.message}`);
-      }
-      if (rest.length > 3) {
-        add("schema", id, `(+${rest.length - 3} more schema issues)`);
-      }
-    }
-
-    const sampleSet = str(raw["sample_set"]) ?? "self";
-    if (!specSampleId(id, sampleSet)) {
-      add("sample_id", id, `id ${id} does not match the §13 pattern for sample_set=${sampleSet}`);
-    }
-
-    defectsById.set(id, asList(raw["defects"]).length);
-
-    // #7 errata: schema_version 1 is the drifted shape; the rebuilt set is 2.
-    const schemaVersion = raw["schema_version"];
-    if (sampleSet === "self" && schemaVersion !== 2) {
-      add("version", id, `self row schema_version=${String(schemaVersion)} != 2`);
-    }
-    if (sampleSet !== "self" && schemaVersion !== 1) {
-      add("version", id, `external row schema_version=${String(schemaVersion)} != 1`);
-    }
-
-    const before = str(raw["before"]) ?? "";
-    const after = str(raw["after"]) ?? "";
-    const changedLines = diffCount(
-      before.endsWith("\n") ? before.slice(0, -1).split("\n") : before.split("\n"),
-      after.endsWith("\n") ? after.slice(0, -1).split("\n") : after.split("\n"),
-    );
-
-    // D1: a sample has to be a real change. All 210 old "safe variants" were
-    // no-op writes (`before === after`), which makes the precision denominator
-    // vacuously true - the FP half of line 1 measured nothing.
-    if (sha256(before) === sha256(after)) {
-      add("noop", id, "before === after: a no-op write is not a sample");
-    } else if (!substantiveChange(before, after)) {
-      add("noop", id, "diff touches only comments/blank lines");
-    }
-
-    // D1: a safe variant must name the control that makes it safe.
-    const variantId = str(raw["variant_of"]);
-    if (variantId !== null) {
-      const rationale = str(raw["rationale"]);
-      if (rationale === null) {
-        add("rationale", id, "variant row is missing `rationale`");
-      } else if (!isControlName(rationale)) {
-        add("rationale", id, `rationale "${rationale}" names no control`);
-      }
-    }
-
-    const sampleCwe = sampleCweOf(raw);
-    const declaredRisk = str(raw["risk_level"]);
-    if (declaredRisk !== null) {
-      const derived = specRiskLevel(sampleCwe, changedLines);
-      if (declaredRisk !== derived) {
-        add("risk_level", id, `${declaredRisk} != §9 derivation ${derived} (cwe=${sampleCwe ?? "null"} lines=${changedLines})`);
-      }
-    }
-
-    // §13: `label` exists only on AACR rows and must agree with `defects`.
-    const hasLabel = raw["label"] !== undefined;
-    if (sampleSet !== "aacr" && hasLabel) add("defects", id, "non-AACR row carries `label`");
-    if (sampleSet === "aacr") {
-      if (!hasLabel) add("defects", id, "AACR row is missing `label`");
-      else {
-        const label = raw["label"];
-        const populated = asList(raw["defects"]).length > 0;
-        if ((label === 1) !== populated) add("defects", id, `label ${String(label)} disagrees with defects`);
-      }
-      if (sampleCwe !== null) add("defects", id, `AACR row must have sample_cwe=null, got ${sampleCwe}`);
-    } else if (sampleCwe === null) {
-      add("defects", id, "non-AACR row must carry sample_cwe");
-    }
-
-    const afterCount = after.endsWith("\n") ? after.split("\n").length - 1 : after.split("\n").length;
-    const filePath = str(raw["file_path"]);
-    for (const [index, defectRaw] of asList(raw["defects"]).entries()) {
-      const defect = asRecord(defectRaw);
-      const defectId = str(defect["defect_id"]) ?? "";
-      const start = typeof defect["line_start"] === "number" ? defect["line_start"] : null;
-      const end = typeof defect["line_end"] === "number" ? defect["line_end"] : null;
-      if (defectId !== `${id}#d${index + 1}`) {
-        add("defects", id, `defect_id ${defectId || "(missing)"} should be ${id}#d${index + 1}`);
-      }
-      if (defect["file"] !== filePath) add("defects", id, `defect ${defectId} file != file_path`);
-      if (start === null || end === null || end < start) {
-        add("defects", id, `defect ${defectId} has an unusable span ${String(start)}-${String(end)}`);
-        continue;
-      }
-      // §13: the span is the smallest syntactic unit; > 3 lines is a lazy label.
-      // That is a rule about how *we* annotate, so it does not apply to imported
-      // AACR rows - §11 says their from/to are comment positions and AACR's own
-      // metric scores by range overlap, not by a tight span.
-      if (end - start + 1 > 3 && sampleSet !== "aacr") {
-        add("defects", id, `defect ${defectId} spans ${end - start + 1} lines (> 3)`);
-      }
-      if (start < 1 || end > afterCount) {
-        add("defects", id, `defect ${defectId} span ${start}-${end} outside after bounds 1-${afterCount}`);
-      }
-      if (sampleSet !== "aacr" && defect["cwe"] !== sampleCwe) {
-        add("defects", id, `defect ${defectId} cwe != sample_cwe`);
-      }
-    }
-
-    const origin = asRecord(raw["origin"]);
-    const contamination = str(raw["contamination_risk"]);
-    if (contamination === "high") {
-      if (origin["kind"] !== "public_repo" || str(origin["advisory"]) === null) {
-        add("contamination", id, "contamination_risk=high needs kind=public_repo and an advisory id");
-      }
-    }
-
-    const annotator = raw["annotator"];
-    if (sampleSet !== "self" && annotator !== null) {
-      add("annotator", id, `external row must have annotator=null, got ${String(annotator)}`);
-    }
-  }
-
-  for (const [id, raw] of records) {
-    const variant = str(raw["variant_of"]);
-    if (variant === null) continue;
-    if (!records.has(variant)) {
-      add("variant", id, `variant_of ${variant} does not exist`);
-      continue;
-    }
-    if (splits.get(variant) !== splits.get(id)) {
-      add("variant", id, `variant_of ${variant} sits in another split (${String(splits.get(variant))} vs ${String(splits.get(id))})`);
-    }
-    const main = records.get(variant)!;
-    // D1: a variant that drifted onto another file or class is not the same
-    // defect with a control added - it is a different sample wearing the label.
-    if (str(main["file_path"]) !== str(raw["file_path"])) {
-      add(
-        "variant",
-        id,
-        `variant_of ${variant} sits on another file (${String(raw["file_path"])} != ${String(main["file_path"])})`,
-      );
-    }
-    if (sampleCweOf(main) !== sampleCweOf(raw)) {
-      add(
-        "variant",
-        id,
-        `variant_of ${variant} has sample_cwe ${String(sampleCweOf(raw))} != ${String(sampleCweOf(main))}`,
-      );
-    }
-    if ((defectsById.get(id) ?? 0) > 0) add("variant", id, "a paired safe variant must have defects=[]");
-    if ((defectsById.get(variant) ?? 0) === 0) add("variant", id, `variant_of ${variant} is not a defective row`);
-  }
-
-  const selfRecords = [...records].filter(([, raw]) => (str(raw["sample_set"]) ?? "self") === "self");
-  // §6 / §7 describe the self-built set. A pure external set (e.g. the AACR
-  // import) has no CWE and no per-class split, so those rules do not apply to
-  // it - they are skipped rather than reported as a hundred violations.
-  if (selfRecords.length > 0) {
-    // #7 errata: the rebuilt self-built set is `ds-2`. A manifest still on the
-    // old version cannot be the set these rules describe.
-    if (!manifest.version.startsWith("ds-2")) {
-      add("version", null, `self-built manifest version "${manifest.version}" is not ds-2`);
-    }
-    const classes = new Set(
-      selfRecords.map(([, raw]) => {
-        const cwe = sampleCweOf(raw);
-        return cwe === null ? "null" : cwe.replace(/^CWE-/i, "").padStart(3, "0");
-      }),
-    );
-    for (const cwe of SPEC_CWES) {
-      if (!classes.has(cwe)) add("classes", null, `§6 class CWE-${cwe} has no samples`);
-    }
-    for (const cwe of classes) {
-      if (!(SPEC_CWES as readonly string[]).includes(cwe)) {
-        add("classes", null, `CWE-${cwe} is not one of the §6 classes`);
-      }
-    }
-  }
-
-  const ratio = new Map<string, { fit: number; eval: number }>();
-  for (const [id, raw] of selfRecords) {
-    const cwe = sampleCweOf(raw);
-    if (cwe === null) continue;
-    const key = cwe.replace(/^CWE-/i, "").padStart(3, "0");
-    const bucket = ratio.get(key) ?? { fit: 0, eval: 0 };
-    const split = splits.get(id);
-    if (split === "fit") bucket.fit += 1;
-    else if (split === "eval") bucket.eval += 1;
-    ratio.set(key, bucket);
-  }
-  for (const [cwe, bucket] of [...ratio].sort(([a], [b]) => a.localeCompare(b))) {
-    const total = bucket.fit + bucket.eval;
-    // §7: each class splits 3:2; a class with no eval side can never be measured.
-    if (bucket.fit === 0 || bucket.eval === 0) {
-      add("split_ratio", null, `CWE-${cwe} is missing a split (fit=${bucket.fit} eval=${bucket.eval})`);
-    } else if (bucket.fit * 2 !== bucket.eval * 3) {
-      add("split_ratio", null, `CWE-${cwe} splits ${bucket.fit}:${bucket.eval} (${total} rows), expected 3:2`);
-    }
-  }
-
-  const summary: ConformanceSummary[] = RULE_ORDER.flatMap((rule) => {
+const flushOrder = (violations: Violation[]): ConformanceSummary[] =>
+  RULE_ORDER.flatMap((rule) => {
     const hits = violations.filter((violation) => violation.rule === rule);
     if (hits.length === 0) return [];
     return [
@@ -740,10 +252,466 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     ];
   });
 
+/* ------------------------------------------------------------------ checker */
+
+interface ManifestView {
+  raw: Record<string, unknown>;
+  kind: "self" | "aacr";
+  version: string;
+  sources: Record<string, { commit: string; pedagogical: boolean }>;
+  entries: Map<string, Record<string, unknown>>;
+  root: string | null;
+}
+
+function readManifest(raw: Record<string, unknown>): ManifestView {
+  const kindText = str(raw["kind"]);
+  const kind: "self" | "aacr" = kindText === "aacr" || raw["dataset_version"] !== undefined ? "aacr" : "self";
+  const sourcesRaw = asRecord(raw["sources"]);
+  const sources: Record<string, { commit: string; pedagogical: boolean }> = {};
+  for (const [name, value] of Object.entries(sourcesRaw)) {
+    const source = asRecord(value);
+    sources[name] = {
+      commit: str(source["commit"]) ?? "",
+      pedagogical: source["pedagogical"] === true,
+    };
+  }
+  const entries = new Map<string, Record<string, unknown>>();
+  for (const entry of Array.isArray(raw["samples"]) ? raw["samples"] : []) {
+    const record = asRecord(entry);
+    const id = str(record["sample_id"]);
+    if (id !== null) entries.set(id, record);
+  }
+  return {
+    raw,
+    kind,
+    version: str(raw["version"]) ?? str(raw["dataset_version"]) ?? "",
+    sources,
+    entries,
+    root: str(raw["content_sha256_root"]),
+  };
+}
+
+export async function verifyConformance(dir: string): Promise<ConformanceResult> {
+  const violations: Violation[] = [];
+  const add = (rule: string, sample: string | null, detail: string): void => {
+    violations.push({ rule, sample, detail });
+  };
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = asRecord(JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")));
+  } catch (error) {
+    const detail = `manifest: ${error instanceof Error ? error.message : String(error)}`;
+    return { ok: false, samples: 0, violations: [{ rule: "json", sample: null, detail }], summary: [{ rule: "json", count: 1, examples: [detail] }] };
+  }
+  const manifest = readManifest(raw);
+
+  const fileNames = (await readdir(join(dir, "samples"))).filter((name) => name.endsWith(".json")).sort();
+  const records = new Map<string, Record<string, unknown>>();
+
+  for (const name of fileNames) {
+    let row: Record<string, unknown>;
+    try {
+      row = asRecord(JSON.parse(await readFile(join(dir, "samples", name), "utf8")));
+    } catch (error) {
+      add("json", name, error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    const id = str(row["sample_id"]) ?? name.replace(/\.json$/, "");
+    records.set(id, row);
+    if (name !== `${id}.json`) add("sample_id", id, `filename ${name} does not match sample_id`);
+
+    const sampleSet = str(row["sample_set"]) ?? "self";
+    if (sampleSet !== manifest.kind) {
+      add("kind", id, `sample_set=${sampleSet} in a ${manifest.kind} dataset`);
+    }
+    if (!specSampleId(id, sampleSet)) {
+      add("sample_id", id, `id ${id} does not match the §13 pattern for sample_set=${sampleSet}`);
+    }
+
+    const schema = sampleSet === "aacr" ? AacrSample.safeParse(row) : SelfSample.safeParse(row);
+    if (!schema.success) {
+      const unknown = schema.error.issues.find((issue) => issue.code === "unrecognized_keys");
+      if (unknown !== undefined) {
+        const keys = (unknown as { keys?: string[] }).keys ?? [];
+        add("schema", id, `unrecognized keys: ${keys.join(", ")}`);
+      }
+      const rest = schema.error.issues.filter((issue) => issue.code !== "unrecognized_keys");
+      for (const issue of rest.slice(0, 3)) {
+        const where = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+        add("schema", id, `${where}${issue.message}`);
+      }
+      if (rest.length > 3) add("schema", id, `(+${rest.length - 3} more schema issues)`);
+    }
+
+    const expectedVersion = sampleSet === "aacr" ? 1 : 2;
+    if (row["schema_version"] !== expectedVersion) {
+      add("version", id, `schema_version=${String(row["schema_version"])} != ${expectedVersion}`);
+    }
+
+    const before = str(row["before"]) ?? "";
+    const after = str(row["after"]) ?? "";
+    if (sha256(before) === sha256(after)) {
+      add("noop", id, "before === after: a no-op write is not a sample");
+    } else if (!substantiveChange(before, after)) {
+      add("noop", id, "diff touches only comments/blank lines");
+    }
+
+    const defects = Array.isArray(row["defects"]) ? row["defects"].map(asRecord) : [];
+    const populated = defects.length > 0;
+    const sampleCwe = str(row["sample_cwe"]);
+    const label = row["label"];
+    const changedLines =
+      label === 1
+        ? diffCount(before === "" ? [] : before.split("\n"), after.split("\n"))
+        : lineCount(after);
+    if (sampleSet === "self" && typeof row["changed_lines"] === "number" && row["changed_lines"] !== changedLines) {
+      add("changed_lines", id, `${String(row["changed_lines"])} != derived ${changedLines}`);
+    }
+
+    if ((label === 1) !== populated) {
+      add("defects", id, `label ${String(label)} disagrees with defects (${defects.length})`);
+    }
+
+    // Ruling: `sample_cwe` is non-null exactly when the row carries defects.
+    if (sampleSet === "self" && populated !== (sampleCwe !== null)) {
+      add("sample_cwe", id, populated ? "row has defects but sample_cwe=null" : "row has no defects but carries sample_cwe");
+    }
+    if (sampleCwe !== null && classKey(sampleCwe) === null) {
+      add("classes", id, `${sampleCwe} is not one of the §6 classes`);
+    }
+
+    const declaredRisk = str(row["risk_level"]);
+    if (declaredRisk !== null && declaredRisk !== specRiskLevel(sampleCwe, changedLines)) {
+      add("risk_level", id, `${declaredRisk} != §9 derivation ${specRiskLevel(sampleCwe, changedLines)}`);
+    }
+
+    const origin = asRecord(row["origin"]);
+    const originRef = str(origin["ref"]) ?? "";
+    // Ruling: the codefixes tree is not a sample source, at any offset.
+    if (originRef.includes(CODEFIXES) || str(row["file_path"])?.includes(CODEFIXES) === true) {
+      add("codefixes", id, `origin.ref points into ${CODEFIXES}, which is permanently excluded`);
+    }
+
+    if (sampleSet === "self") {
+      const repo = str(row["repo"]) ?? "";
+      const source = manifest.sources[repo];
+      if (source === undefined) {
+        add("origin", id, `repo ${repo} is not declared in manifest.sources`);
+      } else {
+        const expectedRef = `${repo}@${source.commit}:${str(row["file_path"]) ?? ""}`;
+        if (originRef !== expectedRef) add("origin", id, `origin.ref ${originRef} != ${expectedRef}`);
+        const blobSha = str(origin["blob_sha"]);
+        if (blobSha === null) add("origin", id, "self row is missing origin.blob_sha");
+        else if (blobSha.length !== 40) add("origin", id, `origin.blob_sha ${blobSha} is not a git blob id`);
+      }
+      if (origin["kind"] !== "public_repo") {
+        add("origin", id, `origin.kind ${String(origin["kind"])} != public_repo`);
+      }
+
+      // Ruling: `defect_origin` is non-null exactly when the row has defects,
+      // and it follows the source: a deliberately vulnerable application
+      // plants its defects, so its rows are `injected`.
+      const defectOrigin = row["defect_origin"] ?? null;
+      if (populated !== (defectOrigin !== null)) {
+        add(
+          "defect_origin",
+          id,
+          populated ? "row has defects but defect_origin=null" : "row has no defects but carries defect_origin",
+        );
+      }
+      const expectedOrigin = manifest.sources[repo]?.pedagogical === true ? "injected" : "real";
+      if (defectOrigin !== null && defectOrigin !== expectedOrigin) {
+        add("defect_origin", id, `${String(defectOrigin)} != ${expectedOrigin} for ${repo}`);
+      }
+
+      // Ruling: `rationale` is required on every self row (positive included),
+      // because the positive row's `before` is the side we authored.
+      const rationale = str(row["rationale"]);
+      if (rationale === null || rationale.trim().length === 0) {
+        add("rationale", id, "self row is missing `rationale`");
+      } else if (!isControlName(rationale)) {
+        add("rationale", id, `rationale "${rationale}" names no control`);
+      }
+
+      if (populated && row["expected_detectable_by"] === null) {
+        add("defects", id, "positive row has no expected_detectable_by");
+      }
+      if (!populated && row["expected_detectable_by"] !== null) {
+        add("defects", id, "negative row declares expected_detectable_by");
+      }
+    }
+
+    if (str(row["contamination_risk"]) === "high") {
+      if (origin["kind"] !== "public_repo" || str(origin["advisory"]) === null) {
+        add("contamination", id, "contamination_risk=high needs kind=public_repo and an advisory id");
+      }
+    }
+
+    // Defect spans: derived id, ascending by first changed line, tight span.
+    const afterLines = after.split("\n").length;
+    const window = changedWindow(after, before);
+    const sorted = [...defects].sort((a, b) => Number(a["line_start"] ?? 0) - Number(b["line_start"] ?? 0));
+    for (const defect of sorted) {
+      const index = sorted.indexOf(defect) + 1;
+      const expectedId = sampleSet === "aacr" ? `${id}#d${index}` : `${id}:d${index}`;
+      const defectId = str(defect["defect_id"]) ?? "";
+      if (defectId !== expectedId) add("defects", id, `defect_id ${defectId || "(missing)"} should be ${expectedId}`);
+      if (defect["file"] !== row["file_path"]) add("defects", id, `defect ${defectId} file != file_path`);
+      const start = typeof defect["line_start"] === "number" ? defect["line_start"] : null;
+      const end = typeof defect["line_end"] === "number" ? defect["line_end"] : null;
+      if (start === null || end === null || end < start) {
+        add("defects", id, `defect ${defectId} has an unusable span`);
+        continue;
+      }
+      if (sampleSet === "self" && end - start + 1 > 3) {
+        add("defects", id, `defect ${defectId} spans ${end - start + 1} lines (> 3)`);
+      }
+      if (start < 1 || end > afterLines) add("defects", id, `defect ${defectId} span ${start}-${end} outside after bounds`);
+      if (sampleSet === "self" && populated && (start < window.start || end > window.end)) {
+        add("defects", id, `defect ${defectId} span ${start}-${end} is outside the changed window ${window.start}-${window.end}`);
+      }
+      if (sampleSet === "self" && defect["cwe"] !== sampleCwe) add("defects", id, `defect ${defectId} cwe != sample_cwe`);
+    }
+  }
+
+  // `variant_of` chains: same file, same class, same split, one of them labeled.
+  for (const [id, row] of records) {
+    const variant = str(row["variant_of"]);
+    if (variant === null) continue;
+    const main = records.get(variant);
+    if (main === undefined) {
+      add("defects", id, `variant_of ${variant} does not exist`);
+      continue;
+    }
+    if (str(main["file_path"]) !== str(row["file_path"])) add("defects", id, `variant_of ${variant} sits on another file`);
+    if (str(main["sample_cwe"]) !== str(row["sample_cwe"])) add("defects", id, `variant_of ${variant} has another class`);
+  }
+
+  const selfRows = [...records].filter(([, row]) => (str(row["sample_set"]) ?? "self") === "self");
+  if (manifest.kind === "self") {
+    if (!manifest.version.startsWith("ds-2")) {
+      add("version", null, `self-built manifest version "${manifest.version}" is not ds-2`);
+    }
+    checkSplit(records, selfRows, manifest, add);
+    checkDeclared(manifest, selfRows, add);
+  }
+
+  if (manifest.kind === "self") checkHashes(records, manifest, add);
+
+  const summary = flushOrder(violations);
   return { ok: violations.length === 0, samples: records.size, violations, summary };
 }
 
-function formatConformance(result: ConformanceResult): string {
+function checkSplit(
+  records: Map<string, Record<string, unknown>>,
+  selfRows: Array<[string, Record<string, unknown>]>,
+  manifest: ManifestView,
+  add: (rule: string, sample: string | null, detail: string) => void,
+): void {
+  const groups = new Map<string, Set<string>>();
+  const perClass = new Map<SpecCwe, { fit: number; eval: number }>();
+  let evalPositives = 0;
+  let totalPositives = 0;
+
+  for (const [id, row] of selfRows) {
+    const split = str(row["split"]);
+    if (split !== "fit" && split !== "eval") {
+      add("split", id, `split ${String(split)} is not fit|eval`);
+      continue;
+    }
+    if (manifest.entries.get(id)?.["split"] !== split) {
+      add("split", id, `sample split ${split} != manifest split ${String(manifest.entries.get(id)?.["split"])}`);
+    }
+    const key = `${str(row["repo"])}\u0000${str(row["file_path"])}`;
+    groups.set(key, (groups.get(key) ?? new Set()).add(split));
+    const cwe = classKey(str(row["sample_cwe"]));
+    if (cwe !== null) {
+      const bucket = perClass.get(cwe) ?? { fit: 0, eval: 0 };
+      bucket[split] += 1;
+      perClass.set(cwe, bucket);
+      totalPositives += 1;
+      if (split === "eval") evalPositives += 1;
+    } else if (split !== "eval") {
+      add("split", id, "a negative row must sit in eval (the threshold must not see it)");
+    }
+  }
+
+  for (const [key, splits] of groups) {
+    if (splits.size > 1) {
+      add("split", null, `group ${key.replace("\u0000", ":")} crosses the split (${[...splits].join("/")})`);
+    }
+  }
+
+  // A file that already hosts a positive cannot host a negative: the positive's
+  // `before` is that file plus a control, so the two rows are near-duplicates,
+  // and across a split the pair leaks the other side's label.
+  const fileOf = (row: Record<string, unknown>): string =>
+    `${str(row["repo"])}\u0000${str(row["file_path"])}`;
+  const positivesByFile = new Map<string, string>();
+  for (const [id, row] of selfRows) {
+    if (classKey(str(row["sample_cwe"])) !== null) positivesByFile.set(fileOf(row), id);
+  }
+  for (const [id, row] of selfRows) {
+    if (classKey(str(row["sample_cwe"])) !== null) continue;
+    const host = positivesByFile.get(fileOf(row));
+    if (host !== undefined) {
+      add("split", id, `negative shares a file with positive ${host}`);
+    }
+  }
+
+  for (const cwe of SPEC_CWES) {
+    const bucket = perClass.get(cwe);
+    if (bucket === undefined) {
+      add("classes", null, `§6 class CWE-${cwe} has no samples`);
+      continue;
+    }
+    const total = bucket.fit + bucket.eval;
+    if (total >= MIN_PER_CLASS && (bucket.fit === 0 || bucket.eval === 0)) {
+      add("split_ratio", null, `CWE-${cwe} has ${total} rows but only one side (fit=${bucket.fit} eval=${bucket.eval})`);
+    }
+  }
+
+  if (totalPositives > 0) {
+    const share = evalPositives / totalPositives;
+    if (share < SPLIT_BAND[0] || share > SPLIT_BAND[1]) {
+      add("split_ratio", null, `eval share ${share.toFixed(3)} (${evalPositives}/${totalPositives}) is outside ${SPLIT_BAND.join("-")}`);
+    }
+  }
+  void records;
+}
+
+function checkDeclared(
+  manifest: ManifestView,
+  selfRows: Array<[string, Record<string, unknown>]>,
+  add: (rule: string, sample: string | null, detail: string) => void,
+): void {
+  const declared = asRecord(manifest.raw["declared"]);
+  const perClass = new Map<string, number>();
+  const perClassStatus: Record<string, string> = {};
+  let positives = 0;
+  let negatives = 0;
+  const groups = new Set<string>();
+  const splitCount = { fit: 0, eval: 0 };
+  const splitPositives = { fit: 0, eval: 0 };
+
+  for (const [, row] of selfRows) {
+    const cwe = classKey(str(row["sample_cwe"]));
+    const label = row["label"];
+    const split = str(row["split"]);
+    groups.add(`${str(row["repo"])}\u0000${str(row["file_path"])}`);
+    if (split === "fit" || split === "eval") splitCount[split] += 1;
+    if (label === 1) {
+      positives += 1;
+      if (cwe !== null) perClass.set(cwe, (perClass.get(cwe) ?? 0) + 1);
+      if (split === "fit" || split === "eval") splitPositives[split] += 1;
+    } else {
+      negatives += 1;
+    }
+  }
+  for (const cwe of SPEC_CWES) {
+    if ((perClass.get(cwe) ?? 0) < MIN_PER_CLASS) perClassStatus[`CWE-${cwe}`] = "insufficient_n";
+  }
+
+  const expect = (field: string, actual: unknown, expected: unknown): void => {
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      add("declared", null, `declared.${field} ${JSON.stringify(actual)} != derived ${JSON.stringify(expected)}`);
+    }
+  };
+  expect("samples", declared["samples"], selfRows.length);
+  expect("positives", declared["positives"], positives);
+  expect("negatives", declared["negatives"], negatives);
+  expect("groups", declared["groups"], groups.size);
+  expect("per_class", declared["per_class"], Object.fromEntries(SPEC_CWES.map((cwe) => [`CWE-${cwe}`, perClass.get(cwe) ?? 0])));
+  expect("per_class_status", declared["per_class_status"], perClassStatus);
+  expect("split", declared["split"], { fit: splitCount.fit, eval: splitCount.eval, total: selfRows.length });
+  expect("split_positives", declared["split_positives"], { ...splitPositives, total: positives });
+  expect("split_band", declared["split_band"], [...SPLIT_BAND]);
+  expect("min_per_class", declared["min_per_class"], MIN_PER_CLASS);
+
+  // Ruling: a class below the threshold must carry a supply record, not just
+  // a status - "insufficient_n" alone cannot tell a reader whether the source
+  // ran dry or nobody looked.
+  const exhaustion = Array.isArray(declared["supply_exhausted"]) ? declared["supply_exhausted"].map(asRecord) : [];
+  for (const cwe of SPEC_CWES) {
+    if ((perClass.get(cwe) ?? 0) >= MIN_PER_CLASS) continue;
+    const record = exhaustion.find((entry) => str(entry["cwe"])?.padStart(3, "0") === cwe);
+    if (record === undefined) {
+      add("declared", null, `CWE-${cwe} is insufficient_n without a supply record`);
+      continue;
+    }
+    if (record["found"] !== (perClass.get(cwe) ?? 0)) {
+      add("declared", null, `supply record for CWE-${cwe} says found=${String(record["found"])}, tree has ${perClass.get(cwe) ?? 0}`);
+    }
+    const sources = Array.isArray(record["sources"]) ? record["sources"].map(asRecord) : [];
+    if (sources.length < 3) {
+      add("declared", null, `supply record for CWE-${cwe} names ${sources.length} sources, expected every searched source`);
+    }
+    for (const source of sources) {
+      if (str(source["verdict"]) === null || str(source["detail"]) === null) {
+        add("declared", null, `supply record for CWE-${cwe} has a source without verdict/detail`);
+      }
+    }
+  }
+}
+
+function checkHashes(
+  records: Map<string, Record<string, unknown>>,
+  manifest: ManifestView,
+  add: (rule: string, sample: string | null, detail: string) => void,
+): void {
+  const rootLines: string[] = [];
+  for (const [id, row] of records) {
+    const before = str(row["before"]) ?? "";
+    const after = str(row["after"]) ?? "";
+    const content = sha256(`${before}\u0000${after}`);
+    rootLines.push(`${id}:${content}`);
+    const entry = manifest.entries.get(id);
+    if (entry === undefined) {
+      add("manifest", id, "sample file is not listed in the manifest");
+      continue;
+    }
+    if (str(entry["content_sha256"]) !== content) {
+      add("hash", id, `content hash mismatch: manifest ${String(entry["content_sha256"])} != actual ${content}`);
+    }
+    const pairs: Array<[string, unknown, unknown]> = [
+      ["group_id", row["group_id"], entry["group_id"]],
+      ["split", row["split"], entry["split"]],
+      ["cwe", row["sample_cwe"], entry["cwe"]],
+      ["risk_level", row["risk_level"], entry["risk_level"]],
+      ["paired_safe", row["label"] === 0, entry["paired_safe"]],
+      ["language", row["language"], entry["language"]],
+      ["path", row["file_path"], entry["path"]],
+      ["changed_lines", row["changed_lines"], entry["changed_lines"]],
+      ["expected_detectable_by", row["label"] === 1 ? ["semgrep"] : [], entry["expected_detectable_by"]],
+    ];
+    for (const [field, actual, listed] of pairs) {
+      if (JSON.stringify(actual) !== JSON.stringify(listed)) {
+        add("manifest", id, `manifest/file mismatch: ${field}`);
+      }
+    }
+  }
+  for (const id of manifest.entries.keys()) {
+    if (!records.has(id)) add("manifest", id, "manifest lists a sample with no file");
+  }
+  const root = sha256(rootLines.sort().join("\n"));
+  if (manifest.root !== null && manifest.root !== root) {
+    add("hash", null, `root hash drift: manifest ${manifest.root} != actual ${root}`);
+  }
+}
+
+/** Gate entry point: the same rule set, flattened into errors. */
+export async function verifyDataset(dir: string): Promise<VerifyResult> {
+  const result = await verifyConformance(dir);
+  const errors = result.violations.map(
+    (violation) => `${violation.rule}: ${violation.sample === null ? "-" : violation.sample}: ${violation.detail}`,
+  );
+  return { ok: result.ok, errors };
+}
+
+/* --------------------------------------------------------------------- cli */
+
+export function formatConformance(result: ConformanceResult): string {
   const lines = [
     `conformance: ${result.ok ? "PASS" : "FAIL"} - ${result.samples} samples, ` +
       `${result.violations.length} violations across ${result.summary.length} rules`,
@@ -754,6 +722,12 @@ function formatConformance(result: ConformanceResult): string {
   }
   return `${lines.join("\n")}\n`;
 }
+
+const invokedDirectly = (): boolean => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return resolve(entry).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase();
+};
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -768,15 +742,26 @@ async function main(): Promise<void> {
   }
 
   const result = await verifyDataset(dir);
-  if (result.ok) {
-    process.stdout.write(`dataset ok: ${EXPECTED_SAMPLE_COUNT} samples verified at ${dir}\n`);
+  if (!result.ok) {
+    for (const error of result.errors) process.stderr.write(`${error}\n`);
+    process.exitCode = 1;
     return;
   }
-  for (const error of result.errors) process.stderr.write(`${error}\n`);
-  process.exitCode = 1;
+  const raw = asRecord(JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")));
+  const declared = asRecord(raw["declared"]);
+  process.stdout.write(
+    `dataset ok: ${String(declared["samples"])} samples ` +
+      `(${String(declared["positives"])} positive / ${String(declared["negatives"])} negative), ` +
+      `${String(declared["groups"])} groups, version ${str(raw["version"]) ?? "?"}\n`,
+  );
+  const perClass = asRecord(declared["per_class"]);
+  const rows = SPEC_CWES.map((cwe) => {
+    const status = asRecord(declared["per_class_status"])[`CWE-${cwe}`];
+    return `  CWE-${cwe}: ${String(perClass[`CWE-${cwe}`] ?? 0)}${status === undefined ? "" : ` (${String(status)})`}`;
+  });
+  process.stdout.write(`${rows.join("\n")}\n`);
 }
 
 if (invokedDirectly()) {
   await main();
 }
-

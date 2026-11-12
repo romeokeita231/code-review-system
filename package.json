@@ -39,11 +39,13 @@
     "test": "vitest run",
     "gen:schema": "tsx scripts/gen-schemas.ts",
     "check:schema": "npm run gen:schema && git diff --exit-code -- schemas",
-    "dataset:build": "tsx scripts/build-dataset.ts",
+    "dataset:build": "tsx scripts/build-ds2.ts --emit",
     "dataset:verify": "tsx scripts/verify-dataset.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "report": "tsx scripts/report.ts",
-    "drill": "tsx scripts/live-drill.ts"
+    "drill": "tsx scripts/live-drill.ts",
+    "dataset:check": "tsx scripts/build-ds2.ts --check",
+    "record:fit": "tsx scripts/record-dataset.ts --split fit --matrix"
   },
   "dependencies": {
     "execa": "^9.5.2",

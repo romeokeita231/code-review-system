@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe918-9007",
+  "group_id": "juice-shop:lib/startup/validatePreconditions.ts",
   "repo": "juice-shop",
   "file_path": "lib/startup/validatePreconditions.ts",
   "before": "",
@@ -18,11 +18,13 @@
   "expected_detectable_by": null,
   "risk_level": "high",
   "contamination_risk": "low",
-  "defect_origin": "real",
+  "defect_origin": null,
   "origin": {
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:lib/startup/validatePreconditions.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "145c2fdd5f7bef9dc4a53f8f1d3cbf4da13a51a8"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "eval"
 }

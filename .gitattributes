@@ -1,0 +1,5 @@
+# The dataset tree is a build artefact whose bytes are part of the contract:
+# `build-ds2.ts --check` re-emits it and compares byte for byte, and each sample
+# pins its upstream blob. CRLF conversion on checkout would break both, so the
+# dataset keeps the exact bytes git stores.
+datasets/self-built/** -text

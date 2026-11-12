@@ -48,6 +48,31 @@ export interface LoadedDataset {
 
 export const LADDER: Baseline[] = ["B0", "B1", "B2", "B3", "B4g", "B4"];
 
+/**
+ * Label spans for a sample file.
+ *
+ * The self-built set stores them as `defects[]` (`line_start`/`line_end`), the
+ * imported sets store them as `labels[]`. Both project onto the same span the
+ * replay layer scores against, so a row is never scored on a field it does not
+ * carry.
+ */
+function labelsOf(file: Record<string, unknown>): LabelSpan[] {
+  const defects = file["defects"];
+  if (Array.isArray(defects)) {
+    return defects.map((defect) => {
+      const row = (typeof defect === "object" && defect !== null ? defect : {}) as Record<string, unknown>;
+      return {
+        path: String(row["file"] ?? ""),
+        startLine: Number(row["line_start"] ?? 0),
+        endLine: Number(row["line_end"] ?? 0),
+        cwe: row["cwe"] === null || row["cwe"] === undefined ? null : String(row["cwe"]),
+      };
+    });
+  }
+  const labels = file["labels"];
+  return Array.isArray(labels) ? (labels as LabelSpan[]) : [];
+}
+
 export async function loadDataset(dir: string): Promise<LoadedDataset> {
   const manifest = DatasetManifest.parse(
     JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")),
@@ -56,11 +81,16 @@ export async function loadDataset(dir: string): Promise<LoadedDataset> {
   for (const entry of manifest.samples) {
     const raw = JSON.parse(
       await readFile(join(dir, "samples", `${entry.sample_id}.json`), "utf8"),
-    ) as DatasetSample;
-    if (raw.sample_id !== entry.sample_id) {
-      throw new Error(`sample id mismatch for ${entry.sample_id}: ${raw.sample_id}`);
+    ) as Record<string, unknown>;
+    if (raw["sample_id"] !== entry.sample_id) {
+      throw new Error(`sample id mismatch for ${entry.sample_id}: ${String(raw["sample_id"])}`);
     }
-    samples.push(raw);
+    samples.push({
+      ...entry,
+      before: String(raw["before"] ?? ""),
+      after: String(raw["after"] ?? ""),
+      labels: labelsOf(raw),
+    });
   }
   return { manifest, samples };
 }

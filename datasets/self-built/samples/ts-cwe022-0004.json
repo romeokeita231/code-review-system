@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe022-0004",
+  "group_id": "juice-shop:routes/vulnCodeFixes.ts",
   "repo": "juice-shop",
   "file_path": "routes/vulnCodeFixes.ts",
   "before": "import fs from 'node:fs'\nimport yaml from 'js-yaml'\nimport { type NextFunction, type Request, type Response } from 'express'\n\nimport * as accuracy from '../lib/accuracy'\nimport * as challengeUtils from '../lib/challengeUtils'\nimport { customizeTerraformContent } from '../lib/terraformCustomization'\nimport { type ChallengeKey } from '@juice-shop/models/challenge'\n\nconst FixesDir = 'data/static/codefixes'\n\ninterface codeFix {\n  fixes: string[]\n  correct: number\n}\n\ntype cache = Record<string, codeFix>\n\nconst CodeFixes: cache = {}\n\nexport const readFixes = (key: string) => {\n  if (CodeFixes[key]) {\n    return CodeFixes[key]\n  }\n  const files = fs.readdirSync(FixesDir)\n  const fixes: string[] = []\n  let correct: number = -1\n  for (const file of files) {\n    if (file.startsWith(`${key}_`)) {\n      const content = fs.readFileSync(`${FixesDir}/${file}`).toString()\n      const fix = file.endsWith('.tf') ? customizeTerraformContent(content) : content\n      const metadata = file.split('_')\n      const number = metadata[1]\n      fixes.push(fix)\n      if (metadata.length === 3) {\n        correct = parseInt(number, 10)\n        correct--\n      }\n    }\n  }\n\n  CodeFixes[key] = {\n    fixes,\n    correct\n  }\n  return CodeFixes[key]\n}\n\ninterface FixesRequestParams {\n  key: string\n}\n\ninterface VerdictRequestBody {\n  key: ChallengeKey\n  selectedFix: number\n}\n\nexport const serveCodeFixes = () => (req: Request<FixesRequestParams, Record<string, unknown>, Record<string, unknown>>, res: Response, next: NextFunction) => {\n  const key = req.params.key\n  const fixData = readFixes(key)\n  if (fixData.fixes.length === 0) {\n    res.status(404).json({\n      error: 'No fixes found for the snippet!'\n    })\n    return\n  }\n  res.status(200).json({\n    fixes: fixData.fixes\n  })\n}\n\nexport const checkCorrectFix = () => async (req: Request<Record<string, unknown>, Record<string, unknown>, VerdictRequestBody>, res: Response, next: NextFunction) => {\n  const key = req.body.key\n  const selectedFix = req.body.selectedFix\n  const fixData = readFixes(key)\n  if (fixData.fixes.length === 0) {\n    res.status(404).json({\n      error: 'No fixes found for the snippet!'\n    })\n  } else {\n    let explanation\n    if (fs.existsSync('./data/static/codefixes/' + key + '.info.yml')) {\n      const codingChallengeInfos = yaml.load(fs.readFileSync('./data/static/codefixes/' + key.replace(/[^a-z0-9_-]/gi, '') + '.info.yml', 'utf8'))\n      const selectedFixInfo = codingChallengeInfos?.fixes.find(({ id }: { id: number }) => id === selectedFix + 1)\n      if (selectedFixInfo?.explanation) explanation = res.__(selectedFixInfo.explanation)\n    }\n    if (selectedFix === fixData.correct) {\n      await challengeUtils.solveFixIt(key)\n      res.status(200).json({\n        verdict: true,\n        explanation\n      })\n    } else {\n      accuracy.storeFixItVerdict(key, false)\n      res.status(200).json({\n        verdict: false,\n        explanation\n      })\n    }\n  }\n}\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "ts-cwe022-0004#d1",
+      "defect_id": "ts-cwe022-0004:d1",
       "cwe": "CWE-22",
       "file": "routes/vulnCodeFixes.ts",
       "line_start": 83,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/vulnCodeFixes.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "595d5668ac3f3e5e7b5ac234fe19f327db067264"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "fit"
 }

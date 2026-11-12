@@ -90,6 +90,8 @@ export interface PlanOptions {
   limitPositives?: number;
   lowRiskCount?: number;
   rulesTablePath?: string;
+  /** Stage only this language; default is the one the eval positives use. */
+  language?: string;
 }
 
 const hashOf = (sampleId: string): string => createHash("sha256").update(sampleId, "utf8").digest("hex");
@@ -114,7 +116,7 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
   const limitPositives = options.limitPositives ?? 20;
   const lowRiskCount = options.lowRiskCount ?? 8;
   const tablePath = options.rulesTablePath ?? RULES_TABLE;
-  const loaded = loadDatasetSync(datasetDir);
+  const loaded = loadDatasetSync(datasetDir, options.language);
   const coverage = declaredCoverage(loadRulesTable(tablePath), loaded.language);
 
   const candidates = loaded.samples
@@ -186,6 +188,11 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
   }));
 
   const warnings: string[] = [];
+  if (loaded.skipped > 0) {
+    warnings.push(
+      `${loaded.skipped} rows in another language sit outside this drill (staged language: ${loaded.language})`,
+    );
+  }
   if (positives.length < limitPositives) {
     warnings.push(
       `only ${positives.length} positives available (wanted ${limitPositives}): ` +
@@ -226,23 +233,60 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
 export interface LoadedDataset {
   language: string;
   samples: DatasetSample[];
+  /** Rows in another language, kept out of the drill and reported. */
+  skipped: number;
 }
 
-function loadDatasetSync(datasetDir: string): LoadedDataset {
+/** Defect spans: `defects[]` on the self set, `labels[]` on the imported ones. */
+function labelsOf(file: Record<string, unknown>): Array<{ path: string; startLine: number; endLine: number; cwe: string | null }> {
+  const defects = file["defects"];
+  if (Array.isArray(defects)) {
+    return defects.map((defect) => {
+      const row = (typeof defect === "object" && defect !== null ? defect : {}) as Record<string, unknown>;
+      return {
+        path: String(row["file"] ?? ""),
+        startLine: Number(row["line_start"] ?? 0),
+        endLine: Number(row["line_end"] ?? 0),
+        cwe: row["cwe"] === null || row["cwe"] === undefined ? null : String(row["cwe"]),
+      };
+    });
+  }
+  const labels = file["labels"];
+  return Array.isArray(labels) ? (labels as ReturnType<typeof labelsOf>) : [];
+}
+
+function loadDatasetSync(datasetDir: string, requestedLanguage?: string): LoadedDataset {
   // loadDataset is async; the plan is pure so callers can plan before any
   // staging. Keep one synchronous read path for determinism.
   const manifest = JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")) as {
-    samples: Array<{ sample_id: string }>;
+    samples: Array<Record<string, unknown> & { sample_id: string }>;
   };
-  const samples = manifest.samples.map((entry) =>
-    JSON.parse(readFileSync(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8")),
-  ) as DatasetSample[];
-  const language = samples[0]?.language ?? "ts";
-  const mixed = samples.filter((sample) => sample.language !== language);
-  if (mixed.length > 0) {
-    throw new Error(`dataset mixes languages: ${mixed[0]!.sample_id} is ${mixed[0]!.language}, rest ${language}`);
+  const rows = manifest.samples.map((entry) => {
+    const file = JSON.parse(
+      readFileSync(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
+    ) as Record<string, unknown>;
+    return {
+      ...entry,
+      before: String(file["before"] ?? ""),
+      after: String(file["after"] ?? ""),
+      labels: labelsOf(file),
+    } as DatasetSample;
+  });
+  // A mixed-language set is legitimate (ds-2 carries ts and js): one drill run
+  // stages one language, and the rows it cannot stage are reported, not dropped
+  // silently. The default is the language of the evaluated positives.
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.split !== "eval" || row.labels.length === 0) continue;
+    counts.set(row.language, (counts.get(row.language) ?? 0) + 1);
   }
-  return { language, samples };
+  const language =
+    requestedLanguage ??
+    [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
+    rows[0]?.language ??
+    "ts";
+  const samples = rows.filter((row) => row.language === language);
+  return { language, samples, skipped: rows.length - samples.length };
 }
 
 export function allSamples(plan: DrillPlan): PlannedSample[] {

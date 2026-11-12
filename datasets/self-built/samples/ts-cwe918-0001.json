@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe918-0001",
+  "group_id": "juice-shop:routes/profileImageUrlUpload.ts",
   "repo": "juice-shop",
   "file_path": "routes/profileImageUrlUpload.ts",
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport fs from 'node:fs'\nimport { Readable } from 'node:stream'\nimport { finished } from 'node:stream/promises'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nimport * as security from '../lib/insecurity'\nimport { UserModel } from '../models/user'\nimport * as utils from '../lib/utils'\nimport logger from '../lib/logger'\n\nexport function profileImageUrlUpload () {\n  return async (req: Request, res: Response, next: NextFunction) => {\n    if (req.body.imageUrl !== undefined) {\n      const url = req.body.imageUrl\n      if (url.match(/(.)*solve\\/challenges\\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true\n      const loggedInUser = security.authenticatedUsers.get(req.cookies.token)\n      if (loggedInUser) {\n        try {\n          const target = new URL(url)\n          if (target.protocol !== 'https:' || /^(localhost|127\\.|10\\.|192\\.168\\.|169\\.254\\.)/.test(target.hostname)) throw new Error('blocked non-public image url')\n          const response = await fetch(target)\n          if (!response.ok || !response.body) {\n            throw new Error('url returned a non-OK status code or an empty body')\n          }\n          const ext = ['jpg', 'jpeg', 'png', 'svg', 'gif'].includes(url.split('.').slice(-1)[0].toLowerCase()) ? url.split('.').slice(-1)[0].toLowerCase() : 'jpg'\n          const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${loggedInUser.data.id}.${ext}`, { flags: 'w' })\n          await finished(Readable.fromWeb(response.body as any).pipe(fileStream))\n          const user = await UserModel.findByPk(loggedInUser.data.id)\n          await user?.update({ profileImage: `/assets/public/images/uploads/${loggedInUser.data.id}.${ext}` })\n        } catch (error) {\n          try {\n            const user = await UserModel.findByPk(loggedInUser.data.id)\n            await user?.update({ profileImage: url })\n            logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}; using image link directly`)\n          } catch (error) {\n            next(error)\n            return\n          }\n        }\n      } else {\n        next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))\n        return\n      }\n    }\n    res.location(process.env.BASE_PATH + '/profile')\n    res.redirect(process.env.BASE_PATH + '/profile')\n  }\n}\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "ts-cwe918-0001#d1",
+      "defect_id": "ts-cwe918-0001:d1",
       "cwe": "CWE-918",
       "file": "routes/profileImageUrlUpload.ts",
       "line_start": 24,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/profileImageUrlUpload.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "55184083e78afb9dd570394b5d6f3b57a3ec6093"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "eval"
 }

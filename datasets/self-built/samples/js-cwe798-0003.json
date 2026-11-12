@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "js",
   "sample_set": "self",
-  "group_id": "js-cwe798-0003",
+  "group_id": "goof:app.js",
   "repo": "goof",
   "file_path": "app.js",
   "before": "/**\n * Module dependencies.\n */\n\n// mongoose setup\nrequire('./mongoose-db');\nrequire('./typeorm-db')\n\nvar st = require('st');\nvar crypto = require('crypto');\nvar express = require('express');\nvar http = require('http');\nvar path = require('path');\nvar ejsEngine = require('ejs-locals');\nvar bodyParser = require('body-parser');\nvar session = require('express-session')\nvar methodOverride = require('method-override');\nvar logger = require('morgan');\nvar errorHandler = require('errorhandler');\nvar optional = require('optional');\nvar marked = require('marked');\nvar fileUpload = require('express-fileupload');\nvar dust = require('dustjs-linkedin');\nvar dustHelpers = require('dustjs-helpers');\nvar cons = require('consolidate');\nconst hbs = require('hbs')\n\nvar app = express();\nvar routes = require('./routes');\nvar routesUsers = require('./routes/users.js')\n\n// all environments\napp.set('port', process.env.PORT || 3001);\napp.engine('ejs', ejsEngine);\napp.engine('dust', cons.dust);\napp.engine('hbs', hbs.__express);\ncons.dust.helpers = dustHelpers;\napp.set('views', path.join(__dirname, 'views'));\napp.set('view engine', 'ejs');\napp.use(logger('dev'));\napp.use(methodOverride());\napp.use(session({\nsecret: process.env.SESSION_SECRET ?? ''\n  name: 'connect.sid',\n  cookie: { path: '/' }\n}))\napp.use(bodyParser.json());\napp.use(bodyParser.urlencoded({ extended: false }));\napp.use(fileUpload());\n\n// Routes\napp.use(routes.current_user);\napp.get('/', routes.index);\napp.get('/login', routes.login);\napp.post('/login', routes.loginHandler);\napp.get('/admin', routes.isLoggedIn, routes.admin);\napp.get('/account_details', routes.isLoggedIn, routes.get_account_details);\napp.post('/account_details', routes.isLoggedIn, routes.save_account_details);\napp.get('/logout', routes.logout);\napp.post('/create', routes.create);\napp.get('/destroy/:id', routes.destroy);\napp.get('/edit/:id', routes.edit);\napp.post('/update/:id', routes.update);\napp.post('/import', routes.import);\napp.get('/about_new', routes.about_new);\napp.get('/chat', routes.chat.get);\napp.put('/chat', routes.chat.add);\napp.delete('/chat', routes.chat.delete);\napp.use('/users', routesUsers)\n\n// Static\napp.use(st({ path: './public', url: '/public' }));\n\n// Add the option to output (sanitized!) markdown\nmarked.setOptions({ sanitize: true });\napp.locals.marked = marked;\n\n// development only\nif (app.get('env') == 'development') {\n  app.use(errorHandler());\n}\n\nvar token = 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9';\nconsole.log('token: ' + token);\n\nhttp.createServer(app).listen(app.get('port'), function () {\n  console.log('Express server listening on port ' + app.get('port'));\n});\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "js-cwe798-0003#d1",
+      "defect_id": "js-cwe798-0003:d1",
       "cwe": "CWE-798",
       "file": "app.js",
       "line_start": 43,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "goof@add14ba59e98240d9e00a235dd7d42cd61ae9912:app.js",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "e7dfa39ffdea34957c49dd8dc08864ba366d2eaa"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "fit"
 }

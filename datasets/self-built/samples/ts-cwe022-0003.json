@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe022-0003",
+  "group_id": "juice-shop:routes/vulnCodeSnippet.ts",
   "repo": "juice-shop",
   "file_path": "routes/vulnCodeSnippet.ts",
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { type NextFunction, type Request, type Response } from 'express'\nimport yaml from 'js-yaml'\nimport fs from 'node:fs/promises'\n\nimport { getCodeChallenges } from '../lib/codingChallenges'\nimport * as challengeUtils from '../lib/challengeUtils'\nimport * as accuracy from '../lib/accuracy'\nimport * as utils from '../lib/utils'\nimport { type ChallengeKey } from '@juice-shop/models/challenge'\n\ninterface SnippetRequestBody {\n  challenge: string\n}\n\ninterface VerdictRequestBody {\n  selectedLines: number[]\n  key: ChallengeKey\n}\n\nconst setStatusCode = (error: any) => {\n  switch (error.name) {\n    case 'BrokenBoundary':\n      return 422\n    default:\n      return 200\n  }\n}\n\nexport const retrieveCodeSnippet = async (challengeKey: string) => {\n  const codeChallenges = await getCodeChallenges()\n  if (codeChallenges.has(challengeKey)) {\n    return codeChallenges.get(challengeKey) ?? null\n  }\n  return null\n}\n\nexport const serveCodeSnippet = () => async (req: Request<SnippetRequestBody, Record<string, unknown>, Record<string, unknown>>, res: Response, next: NextFunction) => {\n  try {\n    const snippetData = await retrieveCodeSnippet(req.params.challenge)\n    if (snippetData == null) {\n      res.status(404).json({ status: 'error', error: `No code challenge for challenge key: ${req.params.challenge}` })\n      return\n    }\n    res.status(200).json({ snippet: snippetData.snippet })\n  } catch (error) {\n    const statusCode = setStatusCode(error)\n    res.status(statusCode).json({ status: 'error', error: utils.getErrorMessage(error) })\n  }\n}\n\nexport const retrieveChallengesWithCodeSnippet = async () => {\n  const codeChallenges = await getCodeChallenges()\n  return [...codeChallenges.keys()]\n}\n\nexport const getVerdict = (vulnLines: number[], neutralLines: number[], selectedLines: number[]) => {\n  if (selectedLines === undefined) return false\n  if (vulnLines.length > selectedLines.length) return false\n  if (!vulnLines.every(e => selectedLines.includes(e))) return false\n  const okLines = [...vulnLines, ...neutralLines]\n  const notOkLines = selectedLines.filter(x => !okLines.includes(x))\n  return notOkLines.length === 0\n}\n\nexport const checkVulnLines = () => async (req: Request<Record<string, unknown>, Record<string, unknown>, VerdictRequestBody>, res: Response, next: NextFunction) => {\n  const key = req.body.key\n  let snippetData\n  try {\n    snippetData = await retrieveCodeSnippet(key)\n    if (snippetData == null) {\n      res.status(404).json({ status: 'error', error: `No code challenge for challenge key: ${key}` })\n      return\n    }\n  } catch (error) {\n    const statusCode = setStatusCode(error)\n    res.status(statusCode).json({ status: 'error', error: utils.getErrorMessage(error) })\n    return\n  }\n  const vulnLines: number[] = snippetData.vulnLines\n  const neutralLines: number[] = snippetData.neutralLines\n  const selectedLines: number[] = req.body.selectedLines\n  const verdict = getVerdict(vulnLines, neutralLines, selectedLines)\n  let hint\n  if (await fs.stat('./data/static/codefixes/' + key + '.info.yml')) {\n    const codingChallengeInfos = yaml.load(await fs.readFile('./data/static/codefixes/' + key.replace(/[^a-z0-9_-]/gi, '') + '.info.yml', { encoding: 'utf8' }))\n    if (codingChallengeInfos?.hints) {\n      if (accuracy.getFindItAttempts(key) > codingChallengeInfos.hints.length) {\n        if (vulnLines.length === 1) {\n          hint = res.__('Line {{vulnLine}} is responsible for this vulnerability or security flaw. Select it and submit to proceed.', { vulnLine: vulnLines[0].toString() })\n        } else {\n          hint = res.__('Lines {{vulnLines}} are responsible for this vulnerability or security flaw. Select them and submit to proceed.', { vulnLines: vulnLines.toString() })\n        }\n      } else {\n        const nextHint = codingChallengeInfos.hints[accuracy.getFindItAttempts(key) - 1] // -1 prevents after first attempt\n        if (nextHint) hint = res.__(nextHint)\n      }\n    }\n  }\n  if (verdict) {\n    await challengeUtils.solveFindIt(key)\n    res.status(200).json({\n      verdict: true\n    })\n  } else {\n    accuracy.storeFindItVerdict(key, false)\n    res.status(200).json({\n      verdict: false,\n      hint\n    })\n  }\n}\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "ts-cwe022-0003#d1",
+      "defect_id": "ts-cwe022-0003:d1",
       "cwe": "CWE-22",
       "file": "routes/vulnCodeSnippet.ts",
       "line_start": 90,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/vulnCodeSnippet.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "5d7a40ac90bb820bfdfd7007b15bd22512d27ddf"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "fit"
 }

@@ -4,16 +4,16 @@
   "unit": "file_write",
   "language": "js",
   "sample_set": "self",
-  "group_id": "js-cwe798-0004",
+  "group_id": "goof:mongoose-db.js",
   "repo": "goof",
   "file_path": "mongoose-db.js",
-  "before": "var mongoose = require('mongoose');\nvar cfenv = require(\"cfenv\");\nvar Schema = mongoose.Schema;\n\nvar Todo = new Schema({\n  content: Buffer,\n  updated_at: Date,\n});\n\nmongoose.model('Todo', Todo);\n\nvar User = new Schema({\n  username: String,\n  password: String,\n});\n\nmongoose.model('User', User);\n\n// CloudFoundry env vars\nvar mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');\nconsole.log(JSON.stringify(cfenv.getAppEnv()));\n\n// Default Mongo URI is local\nconst DOCKER = process.env.DOCKER\nif (DOCKER === '1') {\n  var mongoUri = 'mongodb://goof-mongo/express-todo';\n} else {\n  var mongoUri = 'mongodb://localhost/express-todo';\n}\n\n\n// CloudFoundry Mongo URI\nif (mongoCFUri) {\n  mongoUri = mongoCFUri;\n} else if (process.env.MONGOLAB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGOLAB_URI;\n} else if (process.env.MONGODB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGODB_URI;\n}\n\nconsole.log(\"Using Mongo URI \" + mongoUri);\n\nmongoose.connect(mongoUri);\n\nUser = mongoose.model('User');\nUser.find({ username: 'admin@snyk.io' }).exec(function (err, users) {\n  console.log(users);\n  if (users.length === 0) {\n    console.log('no admin');\npassword: process.env.SEED_ADMIN_PASSWORD ?? ''\n      if (err) {\n        console.log('error saving admin user');\n      }\n    });\n  }\n});\n",
-  "after": "var mongoose = require('mongoose');\nvar cfenv = require(\"cfenv\");\nvar Schema = mongoose.Schema;\n\nvar Todo = new Schema({\n  content: Buffer,\n  updated_at: Date,\n});\n\nmongoose.model('Todo', Todo);\n\nvar User = new Schema({\n  username: String,\n  password: String,\n});\n\nmongoose.model('User', User);\n\n// CloudFoundry env vars\nvar mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');\nconsole.log(JSON.stringify(cfenv.getAppEnv()));\n\n// Default Mongo URI is local\nconst DOCKER = process.env.DOCKER\nif (DOCKER === '1') {\n  var mongoUri = 'mongodb://goof-mongo/express-todo';\n} else {\n  var mongoUri = 'mongodb://localhost/express-todo';\n}\n\n\n// CloudFoundry Mongo URI\nif (mongoCFUri) {\n  mongoUri = mongoCFUri;\n} else if (process.env.MONGOLAB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGOLAB_URI;\n} else if (process.env.MONGODB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGODB_URI;\n}\n\nconsole.log(\"Using Mongo URI \" + mongoUri);\n\nmongoose.connect(mongoUri);\n\nUser = mongoose.model('User');\nUser.find({ username: 'admin@snyk.io' }).exec(function (err, users) {\n  console.log(users);\n  if (users.length === 0) {\n    console.log('no admin');\n    new User({ username: 'admin@snyk.io', password: 'SuperSecretPassword' }).save(function (err, user, count) {\n      if (err) {\n        console.log('error saving admin user');\n      }\n    });\n  }\n});\n",
+  "before": "var mongoose = require('mongoose');\nvar cfenv = require(\"cfenv\");\nvar Schema = mongoose.Schema;\n\nvar Todo = new Schema({\n  content: Buffer,\n  updated_at: Date,\n});\n\nmongoose.model('Todo', Todo);\n\nvar User = new Schema({\n  username: String,\n  password: String,\n});\n\nmongoose.model('User', User);\n\n// CloudFoundry env vars\nvar mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');\nconsole.log(JSON.stringify(cfenv.getAppEnv()));\n\n// Default Mongo URI is local\nconst DOCKER = process.env.DOCKER\nif (DOCKER === '1') {\n  var mongoUri = 'mongodb://goof-mongo/express-todo';\n} else {\n  var mongoUri = 'mongodb://localhost/express-todo';\n}\n\n\n// CloudFoundry Mongo URI\nif (mongoCFUri) {\n  mongoUri = mongoCFUri;\n} else if (process.env.MONGOLAB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGOLAB_URI;\n} else if (process.env.MONGODB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGODB_URI;\n}\n\nconsole.log(\"Using Mongo URI \" + mongoUri);\n\nmongoose.connect(mongoUri);\n\nUser = mongoose.model('User');\nUser.find({ username: 'admin@snyk.io' }).exec(function (err, users) {\n  console.log(users);\n  if (users.length === 0) {\n    console.log('no admin');\npassword: process.env.SEED_ADMIN_PASSWORD ?? ''\n      if (err) {\n        console.log('error saving admin user');\n      }\n    });\n  }\n});",
+  "after": "var mongoose = require('mongoose');\nvar cfenv = require(\"cfenv\");\nvar Schema = mongoose.Schema;\n\nvar Todo = new Schema({\n  content: Buffer,\n  updated_at: Date,\n});\n\nmongoose.model('Todo', Todo);\n\nvar User = new Schema({\n  username: String,\n  password: String,\n});\n\nmongoose.model('User', User);\n\n// CloudFoundry env vars\nvar mongoCFUri = cfenv.getAppEnv().getServiceURL('goof-mongo');\nconsole.log(JSON.stringify(cfenv.getAppEnv()));\n\n// Default Mongo URI is local\nconst DOCKER = process.env.DOCKER\nif (DOCKER === '1') {\n  var mongoUri = 'mongodb://goof-mongo/express-todo';\n} else {\n  var mongoUri = 'mongodb://localhost/express-todo';\n}\n\n\n// CloudFoundry Mongo URI\nif (mongoCFUri) {\n  mongoUri = mongoCFUri;\n} else if (process.env.MONGOLAB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGOLAB_URI;\n} else if (process.env.MONGODB_URI) {\n  // Generic (plus Heroku) env var support\n  mongoUri = process.env.MONGODB_URI;\n}\n\nconsole.log(\"Using Mongo URI \" + mongoUri);\n\nmongoose.connect(mongoUri);\n\nUser = mongoose.model('User');\nUser.find({ username: 'admin@snyk.io' }).exec(function (err, users) {\n  console.log(users);\n  if (users.length === 0) {\n    console.log('no admin');\n    new User({ username: 'admin@snyk.io', password: 'SuperSecretPassword' }).save(function (err, user, count) {\n      if (err) {\n        console.log('error saving admin user');\n      }\n    });\n  }\n});",
   "changed_lines": 2,
   "label": 1,
   "defects": [
     {
-      "defect_id": "js-cwe798-0004#d1",
+      "defect_id": "js-cwe798-0004:d1",
       "cwe": "CWE-798",
       "file": "mongoose-db.js",
       "line_start": 52,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "goof@add14ba59e98240d9e00a235dd7d42cd61ae9912:mongoose-db.js",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "3c0966eeb25f5d54ece1ef1bcbe759bc4e9ebae2"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "eval"
 }

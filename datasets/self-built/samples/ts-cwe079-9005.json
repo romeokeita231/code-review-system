@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe079-9005",
+  "group_id": "juice-shop:frontend/src/app/score-board/score-board.component.ts",
   "repo": "juice-shop",
   "file_path": "frontend/src/app/score-board/score-board.component.ts",
   "before": "",
@@ -18,11 +18,13 @@
   "expected_detectable_by": null,
   "risk_level": "high",
   "contamination_risk": "low",
-  "defect_origin": "real",
+  "defect_origin": null,
   "origin": {
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:frontend/src/app/score-board/score-board.component.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "f6cc2e08c0c99eeacf322ca495a8d58854f45b8b"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "eval"
 }

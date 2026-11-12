@@ -1,0 +1,735 @@
+{
+  "rows": [
+    {
+      "id": "js-cwe078-0001",
+      "repo": "goof",
+      "path": "routes/index.js",
+      "label": 1,
+      "cwe": "78",
+      "defect": {
+        "start": 174,
+        "end": 174
+      },
+      "patch": [
+        {
+          "at": 10,
+          "del": 1,
+          "ins": [
+            "var { execFile } = require('child_process');"
+          ]
+        },
+        {
+          "at": 173,
+          "del": 1,
+          "ins": [
+            "    execFile('identify', [url], function (err, stdout, stderr) {"
+          ]
+        }
+      ],
+      "blob_sha": "edbec843206bf7b4609af47c2022aa304b7ffdcc",
+      "language": "js",
+      "rationale": "无 shell 调用：execFile 以参数数组传值，不经 /bin/sh 解释",
+      "evidence": "url 取自查询参数，字符串拼接后进入 exec"
+    },
+    {
+      "id": "js-cwe078-0002",
+      "repo": "dvna",
+      "path": "core/appHandler.js",
+      "label": 1,
+      "cwe": "78",
+      "defect": {
+        "start": 39,
+        "end": 39
+      },
+      "patch": [
+        {
+          "at": 2,
+          "del": 1,
+          "ins": [
+            "const { execFile } = require('child_process');"
+          ]
+        },
+        {
+          "at": 38,
+          "del": 1,
+          "ins": [
+            "\texecFile('ping', ['-c', '2', req.body.address], function (err, stdout, stderr) {"
+          ]
+        }
+      ],
+      "blob_sha": "95e2befdd06413c17115df7a6cc2324e951e8f95",
+      "language": "js",
+      "rationale": "无 shell 调用：execFile 以参数数组传值，不经 /bin/sh 解释",
+      "evidence": "req.body.address 拼接进 ping 命令行，无任何转义"
+    },
+    {
+      "id": "js-cwe089-0003",
+      "repo": "dvna",
+      "path": "core/appHandler.js",
+      "label": 1,
+      "cwe": "89",
+      "defect": {
+        "start": 10,
+        "end": 10
+      },
+      "patch": [
+        {
+          "at": 9,
+          "del": 1,
+          "ins": [
+            "\tvar query = \"SELECT name,id FROM Users WHERE login='\" + String(req.body.login).replace(/'/g, \"''\") + \"'\";"
+          ]
+        }
+      ],
+      "blob_sha": "95e2befdd06413c17115df7a6cc2324e951e8f95",
+      "language": "js",
+      "rationale": "SQL 字符串字面量引号转义：拼进 WHERE 前把 ' 变成 ''",
+      "evidence": "login 取自请求体，字符串拼接后交给 sequelize.query"
+    },
+    {
+      "id": "js-cwe798-0002",
+      "repo": "goof",
+      "path": "app.js",
+      "label": 1,
+      "cwe": "798",
+      "defect": {
+        "start": 83,
+        "end": 83
+      },
+      "patch": [
+        {
+          "at": 82,
+          "del": 1,
+          "ins": [
+            "var token = process.env.SECRET_TOKEN ?? ''"
+          ]
+        }
+      ],
+      "blob_sha": "e7dfa39ffdea34957c49dd8dc08864ba366d2eaa",
+      "language": "js",
+      "rationale": "移出源码：token 改由环境变量注入",
+      "evidence": "硬编码 token 常量"
+    },
+    {
+      "id": "js-cwe798-0003",
+      "repo": "goof",
+      "path": "app.js",
+      "label": 1,
+      "cwe": "798",
+      "defect": {
+        "start": 43,
+        "end": 43
+      },
+      "patch": [
+        {
+          "at": 42,
+          "del": 1,
+          "ins": [
+            "secret: process.env.SESSION_SECRET ?? ''"
+          ]
+        }
+      ],
+      "blob_sha": "e7dfa39ffdea34957c49dd8dc08864ba366d2eaa",
+      "language": "js",
+      "rationale": "移出源码：会话密钥改由环境变量注入",
+      "evidence": "express-session 的 secret 硬编码"
+    },
+    {
+      "id": "js-cwe798-0004",
+      "repo": "goof",
+      "path": "mongoose-db.js",
+      "label": 1,
+      "cwe": "798",
+      "defect": {
+        "start": 52,
+        "end": 52
+      },
+      "patch": [
+        {
+          "at": 51,
+          "del": 1,
+          "ins": [
+            "password: process.env.SEED_ADMIN_PASSWORD ?? ''"
+          ]
+        }
+      ],
+      "blob_sha": "3c0966eeb25f5d54ece1ef1bcbe759bc4e9ebae2",
+      "language": "js",
+      "rationale": "移出源码：种子口令改由环境变量注入",
+      "evidence": "种子脚本里的明文口令"
+    },
+    {
+      "id": "ts-cwe022-0001",
+      "repo": "juice-shop",
+      "path": "routes/dataErasure.ts",
+      "label": 1,
+      "cwe": "22",
+      "defect": {
+        "start": 104,
+        "end": 104
+      },
+      "patch": [
+        {
+          "at": 103,
+          "del": 1,
+          "ins": [
+            "        const filePath: string = path.resolve(path.basename(req.body.layout)).toLowerCase()"
+          ]
+        }
+      ],
+      "blob_sha": "32c016f02840e9300d41944ac3b5b58738d39b55",
+      "language": "ts",
+      "rationale": "路径包含校验：path.basename 先剥离目录分隔符再 resolve",
+      "evidence": "req.body.layout 直达 path.resolve；黑名单只拦已知名字"
+    },
+    {
+      "id": "ts-cwe022-0002",
+      "repo": "juice-shop",
+      "path": "routes/fileServer.ts",
+      "label": 1,
+      "cwe": "22",
+      "defect": {
+        "start": 32,
+        "end": 32
+      },
+      "patch": [
+        {
+          "at": 31,
+          "del": 1,
+          "ins": [
+            "      res.sendFile(path.resolve('ftp/', path.basename(file)))"
+          ]
+        }
+      ],
+      "blob_sha": "eeeb0b600a1f9a86b869d4b26720fd756f92c1d2",
+      "language": "ts",
+      "rationale": "路径包含校验：path.basename 剥离分隔符",
+      "evidence": "file 取自路由参数，endsWithAllowlistedFileType 与 cutOffPoisonNullByte 都挡不住 ../"
+    },
+    {
+      "id": "ts-cwe022-0003",
+      "repo": "juice-shop",
+      "path": "routes/vulnCodeSnippet.ts",
+      "label": 1,
+      "cwe": "22",
+      "defect": {
+        "start": 90,
+        "end": 90
+      },
+      "patch": [
+        {
+          "at": 89,
+          "del": 1,
+          "ins": [
+            "    const codingChallengeInfos = yaml.load(await fs.readFile('./data/static/codefixes/' + key.replace(/[^a-z0-9_-]/gi, '') + '.info.yml', { encoding: 'utf8' }))"
+          ]
+        }
+      ],
+      "blob_sha": "5d7a40ac90bb820bfdfd7007b15bd22512d27ddf",
+      "language": "ts",
+      "rationale": "字符白名单：key 仅保留字母数字下划线与连字符",
+      "evidence": "key 取自 req.body.key，直接拼进路径，无任何过滤"
+    },
+    {
+      "id": "ts-cwe022-0004",
+      "repo": "juice-shop",
+      "path": "routes/vulnCodeFixes.ts",
+      "label": 1,
+      "cwe": "22",
+      "defect": {
+        "start": 83,
+        "end": 83
+      },
+      "patch": [
+        {
+          "at": 82,
+          "del": 1,
+          "ins": [
+            "      const codingChallengeInfos = yaml.load(fs.readFileSync('./data/static/codefixes/' + key.replace(/[^a-z0-9_-]/gi, '') + '.info.yml', 'utf8'))"
+          ]
+        }
+      ],
+      "blob_sha": "595d5668ac3f3e5e7b5ac234fe19f327db067264",
+      "language": "ts",
+      "rationale": "字符白名单：key 仅保留字母数字下划线与连字符",
+      "evidence": "与 vulnCodeSnippet 同型，另一文件另一处 sink"
+    },
+    {
+      "id": "ts-cwe022-0005",
+      "repo": "juice-shop",
+      "path": "routes/fileUpload.ts",
+      "label": 1,
+      "cwe": "22",
+      "defect": {
+        "start": 31,
+        "end": 31
+      },
+      "patch": [
+        {
+          "at": 30,
+          "del": 1,
+          "ins": [
+            "    const absolutePath = path.resolve('uploads/complaints/' + path.basename(fileName))"
+          ]
+        }
+      ],
+      "blob_sha": "4da3070152c3bb09634521b9f8d925663e7f1f30",
+      "language": "ts",
+      "rationale": "路径包含校验：path.basename 剥离分隔符",
+      "evidence": "fileName 取自上传文件名；absolutePath.includes('.') 挡不住逃逸到兄弟目录"
+    },
+    {
+      "id": "ts-cwe022-9001",
+      "repo": "juice-shop",
+      "path": "routes/logfileServer.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb",
+      "language": "ts",
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符，sink 在但不可达",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe022-9002",
+      "repo": "juice-shop",
+      "path": "routes/quarantineServer.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "e7a2e841f36077ae62cb211e516428e886304017",
+      "language": "ts",
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe022-9003",
+      "repo": "juice-shop",
+      "path": "routes/keyServer.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "b9a4d9495bc8f1d1739cc7e1df4b2e1a7524ae6c",
+      "language": "ts",
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe022-9008",
+      "repo": "juice-shop",
+      "path": "routes/videoHandler.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "3dfe8c1d371dc9ff1e01be83480d488667ddb891",
+      "language": "ts",
+      "rationale": "subtitles 取自 application.promotion.subtitles 配置项，非请求可达输入",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe079-0001",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/search-result/search-result.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 146,
+        "end": 146
+      },
+      "patch": [
+        {
+          "at": 145,
+          "del": 1,
+          "ins": [
+            "      this.searchValue = this.sanitizer.bypassSecurityTrustHtml(String(queryParam).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) // vuln-code-snippet vuln-line localXssChallenge xssBonusChallenge"
+          ]
+        }
+      ],
+      "blob_sha": "45bce185b9d99819b1f2d5950799df487560094a",
+      "language": "ts",
+      "rationale": "输出编码：HTML 元字符先转义再交给 bypassSecurityTrustHtml",
+      "evidence": "queryParam 取自 URL 查询参数"
+    },
+    {
+      "id": "ts-cwe079-0002",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/search-result/search-result.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 113,
+        "end": 113
+      },
+      "patch": [
+        {
+          "at": 112,
+          "del": 1,
+          "ins": [
+            "      tableData[i].description = this.sanitizer.bypassSecurityTrustHtml(String(tableData[i].description).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) // vuln-code-snippet vuln-line restfulXssChallenge"
+          ]
+        }
+      ],
+      "blob_sha": "45bce185b9d99819b1f2d5950799df487560094a",
+      "language": "ts",
+      "rationale": "输出编码：HTML 元字符先转义再交给 bypassSecurityTrustHtml",
+      "evidence": "商品描述由服务端返回且可被写入"
+    },
+    {
+      "id": "ts-cwe079-0003",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/data-export/data-export.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 72,
+        "end": 72
+      },
+      "patch": [
+        {
+          "at": 71,
+          "del": 1,
+          "ins": [
+            "        window.open('', '_blank', 'width=500')?.document.write(String(this.userData).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))"
+          ]
+        }
+      ],
+      "blob_sha": "82735652d2852acab8852c6517597483536f37e9",
+      "language": "ts",
+      "rationale": "输出编码：写入前转义 HTML 元字符",
+      "evidence": "userData 是导出接口回包，直接 document.write 到新窗口"
+    },
+    {
+      "id": "ts-cwe079-0004",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/track-result/track-result.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 49,
+        "end": 49
+      },
+      "patch": [
+        {
+          "at": 48,
+          "del": 1,
+          "ins": [
+            "      this.results.orderNo = this.sanitizer.bypassSecurityTrustHtml(`<code>${String(results.data[0].orderId).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`)"
+          ]
+        }
+      ],
+      "blob_sha": "53061044770765b2bd3f3c4cf016030e605589b7",
+      "language": "ts",
+      "rationale": "输出编码：插值前转义 HTML 元字符",
+      "evidence": "orderId 来自接口回包"
+    },
+    {
+      "id": "ts-cwe079-0005",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/administration/administration.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 74,
+        "end": 74
+      },
+      "patch": [
+        {
+          "at": 73,
+          "del": 1,
+          "ins": [
+            "          user.email = this.sanitizer.bypassSecurityTrustHtml(`<span class=\"${this.doesUserHaveAnActiveSession(user) ? 'confirmation' : 'error'}\">${String(user.email).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`)"
+          ]
+        }
+      ],
+      "blob_sha": "d3dee00ea3d63e037201407b68e20cb67f7d76a8",
+      "language": "ts",
+      "rationale": "输出编码：插值前转义 HTML 元字符",
+      "evidence": "user.email 由用户可改"
+    },
+    {
+      "id": "ts-cwe079-0006",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/administration/administration.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 92,
+        "end": 92
+      },
+      "patch": [
+        {
+          "at": 91,
+          "del": 1,
+          "ins": [
+            "          feedback.comment = this.sanitizer.bypassSecurityTrustHtml(String(feedback.comment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))"
+          ]
+        }
+      ],
+      "blob_sha": "d3dee00ea3d63e037201407b68e20cb67f7d76a8",
+      "language": "ts",
+      "rationale": "输出编码：插值前转义 HTML 元字符",
+      "evidence": "反馈内容由任意用户提交"
+    },
+    {
+      "id": "ts-cwe079-0007",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/last-login-ip/last-login-ip.component.ts",
+      "label": 1,
+      "cwe": "79",
+      "defect": {
+        "start": 40,
+        "end": 40
+      },
+      "patch": [
+        {
+          "at": 39,
+          "del": 1,
+          "ins": [
+            "        this.lastLoginIp = this.sanitizer.bypassSecurityTrustHtml(`<small>${String(payload.data.lastLoginIp).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</small>`)"
+          ]
+        }
+      ],
+      "blob_sha": "4376de1087ba0a1fd099d8cf30e86341c03b3c85",
+      "language": "ts",
+      "rationale": "输出编码：插值前转义 HTML 元字符",
+      "evidence": "lastLoginIp 来自会话数据"
+    },
+    {
+      "id": "ts-cwe079-9005",
+      "repo": "juice-shop",
+      "path": "frontend/src/app/score-board/score-board.component.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "f6cc2e08c0c99eeacf322ca495a8d58854f45b8b",
+      "language": "ts",
+      "rationale": "challenge.description 是应用自带挑战文案，请求不可写",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe089-0001",
+      "repo": "juice-shop",
+      "path": "routes/search.ts",
+      "label": 1,
+      "cwe": "89",
+      "defect": {
+        "start": 23,
+        "end": 23
+      },
+      "patch": [
+        {
+          "at": 22,
+          "del": 1,
+          "ins": [
+            "    models.sequelize.query(`SELECT * FROM Products WHERE ((name LIKE '%${String(criteria).replace(/'/g, \"''\")}%' OR description LIKE '%${String(criteria).replace(/'/g, \"''\")}%') AND deletedAt IS NULL) ORDER BY name`) // vuln-code-snippet vuln-line unionSqlInjectionChallenge dbSchemaChallenge"
+          ]
+        }
+      ],
+      "blob_sha": "52e1a60a3083a420cf00d5ffb2167e3e76b5b8dd",
+      "language": "ts",
+      "rationale": "SQL 字符串字面量引号转义：拼进 WHERE 前把 ' 变成 ''",
+      "evidence": "模板串拼接 criteria，sequelize.query 直接执行"
+    },
+    {
+      "id": "ts-cwe089-0002",
+      "repo": "juice-shop",
+      "path": "routes/login.ts",
+      "label": 1,
+      "cwe": "89",
+      "defect": {
+        "start": 34,
+        "end": 34
+      },
+      "patch": [
+        {
+          "at": 33,
+          "del": 1,
+          "ins": [
+            "    models.sequelize.query(`SELECT * FROM Users WHERE email = '${String(req.body.email || '').replace(/'/g, \"''\")}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge"
+          ]
+        }
+      ],
+      "blob_sha": "fb9fce357d272a497b77aa66e973b5d130946bb9",
+      "language": "ts",
+      "rationale": "SQL 字符串字面量引号转义：拼进 WHERE 前把 ' 变成 ''",
+      "evidence": "邮箱取自请求体，模板串拼接后交给 sequelize.query"
+    },
+    {
+      "id": "ts-cwe094-0001",
+      "repo": "juice-shop",
+      "path": "routes/userProfile.ts",
+      "label": 1,
+      "cwe": "94",
+      "defect": {
+        "start": 65,
+        "end": 65
+      },
+      "patch": [
+        {
+          "at": 64,
+          "del": 1,
+          "ins": [
+            "          username = (/^[\\w.-]+$/.test(code) ? code : '') // eslint-disable-line no-eval"
+          ]
+        }
+      ],
+      "blob_sha": "ae53156343849239ec4513a9134cf84c9bbd2b1a",
+      "language": "ts",
+      "rationale": "字符白名单：只接受标识符字符集，不再 eval 表达式",
+      "evidence": "code 取自 username 的 #{...} 片段"
+    },
+    {
+      "id": "ts-cwe094-0002",
+      "repo": "juice-shop",
+      "path": "routes/b2bOrder.ts",
+      "label": 1,
+      "cwe": "94",
+      "defect": {
+        "start": 23,
+        "end": 23
+      },
+      "patch": [
+        {
+          "at": 22,
+          "del": 1,
+          "ins": [
+            "        vm.runInContext('JSON.parse(orderLinesData)', sandbox, { timeout: 2000 })"
+          ]
+        }
+      ],
+      "blob_sha": "a3b5e398b80bfd770d1036761898b470da55b740",
+      "language": "ts",
+      "rationale": "改用 JSON.parse：只解析数据，不执行表达式",
+      "evidence": "orderLinesData 取自请求体，vm 沙箱内执行表达式"
+    },
+    {
+      "id": "ts-cwe094-0003",
+      "repo": "juice-shop",
+      "path": "routes/fileUpload.ts",
+      "label": 1,
+      "cwe": "94",
+      "defect": {
+        "start": 114,
+        "end": 114
+      },
+      "patch": [
+        {
+          "at": 113,
+          "del": 1,
+          "ins": [
+            "      const yamlString = vm.runInContext('JSON.stringify(yaml.load(data, { schema: \"failsafe\" }))', sandbox, { timeout: 2000 })"
+          ]
+        }
+      ],
+      "blob_sha": "4da3070152c3bb09634521b9f8d925663e7f1f30",
+      "language": "ts",
+      "rationale": "yaml failsafe schema：禁用自定义标签，只产出纯数据",
+      "evidence": "上传文件内容直接进 yaml.load，沙箱超时是唯一控制"
+    },
+    {
+      "id": "ts-cwe094-0004",
+      "repo": "juice-shop",
+      "path": "lib/xml.ts",
+      "label": 1,
+      "cwe": "94",
+      "defect": {
+        "start": 38,
+        "end": 38
+      },
+      "patch": [
+        {
+          "at": 37,
+          "del": 1,
+          "ins": [
+            "  const xmlDoc = vm.runInContext('libxml2.XmlDocument.fromString(data, { noent: false })', sandbox, { timeout: timeoutMs })"
+          ]
+        }
+      ],
+      "blob_sha": "425a24463f35156d845f78b3524607b6243915eb",
+      "language": "ts",
+      "rationale": "禁用实体展开（noent: false）：XML 不允许引入外部实体",
+      "evidence": "XML 内容来自上传，送进 libxml2 沙箱"
+    },
+    {
+      "id": "ts-cwe094-9004",
+      "repo": "juice-shop",
+      "path": "routes/captcha.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "d874df7bbd159aa811f6b14f06f378750011760e",
+      "language": "ts",
+      "rationale": "eval 的实参由 Math.random 整数与运算符拼成，无外部输入可达",
+      "evidence": null
+    },
+    {
+      "id": "ts-cwe798-0001",
+      "repo": "juice-shop",
+      "path": "lib/insecurity.ts",
+      "label": 1,
+      "cwe": "798",
+      "defect": {
+        "start": 21,
+        "end": 21
+      },
+      "patch": [
+        {
+          "at": 20,
+          "del": 1,
+          "ins": [
+            "const privateKey = process.env.JWT_PRIVATE_KEY ?? ''"
+          ]
+        }
+      ],
+      "blob_sha": "b6039a86c17b02cdf026a6d3353765be9beb801c",
+      "language": "ts",
+      "rationale": "移出源码：密钥改由环境变量注入",
+      "evidence": "约 1.6 KB 的完整 RSA 私钥字面量硬编码在源码里"
+    },
+    {
+      "id": "ts-cwe918-0001",
+      "repo": "juice-shop",
+      "path": "routes/profileImageUrlUpload.ts",
+      "label": 1,
+      "cwe": "918",
+      "defect": {
+        "start": 24,
+        "end": 24
+      },
+      "patch": [
+        {
+          "at": 23,
+          "del": 1,
+          "ins": [
+            "          const target = new URL(url)",
+            "          if (target.protocol !== 'https:' || /^(localhost|127\\.|10\\.|192\\.168\\.|169\\.254\\.)/.test(target.hostname)) throw new Error('blocked non-public image url')",
+            "          const response = await fetch(target)"
+          ]
+        }
+      ],
+      "blob_sha": "55184083e78afb9dd570394b5d6f3b57a3ec6093",
+      "language": "ts",
+      "rationale": "目标地址白名单校验：仅 https，且拒绝回环与内网主机",
+      "evidence": "url 取自上送 imageUrl，无目标白名单（项目自己用 abused_ssrf_bug 标记）"
+    },
+    {
+      "id": "ts-cwe918-9007",
+      "repo": "juice-shop",
+      "path": "lib/startup/validatePreconditions.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "145c2fdd5f7bef9dc4a53f8f1d3cbf4da13a51a8",
+      "language": "ts",
+      "rationale": "domain 取自启动配置，非请求输入",
+      "evidence": null
+    }
+  ]
+}

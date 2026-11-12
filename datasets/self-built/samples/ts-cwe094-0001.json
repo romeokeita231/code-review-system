@@ -4,7 +4,7 @@
   "unit": "file_write",
   "language": "ts",
   "sample_set": "self",
-  "group_id": "ts-cwe094-0001",
+  "group_id": "juice-shop:routes/userProfile.ts",
   "repo": "juice-shop",
   "file_path": "routes/userProfile.ts",
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { type Request, type Response, type NextFunction } from 'express'\nimport { AllHtmlEntities as Entities } from 'html-entities'\nimport config from 'config'\nimport fs from 'node:fs/promises'\n\nimport * as challengeUtils from '../lib/challengeUtils'\nimport { themes } from '../views/themes/themes'\nimport { challenges } from '../data/datacache'\nimport * as security from '../lib/insecurity'\nimport { UserModel } from '../models/user'\nimport * as utils from '../lib/utils'\n\nconst entities = new Entities()\n\nfunction favicon () {\n  return utils.extractFilename(config.get('application.favicon'))\n}\n\nexport function getUserProfile () {\n  return async (req: Request, res: Response, next: NextFunction) => {\n    let template: string\n    try {\n      template = await fs.readFile('views/userProfile.pug', { encoding: 'utf-8' })\n    } catch (err) {\n      next(err)\n      return\n    }\n\n    const loggedInUser = security.authenticatedUsers.get(req.cookies.token)\n    if (!loggedInUser) {\n      next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress)); return\n    }\n\n    let user: UserModel | null\n    try {\n      user = await UserModel.findByPk(loggedInUser.data.id)\n    } catch (error) {\n      next(error)\n      return\n    }\n\n    if (!user) {\n      next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))\n      return\n    }\n\n    let username = user.username\n\n    const themeKey = config.get<string>('application.theme') as keyof typeof themes\n    const theme = themes[themeKey] || themes['bluegrey-lightgreen']\n\n    if (utils.isChallengeEnabled(challenges.usernameXssChallenge)) {\n      if (username?.match(/#{(.*)}/) !== null) {\n        req.app.locals.abused_ssti_bug = true\n        const code = username?.substring(2, username.length - 1)\n        try {\n          if (!code) {\n            throw new Error('Username is null')\n          }\n          username = (/^[\\w.-]+$/.test(code) ? code : '') // eslint-disable-line no-eval\n        } catch (err) {\n          username = '\\\\' + username\n        }\n      } else {\n        username = '\\\\' + username\n      }\n      if (username) {\n        template = template.replace(/_username_/g, username)\n      }\n    } else {\n      template = template.replace(/_username_/g, '#{username}')\n    }\n    template = template.replace(/_emailHash_/g, security.hash(user?.email))\n    template = template.replace(/_title_/g, entities.encode(config.get<string>('application.name')))\n    template = template.replace(/_favicon_/g, favicon())\n    template = template.replace(/_bgColor_/g, theme.bgColor)\n    template = template.replace(/_textColor_/g, theme.textColor)\n    template = template.replace(/_navColor_/g, theme.navColor)\n    template = template.replace(/_primLight_/g, theme.primLight)\n    template = template.replace(/_primDark_/g, theme.primDark)\n    template = template.replace(/_logo_/g, utils.extractFilename(config.get('application.logo')))\n\n    try {\n      const pug = (await import('pug')).default\n      const fn = pug.compile(template)\n      const CSP = `img-src 'self' ${user?.profileImage}; script-src 'self' 'unsafe-eval'`\n\n      challengeUtils.solveIf(challenges.usernameXssChallenge, () => {\n        return username && user?.profileImage.match(/;[ ]*script-src(.)*'unsafe-inline'/g) !== null && username.includes('<script>alert(`xss`)</script>')\n      })\n\n      res.set({\n        'Content-Security-Policy': CSP\n      })\n\n      res.send(fn(user))\n    } catch (err) {\n      next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))\n    }\n  }\n}\n",
@@ -13,7 +13,7 @@
   "label": 1,
   "defects": [
     {
-      "defect_id": "ts-cwe094-0001#d1",
+      "defect_id": "ts-cwe094-0001:d1",
       "cwe": "CWE-94",
       "file": "routes/userProfile.ts",
       "line_start": 65,
@@ -30,9 +30,11 @@
   "contamination_risk": "low",
   "defect_origin": "injected",
   "origin": {
-    "kind": "self_rewritten",
+    "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/userProfile.ts",
-    "advisory": null
+    "advisory": null,
+    "blob_sha": "ae53156343849239ec4513a9134cf84c9bbd2b1a"
   },
-  "annotator": "self"
+  "annotator": "self",
+  "split": "fit"
 }
