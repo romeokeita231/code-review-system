@@ -40,6 +40,38 @@ Rebuilding this set is P2 of the #41 sequence: parents from `nodejs-goof` / `dvn
 Juice Shop with a `tsc --noEmit` gate, CWE-502 replaced by CWE-918, `origin` /
 `repo` / `contamination_risk` filled in, `risk_level` re-derived.
 
+### P2 supply check (measured 2026-11-12)
+
+`gh api repos/<repo>/git/trees/<sha>?recursive=1` at each parent's HEAD:
+
+| Parent | files | `.ts`/`.tsx` | `.js`/`.jsx` |
+| --- | --- | --- | --- |
+| `snyk-labs/nodejs-goof` | 60 | **0** | 10 |
+| `appsecco/dvna` | 151 | **0** | 14 |
+| `juice-shop/juice-shop` | 1498 | 664 | 9 |
+
+Two of the three parents named by §4 contain **no TypeScript at all**, while §13
+fixes `language: "ts"`. The parent list therefore cannot yield ready-made rows:
+Juice Shop is the only parent that is already TypeScript (an Angular front end plus
+an Express server).
+
+Three ways to build the set, in descending order of fit:
+
+1. **Port a child of `nodejs-goof` / `dvna` into TypeScript inside a project whose
+   `tsc --noEmit` passes.** The schema already has `origin.kind = self_rewritten`
+   for exactly this, and §4.4 requires structural rewriting anyway. This keeps the
+   Express context (imports, routes, DAOs) that the current hand-written samples
+   lack, and is the only route that covers all seven classes.
+2. Use Juice Shop alone for the classes it actually contains (injection, XSS, broken
+   access control) and accept a smaller set.
+3. Relax §13 to `language: "js"`, which would invalidate the TypeScript ruleset
+   coverage numbers the drill depends on.
+
+Annotation stays human (§5: 主标本人, advisor spot-check at κ ≥ 0.70). The
+machine-checkable part — provenance, `origin`/`contamination_risk`, the `tsc` gate,
+the 3:2 split, the §9 risk derivation — is what `--conformance` enforces once the
+rows exist.
+
 ## AACR-Bench (imported)
 
 Source: [`alibaba/aacr-bench`](https://github.com/alibaba/aacr-bench), Apache-2.0,
