@@ -1,0 +1,151 @@
+{
+  "$ref": "#/definitions/SourceResult",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "SourceResult": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "additionalProperties": false,
+          "properties": {
+            "filesCovered": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filesUnknown": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "filesCovered",
+            "filesUnknown"
+          ],
+          "type": "object"
+        },
+        "errorKind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "confidence": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "cwe": {
+                "anyOf": [
+                  {
+                    "pattern": "^CWE-\\d+$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "endLine": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "evidence": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "file": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "rawId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "severity": {
+                "type": "number"
+              },
+              "source": {
+                "enum": [
+                  "semgrep",
+                  "aor",
+                  "crg",
+                  "registry"
+                ],
+                "type": "string"
+              },
+              "startLine": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "symbol": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "startLine",
+              "endLine",
+              "severity",
+              "confidence",
+              "source",
+              "rawId"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "latencyMs": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "semgrep",
+            "aor",
+            "crg",
+            "registry"
+          ],
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "timeout",
+            "error",
+            "degraded"
+          ],
+          "type": "string"
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "status",
+        "findings",
+        "coverage",
+        "tokens",
+        "latencyMs"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "disk": "dup\ndup\n",
+  "pre": {
+    "name": "edit",
+    "callId": "call-edit-ambiguous",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": {
+      "file_path": "src/app.ts",
+      "old_string": "dup",
+      "new_string": "unique",
+      "replace_all": false
+    },
+    "ts": 1700000000400
+  },
+  "post": {
+    "name": "edit",
+    "callId": "call-edit-ambiguous",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": { "file_path": "src/app.ts" },
+    "value": null,
+    "ts": 1700000000500
+  }
+}

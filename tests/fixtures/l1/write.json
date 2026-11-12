@@ -1,0 +1,26 @@
+{
+  "disk": "const a = 1;\r\nconst b = 2;\r\n",
+  "pre": {
+    "name": "write",
+    "callId": "call-write-1",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": {
+      "file_path": "src/app.ts",
+      "content": "const a = 1;\r\nconst b = 3;\r\n"
+    },
+    "ts": 1700000000000
+  },
+  "post": {
+    "name": "write",
+    "callId": "call-write-1",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": { "file_path": "src/app.ts" },
+    "value": {
+      "before": "const a = 1;\nconst b = 2;\n",
+      "after": "const a = 1;\nconst b = 3;\n"
+    },
+    "ts": 1700000000100
+  }
+}

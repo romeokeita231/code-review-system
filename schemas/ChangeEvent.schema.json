@@ -1,0 +1,83 @@
+{
+  "$ref": "#/definitions/ChangeEvent",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ChangeEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "diff": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diffProvenance": {
+          "enum": [
+            "synthesized",
+            "observed",
+            "none"
+          ],
+          "type": "string"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "pre",
+            "post",
+            "disposition"
+          ],
+          "type": "string"
+        },
+        "rootCallId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "trigger": {
+          "enum": [
+            "write",
+            "edit",
+            "command"
+          ],
+          "type": "string"
+        },
+        "ts": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sessionId",
+        "rootCallId",
+        "phase",
+        "trigger",
+        "files",
+        "diff",
+        "diffProvenance",
+        "ts"
+      ],
+      "type": "object"
+    }
+  }
+}

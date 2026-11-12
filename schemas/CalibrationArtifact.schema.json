@@ -1,0 +1,200 @@
+{
+  "$ref": "#/definitions/CalibrationArtifact",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CalibrationArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "fitRoot": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "grids": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "n": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "points": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "p": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "rawHigh": {
+                      "type": "number"
+                    },
+                    "rawLow": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "rawLow",
+                    "rawHigh",
+                    "p"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "source": {
+                "enum": [
+                  "semgrep",
+                  "aor",
+                  "crg",
+                  "registry"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "category",
+              "n",
+              "points"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "pMax": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "type": "number"
+        },
+        "pPrior": {
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "shrinkageN0": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "thresholds": {
+          "additionalProperties": false,
+          "properties": {
+            "global": {
+              "additionalProperties": false,
+              "properties": {
+                "block": {
+                  "anyOf": [
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "warn": {
+                  "anyOf": [
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "block",
+                "warn"
+              ],
+              "type": "object"
+            },
+            "perCategory": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "block": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "warn": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "block",
+                  "warn"
+                ],
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "skipped": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "scope",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "global",
+            "perCategory",
+            "skipped"
+          ],
+          "type": "object"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "pPrior",
+        "shrinkageN0",
+        "pMax",
+        "fitRoot",
+        "grids",
+        "thresholds"
+      ],
+      "type": "object"
+    }
+  }
+}

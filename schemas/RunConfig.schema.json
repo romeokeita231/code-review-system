@@ -1,0 +1,508 @@
+{
+  "$ref": "#/definitions/RunConfig",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "RunConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "enum": [
+            "B0",
+            "B1",
+            "B2",
+            "B3",
+            "B4g",
+            "B4",
+            "single"
+          ],
+          "type": "string"
+        },
+        "budgets": {
+          "additionalProperties": false,
+          "properties": {
+            "callMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "crgQueryMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "fusionWriteMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "semgrepKillMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "softCapMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            "turnMs": {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "callMs",
+            "turnMs",
+            "semgrepKillMs",
+            "crgQueryMs",
+            "fusionWriteMs",
+            "softCapMs"
+          ],
+          "type": "object"
+        },
+        "calibration": {
+          "additionalProperties": false,
+          "properties": {
+            "artifactPath": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifactPath",
+            "version"
+          ],
+          "type": "object"
+        },
+        "fusionStages": {
+          "additionalProperties": false,
+          "properties": {
+            "calibrate": {
+              "type": "boolean"
+            },
+            "conflict": {
+              "type": "boolean"
+            },
+            "merge": {
+              "type": "boolean"
+            },
+            "vote": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "merge",
+            "conflict",
+            "calibrate",
+            "vote"
+          ],
+          "type": "object"
+        },
+        "mode": {
+          "enum": [
+            "replay",
+            "live"
+          ],
+          "type": "string"
+        },
+        "persistence": {
+          "additionalProperties": false,
+          "properties": {
+            "jsonlPath": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "rawDir": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "turnStatePath": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "jsonlPath",
+            "rawDir",
+            "turnStatePath"
+          ],
+          "type": "object"
+        },
+        "prior": {
+          "additionalProperties": false,
+          "properties": {
+            "pPrior": {
+              "exclusiveMaximum": 1,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "pPrior"
+          ],
+          "type": "object"
+        },
+        "sMax": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "sources": {
+          "additionalProperties": false,
+          "properties": {
+            "aor": {
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "concurrency": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "maxChunks": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                "outerCapMs": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                "preview": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "budgetSwitchRatio": {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "budgetSwitchRatio"
+                  ],
+                  "type": "object"
+                },
+                "tier2MaxTools": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                "tierTokens": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "tier1": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer"
+                    },
+                    "tier2": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "tier1",
+                    "tier2"
+                  ],
+                  "type": "object"
+                },
+                "timeoutPerFileMs": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                "versionCommit": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "enabled",
+                "command",
+                "versionCommit",
+                "outerCapMs",
+                "concurrency",
+                "timeoutPerFileMs",
+                "maxChunks",
+                "preview",
+                "tierTokens",
+                "tier2MaxTools"
+              ],
+              "type": "object"
+            },
+            "crg": {
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "indexTimeoutMs": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "enabled",
+                "command",
+                "indexTimeoutMs"
+              ],
+              "type": "object"
+            },
+            "registry": {
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "timeoutMs": {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "enabled",
+                "command",
+                "timeoutMs"
+              ],
+              "type": "object"
+            },
+            "semgrep": {
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "failOpenOverBytes": {
+                  "additionalProperties": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                "rulesPath": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "rulesSha256": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "subsets": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "blockRules": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "langs": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "path": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "path",
+                      "sha256",
+                      "langs",
+                      "blockRules"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "timeoutsMs": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "callMs": {
+                      "exclusiveMinimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "callMs"
+                  ],
+                  "type": "object"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "enabled",
+                "command",
+                "version",
+                "rulesPath",
+                "rulesSha256",
+                "subsets",
+                "timeoutsMs",
+                "failOpenOverBytes"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "semgrep",
+            "aor",
+            "crg",
+            "registry"
+          ],
+          "type": "object"
+        },
+        "thresholds": {
+          "additionalProperties": false,
+          "properties": {
+            "block": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "warn": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "block",
+            "warn"
+          ],
+          "type": "object"
+        },
+        "tieBreak": {
+          "enum": [
+            "max",
+            "first"
+          ],
+          "type": "string"
+        },
+        "triage": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tier0": {
+              "additionalProperties": false,
+              "properties": {
+                "filesMax": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "nodesMax": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "filesMax",
+                "nodesMax"
+              ],
+              "type": "object"
+            },
+            "tier1": {
+              "additionalProperties": false,
+              "properties": {
+                "filesMax": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "nodesMax": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "filesMax",
+                "nodesMax"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "enabled",
+            "tier0",
+            "tier1"
+          ],
+          "type": "object"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "weights": {
+          "additionalProperties": false,
+          "properties": {
+            "dual": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "single": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "single",
+            "dual"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "version",
+        "mode",
+        "baseline",
+        "sources",
+        "fusionStages",
+        "tieBreak",
+        "triage",
+        "budgets",
+        "thresholds",
+        "weights",
+        "prior",
+        "calibration",
+        "sMax",
+        "persistence"
+      ],
+      "type": "object"
+    }
+  }
+}

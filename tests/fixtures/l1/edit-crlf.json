@@ -1,0 +1,28 @@
+{
+  "disk": "first line\r\nsecond line\r\n",
+  "pre": {
+    "name": "edit",
+    "callId": "call-edit-1",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": {
+      "file_path": "src/app.ts",
+      "old_string": "second line\n",
+      "new_string": "patched line\n",
+      "replace_all": false
+    },
+    "ts": 1700000000200
+  },
+  "post": {
+    "name": "edit",
+    "callId": "call-edit-1",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": { "file_path": "src/app.ts" },
+    "value": {
+      "before": "first line\nsecond line\n",
+      "after": "first line\npatched line\n"
+    },
+    "ts": 1700000000300
+  }
+}

@@ -1,0 +1,553 @@
+{
+  "$ref": "#/definitions/ReviewRow",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewRow": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "enum": [
+            "B0",
+            "B1",
+            "B2",
+            "B3",
+            "B4g",
+            "B4",
+            "single"
+          ],
+          "type": "string"
+        },
+        "block_loop": {
+          "type": "boolean"
+        },
+        "change_event": {
+          "additionalProperties": false,
+          "properties": {
+            "diff": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "diffProvenance": {
+              "enum": [
+                "synthesized",
+                "observed",
+                "none"
+              ],
+              "type": "string"
+            },
+            "files": {
+              "anyOf": [
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "phase": {
+              "enum": [
+                "pre",
+                "post",
+                "disposition"
+              ],
+              "type": "string"
+            },
+            "rootCallId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sessionId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "trigger": {
+              "enum": [
+                "write",
+                "edit",
+                "command"
+              ],
+              "type": "string"
+            },
+            "ts": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "sessionId",
+            "rootCallId",
+            "phase",
+            "trigger",
+            "files",
+            "diff",
+            "diffProvenance",
+            "ts"
+          ],
+          "type": "object"
+        },
+        "config_hash": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "final_disposition": {
+          "enum": [
+            "mechanical_block",
+            "instruction_correction",
+            "record"
+          ],
+          "type": "string"
+        },
+        "findings_merged": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "blockable": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "conflictResolution": {
+                "enum": [
+                  "none",
+                  "evidence_preferred",
+                  "vote",
+                  "downgraded"
+                ],
+                "type": "string"
+              },
+              "cwe": {
+                "anyOf": [
+                  {
+                    "pattern": "^CWE-\\d+$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cweComparable": {
+                "type": "boolean"
+              },
+              "endLine": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "evidence": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "file": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "rawId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "rawIds": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "severity": {
+                "type": "number"
+              },
+              "source": {
+                "enum": [
+                  "semgrep",
+                  "aor",
+                  "crg",
+                  "registry"
+                ],
+                "type": "string"
+              },
+              "sources": {
+                "items": {
+                  "enum": [
+                    "semgrep",
+                    "aor",
+                    "crg",
+                    "registry"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "startLine": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "symbol": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "startLine",
+              "endLine",
+              "severity",
+              "confidence",
+              "source",
+              "rawId",
+              "sources",
+              "rawIds",
+              "cweComparable",
+              "conflictResolution",
+              "blockable"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "mode": {
+          "enum": [
+            "replay",
+            "live"
+          ],
+          "type": "string"
+        },
+        "p_fused": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "p_semgrep": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "post_decision": {
+          "enum": [
+            "inject_warn",
+            "none",
+            "not_run"
+          ],
+          "type": "string"
+        },
+        "pre_decision": {
+          "enum": [
+            "deny",
+            "allow",
+            "not_run"
+          ],
+          "type": "string"
+        },
+        "review_skip_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_supported_files",
+                "language_unsupported",
+                "resource_limit",
+                "turn_budget_exhausted",
+                "budget_exhausted",
+                "index_not_ready",
+                "index_stale",
+                "aor_timeout",
+                "aor_partial",
+                "no_evidence",
+                "tier0_no_semantic",
+                "duplicate_reuse",
+                "no_change",
+                "command_event",
+                "disposition_missing"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review_status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "skipped"
+          ],
+          "type": "string"
+        },
+        "run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "additionalProperties": false,
+                "properties": {
+                  "filesCovered": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "filesUnknown": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "filesCovered",
+                  "filesUnknown"
+                ],
+                "type": "object"
+              },
+              "errorKind": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "findings": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "confidence": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "cwe": {
+                      "anyOf": [
+                        {
+                          "pattern": "^CWE-\\d+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "endLine": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "evidence": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "file": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "rawId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "number"
+                    },
+                    "source": {
+                      "enum": [
+                        "semgrep",
+                        "aor",
+                        "crg",
+                        "registry"
+                      ],
+                      "type": "string"
+                    },
+                    "startLine": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "symbol": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "file",
+                    "startLine",
+                    "endLine",
+                    "severity",
+                    "confidence",
+                    "source",
+                    "rawId"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "latencyMs": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "source": {
+                "enum": [
+                  "semgrep",
+                  "aor",
+                  "crg",
+                  "registry"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "ok",
+                  "timeout",
+                  "error",
+                  "degraded"
+                ],
+                "type": "string"
+              },
+              "tokens": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "status",
+              "findings",
+              "coverage",
+              "tokens",
+              "latencyMs"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "partial",
+            "timeout",
+            "failed",
+            "unknown",
+            "skipped"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "enum": [
+            0,
+            1,
+            2
+          ],
+          "type": "number"
+        },
+        "tier_source": {
+          "enum": [
+            "triage",
+            "static",
+            "none"
+          ],
+          "type": "string"
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "toolchain": {
+          "additionalProperties": false,
+          "properties": {
+            "aor": {
+              "type": "string"
+            },
+            "crg": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "semgrep": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "semgrep",
+            "aor",
+            "crg",
+            "node",
+            "platform"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "run_id",
+        "config_hash",
+        "baseline",
+        "mode",
+        "change_event",
+        "tier",
+        "tier_source",
+        "sources",
+        "findings_merged",
+        "p_semgrep",
+        "p_fused",
+        "pre_decision",
+        "post_decision",
+        "final_disposition",
+        "review_status",
+        "review_skip_reason",
+        "block_loop",
+        "text",
+        "tokens",
+        "latency_ms",
+        "status",
+        "toolchain"
+      ],
+      "type": "object"
+    }
+  }
+}

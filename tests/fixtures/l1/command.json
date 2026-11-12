@@ -1,0 +1,11 @@
+{
+  "post": {
+    "name": "bash",
+    "callId": "call-bash-1",
+    "rootCallId": "root-1",
+    "sessionId": "session-1",
+    "arguments": { "command": "npm test" },
+    "value": { "cwd": "F:/repo", "exitCode": 0 },
+    "ts": 1700000000600
+  }
+}

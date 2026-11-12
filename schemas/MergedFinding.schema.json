@@ -1,0 +1,118 @@
+{
+  "$ref": "#/definitions/MergedFinding",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "MergedFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "blockable": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "conflictResolution": {
+          "enum": [
+            "none",
+            "evidence_preferred",
+            "vote",
+            "downgraded"
+          ],
+          "type": "string"
+        },
+        "cwe": {
+          "anyOf": [
+            {
+              "pattern": "^CWE-\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cweComparable": {
+          "type": "boolean"
+        },
+        "endLine": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rawId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rawIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "severity": {
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "semgrep",
+            "aor",
+            "crg",
+            "registry"
+          ],
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "enum": [
+              "semgrep",
+              "aor",
+              "crg",
+              "registry"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "startLine": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "file",
+        "startLine",
+        "endLine",
+        "severity",
+        "confidence",
+        "source",
+        "rawId",
+        "sources",
+        "rawIds",
+        "cweComparable",
+        "conflictResolution",
+        "blockable"
+      ],
+      "type": "object"
+    }
+  }
+}

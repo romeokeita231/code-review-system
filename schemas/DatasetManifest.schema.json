@@ -1,0 +1,112 @@
+{
+  "$ref": "#/definitions/DatasetManifest",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "DatasetManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256_root": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "samples": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "changed_lines": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "content_sha256": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "cwe": {
+                "anyOf": [
+                  {
+                    "pattern": "^CWE-\\d+$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "expected_detectable_by": {
+                "items": {
+                  "enum": [
+                    "semgrep",
+                    "aor",
+                    "crg",
+                    "registry"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "group_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "language": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "paired_safe": {
+                "type": "boolean"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "risk_level": {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              "sample_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "split": {
+                "enum": [
+                  "fit",
+                  "eval"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "sample_id",
+              "group_id",
+              "split",
+              "cwe",
+              "risk_level",
+              "paired_safe",
+              "language",
+              "path",
+              "changed_lines",
+              "content_sha256",
+              "expected_detectable_by"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "content_sha256_root",
+        "samples"
+      ],
+      "type": "object"
+    }
+  }
+}

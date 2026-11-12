@@ -1,0 +1,11 @@
+{
+  "id": "evt-0001",
+  "sessionId": "sess-demo",
+  "rootCallId": "call-0001",
+  "phase": "pre",
+  "trigger": "write",
+  "files": ["src/demo/app.py"],
+  "diff": "@@ -0,0 +1,3 @@\n+import os\n+def run(cmd):\n+    os.system(cmd)\n",
+  "diffProvenance": "synthesized",
+  "ts": 1762400000000
+}

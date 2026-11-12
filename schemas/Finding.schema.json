@@ -1,0 +1,77 @@
+{
+  "$ref": "#/definitions/Finding",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Finding": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "cwe": {
+          "anyOf": [
+            {
+              "pattern": "^CWE-\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endLine": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rawId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "severity": {
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "semgrep",
+            "aor",
+            "crg",
+            "registry"
+          ],
+          "type": "string"
+        },
+        "startLine": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "file",
+        "startLine",
+        "endLine",
+        "severity",
+        "confidence",
+        "source",
+        "rawId"
+      ],
+      "type": "object"
+    }
+  }
+}

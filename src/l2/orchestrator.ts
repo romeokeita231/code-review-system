@@ -315,7 +315,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       ? Math.max(...semgrepFindings.map((finding) => singleSourceProbability(finding, ctx.config, ctx.artifact)))
       : null;
 
-  let preDecision: Disposition["preDecision"] = semgrep ? "allow" : "not_run";
+  let preDecision: Disposition["preDecision"] = semgrepResult ? "allow" : "not_run";
   let blockLoop = false;
   let denyFindings: Finding[] = [];
 
