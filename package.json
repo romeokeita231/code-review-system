@@ -10,16 +10,28 @@
   "bin": {
     "crs": "./dist/cli.js"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.js"
+    },
+    "./core": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "schemas",
     "cordis.patch.yml"
   ],
   "dsh": {
-    "bundle": "./dist/plugin.js",
-    "patch": "./cordis.patch.yml"
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "scripts": {
     "build": "tsup",
@@ -30,7 +42,8 @@
     "dataset:build": "tsx scripts/build-dataset.ts",
     "dataset:verify": "tsx scripts/verify-dataset.ts",
     "calibrate": "tsx scripts/calibrate.ts",
-    "report": "tsx scripts/report.ts"
+    "report": "tsx scripts/report.ts",
+    "drill": "tsx scripts/live-drill.ts"
   },
   "dependencies": {
     "execa": "^9.5.2",

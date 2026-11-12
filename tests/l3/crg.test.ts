@@ -61,8 +61,14 @@ describe("CrgTriage", () => {
     const triage = createCrgTriage(makeConfig(), { root: "C:/repo", runner });
     const analysis = await triage.analyze(makeEvent(["src/a.ts"]), Date.now() + 5000);
 
-    expect(runner.calls[0]?.args).toContain("-m");
-    expect(runner.calls[0]?.args).toContain("crg");
+    expect(runner.calls[0]?.file).toBe("code-review-graph");
+    expect(runner.calls[0]?.args).toEqual([
+      "impact",
+      "--repo",
+      "C:/repo",
+      "--files",
+      "src/a.ts",
+    ]);
     expect(runner.calls[0]?.timeoutMs).toBeLessThanOrEqual(300);
     expect(analysis.impactedFiles).toBe(2);
     expect(analysis.indexReady).toBe(true);

@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 runs/
+.tmp/
 datasets/external/
 *.log
 .DS_Store
@@ -10,3 +11,4 @@ __pycache__/
 *.pyc
 .pytest_cache/
 uv.lock.tmp
+artifacts/acceptance/

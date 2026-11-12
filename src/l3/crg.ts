@@ -7,7 +7,8 @@ import { asNumber, asRecord, asString } from "./json.js";
 export interface CrgOptions {
   root: string;
   runner?: CommandRunner;
-  python?: string;
+  /** Executable that provides the `code-review-graph` CLI. */
+  command?: string;
 }
 
 function toPosix(value: string): string {
@@ -20,8 +21,7 @@ function normalize(value: string, root: string): string {
   return base.length > 0 && norm.startsWith(`${base}/`) ? norm.slice(base.length + 1) : norm;
 }
 
-export function degradedAnalysis(changedFiles: string[]): TriageAnalysis {
-  return {
+export function degradedAnalysis(changedFiles: string[]): TriageAnalysis {  return {
     changedFiles,
     impactedFiles: changedFiles.length,
     impactedNodes: 0,
@@ -30,6 +30,12 @@ export function degradedAnalysis(changedFiles: string[]): TriageAnalysis {
     indexReady: false,
     indexStale: false,
   };
+}
+
+/** `unresolved_call_sites` is a count in JSON envelopes and an array in the CLI. */
+function unresolvedCount(value: unknown): number {
+  if (Array.isArray(value)) return value.length;
+  return asNumber(value) ?? 0;
 }
 
 export function analyzeStatic(changedFiles: string[], payload: unknown, root = ""): TriageAnalysis {
@@ -50,7 +56,7 @@ export function analyzeStatic(changedFiles: string[], payload: unknown, root = "
   const count = asNumber(doc["impacted_file_count"]);
   const impactedFiles = impacted.length > 0 ? union.size : Math.max(changed.length, count ?? 0);
   const impactedNodes = Math.max(0, Math.trunc(asNumber(doc["total_impacted"]) ?? 0));
-  const unresolved = Math.max(0, Math.trunc(asNumber(doc["unresolved_call_sites"]) ?? 0));
+  const unresolved = Math.max(0, unresolvedCount(doc["unresolved_call_sites"]));
   const stale = status === "partial";
 
   return {
@@ -67,13 +73,13 @@ export function analyzeStatic(changedFiles: string[], payload: unknown, root = "
 export class CrgTriage implements TriageProvider {
   private readonly root: string;
   private readonly runner: CommandRunner;
-  private readonly python: string;
+  private readonly command: string;
   private readonly queryMs: number;
 
   constructor(config: RunConfig, opts: CrgOptions) {
     this.root = opts.root;
     this.runner = opts.runner ?? execaRunner;
-    this.python = opts.python ?? process.env["CRG_PYTHON"] ?? "python";
+    this.command = opts.command ?? process.env["CRG_COMMAND"] ?? config.sources.crg.command;
     this.queryMs = config.budgets.crgQueryMs;
   }
 
@@ -87,18 +93,8 @@ export class CrgTriage implements TriageProvider {
     let result;
     try {
       result = await this.runner.run({
-        file: this.python,
-        args: [
-          "-m",
-          "crg",
-          "impact-radius",
-          "--repo",
-          this.root,
-          "--changed-files",
-          changedFiles.join(","),
-          "--format",
-          "json",
-        ],
+        file: this.command,
+        args: ["impact", "--repo", this.root, "--files", ...changedFiles],
         cwd: this.root,
         timeoutMs,
       });

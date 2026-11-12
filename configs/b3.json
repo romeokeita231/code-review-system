@@ -77,7 +77,7 @@
     },
     "crg": {
       "enabled": true,
-      "command": "python",
+      "command": "code-review-graph",
       "indexTimeoutMs": 5000
     },
     "registry": {
