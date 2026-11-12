@@ -1,15 +1,26 @@
 import { execa } from "execa";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
 import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { collectJsonl, evaluateAcceptance, loadTruth, type AcceptanceRowLike } from "./acceptance.js";
+import { collectJsonl, evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
+import {
+  coverageCounts,
+  cweKey,
+  declaredCoverage,
+  loadRulesTable,
+  rulesFor,
+  semgrepLanguage,
+} from "./coverage.js";
 
 export interface PlannedSample {
   sampleId: string;
+  /** Ground-truth class, kept so reports can stratify per CWE. */
+  cwe: string | null;
   /** Repo-relative POSIX path, as the plugin records it. */
   path: string;
   /** Staged text the agent copies verbatim. */
@@ -17,14 +28,35 @@ export interface PlannedSample {
   kind: "positive" | "low-risk" | "dep-probe";
 }
 
+export interface CoveragePlan {
+  /** Rules table the declaration was read from. */
+  table: string;
+  language: string;
+  /** CWE key -> number of rules declaring it for that language. */
+  declared: Record<string, number>;
+  /**
+   * Eval positives whose class the ruleset declares no rule for. They are
+   * outside the recall denominator by construction and are listed here so the
+   * exclusion is auditable instead of a silent slice.
+   */
+  uncovered: Array<{ sampleId: string; cwe: string | null }>;
+}
+
 export interface DrillPlan {
   positives: PlannedSample[];
   lowRisk: PlannedSample[];
   probe: PlannedSample;
+  coverage: CoveragePlan;
+  warnings: string[];
 }
+
+/** Every class gets at most this many positives, so one class cannot dominate. */
+export const POSITIVE_CAP_PER_CLASS = 4;
+export const RULES_TABLE = "research/semgrep-bench/snapshot/rules_table.json";
 
 export const DEP_PROBE: PlannedSample = {
   sampleId: "dep-hallucination-01",
+  cwe: null,
   path: "live/dep-hallucination-01/package.json",
   staged: ".staging/dep-hallucination-01.txt",
   kind: "dep-probe",
@@ -52,52 +84,149 @@ function livePath(sample: DatasetSample): string {
   return `live/${sample.sample_id}/${name}`;
 }
 
-/**
- * The live set is the spec's 20 injection posamples plus its separate 8
- * low-risk samples and one dependency-hallucination probe. Line 1 needs n>=20
- * semgrep-detectable eval positives, and line 4 needs those same 8 low-risk
- * samples present for B4/B4g pairing, so they cannot be folded into the 20.
- */
-export function planDrill(datasetDir: string, limitPositives = 20, lowRiskCount = 8): DrillPlan {
-  const loaded = loadDatasetSync(datasetDir);
-  const detectable = loaded.samples.filter(
-    (sample) =>
-      sample.split === "eval" &&
-      sample.labels.length > 0 &&
-      sample.expected_detectable_by.includes("semgrep"),
-  );
-  if (detectable.length < limitPositives) {
-    throw new Error(
-      `dataset has ${detectable.length} semgrep-detectable eval positives, needs ${limitPositives}`,
-    );
-  }
-  const positives = detectable
-    .slice()
-    .sort((a, b) => a.sample_id.localeCompare(b.sample_id))
-    .slice(0, limitPositives)
-    .map((sample) => ({
-      sampleId: sample.sample_id,
-      path: livePath(sample),
-      staged: stagedOf(sample),
-      kind: "positive" as const,
-    }));
-  const chosen = new Set(positives.map((sample) => sample.sampleId));
-  const lowRisk = loaded.samples
-    .filter((sample) => sample.risk_level === "low" && !chosen.has(sample.sample_id))
-    .slice(0, lowRiskCount)
-    .map((sample) => ({
-      sampleId: sample.sample_id,
-      path: livePath(sample),
-      staged: stagedOf(sample),
-      kind: "low-risk" as const,
-    }));
-  if (lowRisk.length < lowRiskCount) {
-    throw new Error(`dataset has only ${lowRisk.length} spare low-risk samples, needs ${lowRiskCount}`);
-  }
-  return { positives, lowRisk, probe: { ...DEP_PROBE, staged: DEP_PROBE.staged } };
+export interface PlanOptions {
+  limitPositives?: number;
+  lowRiskCount?: number;
+  rulesTablePath?: string;
 }
 
-function loadDatasetSync(datasetDir: string): { samples: DatasetSample[] } {
+const hashOf = (sampleId: string): string => createHash("sha256").update(sampleId, "utf8").digest("hex");
+
+/**
+ * The live set is the spec's 20 injection positives plus 8 defect-free low-risk
+ * samples and one dependency-hallucination probe.
+ *
+ * Positive selection is deliberately *not* driven by `expected_detectable_by`:
+ * the annotation spec (搂6) marks that field as a non-truth hint that must not
+ * enter any metric, and using it as the selector let the dataset define its own
+ * denominator. The subset is instead decided before unblinding by a mechanical
+ * fact - whether the frozen rules table declares a rule for the sample's class
+ * and language - and sampling is deterministic: `sha256(sample_id)` ordering
+ * (no `localeCompare`, which clusters by class prefix), round-robin across
+ * classes, at most `POSITIVE_CAP_PER_CLASS` per class.
+ *
+ * Samples outside the declared coverage are returned in `coverage.uncovered`
+ * so a report can print them as an explicit "not in the denominator" row.
+ */
+export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillPlan {
+  const limitPositives = options.limitPositives ?? 20;
+  const lowRiskCount = options.lowRiskCount ?? 8;
+  const tablePath = options.rulesTablePath ?? RULES_TABLE;
+  const loaded = loadDatasetSync(datasetDir);
+  const coverage = declaredCoverage(loadRulesTable(tablePath), loaded.language);
+
+  const candidates = loaded.samples
+    .filter((sample) => sample.split === "eval" && sample.labels.length > 0)
+    .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)));
+
+  const byClass = new Map<string, DatasetSample[]>();
+  for (const sample of candidates) {
+    const key = cweKey(sample.cwe) ?? "none";
+    const bucket = byClass.get(key) ?? [];
+    bucket.push(sample);
+    byClass.set(key, bucket);
+  }
+
+  const uncovered: CoveragePlan["uncovered"] = [];
+  const queues: Array<{ key: string; items: DatasetSample[] }> = [];
+  for (const [key, items] of byClass) {
+    if (rulesFor(coverage, items[0]!.cwe).length === 0) {
+      for (const item of items) uncovered.push({ sampleId: item.sample_id, cwe: item.cwe });
+      continue;
+    }
+    queues.push({ key, items: [...items] });
+  }
+
+  const taken = new Map<string, number>();
+  const picked: DatasetSample[] = [];
+  let progressed = true;
+  while (picked.length < limitPositives && progressed) {
+    progressed = false;
+    for (const queue of queues) {
+      if (picked.length >= limitPositives) break;
+      const used = taken.get(queue.key) ?? 0;
+      if (used >= POSITIVE_CAP_PER_CLASS) continue;
+      const next = queue.items.shift();
+      if (next === undefined) continue;
+      taken.set(queue.key, used + 1);
+      picked.push(next);
+      progressed = true;
+    }
+  }
+
+  const positives = picked.map((sample) => ({
+    sampleId: sample.sample_id,
+    cwe: sample.cwe,
+    path: livePath(sample),
+    staged: stagedOf(sample),
+    kind: "positive" as const,
+  }));
+  const chosen = new Set(positives.map((sample) => sample.sampleId));
+
+  // Low-risk slots serve two lines at once: line 4 pairs B4 against B4g on
+  // them, and line 1 needs defect-free rows at all (otherwise precision has no
+  // false-positive denominator). Pair-safe variants are preferred for that
+  // reason; a defective low-risk sample would inflate precision silently.
+  const spare = loaded.samples
+    .filter((sample) => sample.risk_level === "low" && !chosen.has(sample.sample_id))
+    .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)));
+  const defectFree = spare.filter((sample) => sample.labels.length === 0);
+  const lowRiskPicks = [...defectFree, ...spare.filter((sample) => sample.labels.length > 0)].slice(
+    0,
+    lowRiskCount,
+  );
+  const lowRisk = lowRiskPicks.map((sample) => ({
+    sampleId: sample.sample_id,
+    cwe: sample.cwe,
+    path: livePath(sample),
+    staged: stagedOf(sample),
+    kind: "low-risk" as const,
+  }));
+
+  const warnings: string[] = [];
+  if (positives.length < limitPositives) {
+    warnings.push(
+      `only ${positives.length} positives available (wanted ${limitPositives}): ` +
+        `${queues.length} classes with declared ${coverage.language} rules, ` +
+        `${POSITIVE_CAP_PER_CLASS} per class cap, ${uncovered.length} samples outside coverage`,
+    );
+  }
+  if (uncovered.length > 0) {
+    const classes = [...new Set(uncovered.map((sample) => sample.cwe ?? "null"))].join(",");
+    warnings.push(
+      `${uncovered.length} eval positives sit outside the recall denominator ` +
+        `(no declared ${coverage.language} rule for ${classes})`,
+    );
+  }
+  if (lowRisk.length < lowRiskCount) {
+    warnings.push(`only ${lowRisk.length} low-risk samples available (wanted ${lowRiskCount})`);
+  }
+  if (lowRiskPicks.length < lowRiskCount || lowRiskPicks.some((sample) => sample.labels.length > 0)) {
+    warnings.push(
+      "some low-risk slots are defective samples: line1's precision denominator is thinner than 8",
+    );
+  }
+
+  return {
+    positives,
+    lowRisk,
+    probe: { ...DEP_PROBE },
+    coverage: {
+      table: tablePath,
+      language: coverage.language,
+      declared: coverageCounts(coverage),
+      uncovered,
+    },
+    warnings,
+  };
+}
+
+export interface LoadedDataset {
+  language: string;
+  samples: DatasetSample[];
+}
+
+function loadDatasetSync(datasetDir: string): LoadedDataset {
   // loadDataset is async; the plan is pure so callers can plan before any
   // staging. Keep one synchronous read path for determinism.
   const manifest = JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")) as {
@@ -106,7 +235,12 @@ function loadDatasetSync(datasetDir: string): { samples: DatasetSample[] } {
   const samples = manifest.samples.map((entry) =>
     JSON.parse(readFileSync(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8")),
   ) as DatasetSample[];
-  return { samples };
+  const language = samples[0]?.language ?? "ts";
+  const mixed = samples.filter((sample) => sample.language !== language);
+  if (mixed.length > 0) {
+    throw new Error(`dataset mixes languages: ${mixed[0]!.sample_id} is ${mixed[0]!.language}, rest ${language}`);
+  }
+  return { language, samples };
 }
 
 export function allSamples(plan: DrillPlan): PlannedSample[] {
@@ -271,12 +405,46 @@ export interface Preflight {
   checks: Array<{ name: string; ok: boolean; detail: string }>;
 }
 
+export interface PreflightOptions {
+  plan?: DrillPlan;
+  /** Ruleset the baseline config actually loads for TypeScript. */
+  ruleset?: string;
+  datasetDir?: string;
+  /** Commit the AOR numbers must come from; empty means the pin is not asserted. */
+  aorCommit?: string;
+}
+
+/**
+ * The TS ruleset is whatever the baseline config declares, not a file name
+ * typed here twice. `ts_all.yaml` and the config's `ts_dedup.yaml` differ, and
+ * a hardcoded path silently measures a different ruleset than the one under
+ * test.
+ */
+export function pinnedTsRuleset(baseConfig: string): string {
+  const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
+    sources?: { semgrep?: { subsets?: Array<{ path: string; langs?: string[] }> } };
+  };
+  const subset = (base.sources?.semgrep?.subsets ?? []).find((candidate) =>
+    (candidate.langs ?? []).some((lang) => semgrepLanguage(lang) === "typescript"),
+  );
+  if (subset === undefined) throw new Error(`no typescript ruleset subset declared in ${baseConfig}`);
+  return subset.path;
+}
+
+/** The AOR commit the config claims the budgets were verified on (#22). */
+export function pinnedAorCommit(baseConfig: string): string {
+  const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
+    sources?: { aor?: { versionCommit?: string } };
+  };
+  return base.sources?.aor?.versionCommit ?? "";
+}
+
 /**
  * Fail fast, and for the right reason. Semgrep in particular can be installed
  * yet crash before rule matching (`CertOpenSystemStore returned NULL` in its
  * OCaml CA bootstrap), which otherwise only surfaces as a degraded scan.
  */
-export async function preflight(profile: string): Promise<Preflight> {
+export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
   const env = { ...process.env, PATH: toolPath() };
 
@@ -311,6 +479,20 @@ export async function preflight(profile: string): Promise<Preflight> {
     probeDir,
   );
   await run("ocr", "ocr", ["--version"]);
+  if (options.aorCommit !== undefined && options.aorCommit.length > 0) {
+    const probe = await execa("ocr", ["--version"], { env, reject: false, timeout: 120_000 });
+    const text = `${probe.stdout ?? ""}${probe.stderr ?? ""}`.trim().split("\n")[0] ?? "";
+    // `ocr` self-updates. The budgets in #22 were measured on one commit, so a
+    // drifted binary makes every AOR number unquotable until it is re-pinned.
+    const matches = probe.exitCode === 0 && text.includes(options.aorCommit);
+    checks.push({
+      name: "ocr pin",
+      ok: matches,
+      detail: matches
+        ? text
+        : `${text} - config pins ${options.aorCommit}; re-pin before quoting AOR numbers`,
+    });
+  }
   await run("code-review-graph", "code-review-graph", ["--help"]);
   const profileCheck = await execa(process.execPath, [dshBinPath(), "plugin", "--profile", profile, "list"], {
     env,
@@ -335,45 +517,48 @@ export async function preflight(profile: string): Promise<Preflight> {
       detail:
         "semgrep cannot scan here; line1 has no mechanical-block evidence until this is fixed (see the crash above)",
     });
-  } else {
-    const sampleHits = await semgrepDetectable(5);
+  } else if (options.plan !== undefined && options.ruleset !== undefined) {
+    const sampleHits = await semgrepDetectable(
+      options.datasetDir ?? "datasets/self-built",
+      options.plan,
+      options.ruleset,
+      5,
+    );
+    const covered = Object.values(options.plan.coverage.declared).filter((count) => count > 0).length;
     checks.push({
-      name: "dataset semgrep detectability",
+      name: "dataset detectability",
       ok: sampleHits.hits > 0,
       detail:
-        `${sampleHits.hits}/${sampleHits.scanned} planned positives match the pinned ruleset` +
+        `${sampleHits.hits}/${sampleHits.scanned} planned positives match ${sampleHits.ruleset}; ` +
+        `declared coverage ${covered}/${Object.keys(options.plan.coverage.declared).length} classes` +
         (sampleHits.hits === 0
-          ? " - expected_detectable_by claims semgrep, so line1 cannot pass until the dataset or the annotation changes"
+          ? " - the ruleset does not back expected_detectable_by, so line1 cannot pass until the dataset is rebuilt"
           : ""),
     });
   }
   return { ok: checks.every((check) => check.ok), checks };
 }
 
-/** Scan the first planned positives with the pinned full ruleset. */
-async function semgrepDetectable(limit: number): Promise<{ hits: number; scanned: number }> {
-  const plan = planDrill("datasets/self-built");
+/** Scan the first planned positives with the ruleset the baseline config pins. */
+async function semgrepDetectable(
+  datasetDir: string,
+  plan: DrillPlan,
+  ruleset: string,
+  limit: number,
+): Promise<{ hits: number; scanned: number; ruleset: string }> {
   const dir = join(tmpdir(), `crs-dataset-probe-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   let hits = 0;
   const scanned = Math.min(limit, plan.positives.length);
   for (const sample of plan.positives.slice(0, scanned)) {
     const raw = JSON.parse(
-      readFileSync(join("datasets/self-built/samples", `${sample.sampleId}.json`), "utf8"),
+      readFileSync(join(datasetDir, "samples", `${sample.sampleId}.json`), "utf8"),
     ) as { after: string };
     const file = join(dir, `${sample.sampleId}.ts`);
     await writeFile(file, raw.after, "utf8");
     const result = await execa(
       "semgrep",
-      [
-        "--config",
-        resolve("research/semgrep-bench/snapshot/ts_all.yaml"),
-        "--json",
-        "--metrics",
-        "off",
-        "--disable-version-check",
-        file,
-      ],
+      ["--config", resolve(ruleset), "--json", "--metrics", "off", "--disable-version-check", file],
       { env: { ...process.env, PATH: toolPath() }, reject: false, timeout: 60_000 },
     );
     try {
@@ -383,7 +568,7 @@ async function semgrepDetectable(limit: number): Promise<{ hits: number; scanned
       // An unparseable envelope already fails the semgrep check above.
     }
   }
-  return { hits, scanned };
+  return { hits, scanned, ruleset };
 }
 
 export async function runTask(options: RunOptions, prompt: string): Promise<{ stdout: string; sessionId: string | null }> {
@@ -497,6 +682,7 @@ export async function evaluate(
   datasetDir: string,
   gapsPath: string,
   acceptanceOut: string,
+  coverage: RuleCoverage,
 ): Promise<{ pass: number; lines: Array<{ name: string; pass: boolean; detail: string }> }> {
   const rows: AcceptanceRowLike[] = [];
   for (const file of await collectJsonl(outDir)) {
@@ -506,9 +692,9 @@ export async function evaluate(
     }
   }
   const gaps = existsSync(gapsPath) ? JSON.parse(await readFile(gapsPath, "utf8")) : null;
-  const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps);
+  const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, { coverage });
   await mkdir(acceptanceOut, { recursive: true });
-  await writeFile(join(acceptanceOut, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");
+  await writeFile(join(acceptanceOut, "report.md"), `# 楠屾敹缁撴灉琛紙${report.mode}锛塡n\n${report.resultsTable}\n`, "utf8");
   await writeFile(join(acceptanceOut, "verdict.md"), report.verdict, "utf8");
   await writeFile(
     join(acceptanceOut, "verdict.json"),
@@ -528,10 +714,30 @@ async function main(): Promise<void> {
   const profile = arg("--profile", "crs-live");
   const stage = arg("--stage", "all");
   const acceptanceOut = resolve(arg("--acceptance-out", "artifacts/acceptance"));
-  const plan = planDrill(datasetDir);
+  const plan = planDrill(datasetDir, { rulesTablePath: resolve(arg("--rules", RULES_TABLE)) });
+  const ruleset = pinnedTsRuleset(baseConfig);
+  const aorCommit = pinnedAorCommit(baseConfig);
+  const coverage: RuleCoverage = { language: plan.coverage.language, perCwe: plan.coverage.declared };
+  const allowShort = process.argv.includes("--allow-short");
+
+  process.stdout.write(
+    `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk, 1 probe ` +
+      `(rules ${ruleset}, ${plan.coverage.language})\n` +
+      `coverage declared: ${Object.entries(plan.coverage.declared)
+        .map(([cwe, count]) => `${cwe}=${count}`)
+        .join(" ")}\n` +
+      plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
+  );
+
+  if (plan.positives.length < 20 && !allowShort && (stage === "run" || stage === "all" || stage === "prepare")) {
+    throw new Error(
+      `line1 needs n>=20; the ruleset's declared coverage supports only ${plan.positives.length}. ` +
+        "Re-run with --allow-short only for a wiring test, never for a verdict.",
+    );
+  }
 
   if (stage === "check") {
-    const result = await preflight(profile);
+    const result = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
     process.stdout.write(
       `${result.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
     );
@@ -562,7 +768,7 @@ async function main(): Promise<void> {
   }
   if (stage === "prepare" || stage === "all") {
     if (!process.argv.includes("--allow-degraded")) {
-      const ready = await preflight(profile);
+      const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
       if (!ready.ok) {
         process.stdout.write(
           `${ready.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
@@ -598,7 +804,13 @@ async function main(): Promise<void> {
     await collect(plan, outDir);
   }
   if (stage === "evaluate" || stage === "all") {
-    const result = await evaluate(outDir, datasetDir, resolve(arg("--gaps", "artifacts/block-gaps.json")), acceptanceOut);
+    const result = await evaluate(
+      outDir,
+      datasetDir,
+      resolve(arg("--gaps", "artifacts/block-gaps.json")),
+      acceptanceOut,
+      coverage,
+    );
     process.stdout.write(
       `${result.lines.map((line) => `${line.pass ? "PASS" : "FAIL"} ${line.name} :: ${line.detail}`).join("\n")}\n`,
     );

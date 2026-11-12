@@ -1,11 +1,70 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { readFileSync as readSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type { ReviewRow } from "../../src/contracts/index.js";
-import { allSamples, planDrill, toAcceptanceRows, writePrompt } from "../../scripts/live-drill.js";
+import {
+  allSamples,
+  POSITIVE_CAP_PER_CLASS,
+  planDrill,
+  toAcceptanceRows,
+  writePrompt,
+} from "../../scripts/live-drill.js";
+
+const DATASET = "datasets/self-built";
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+interface SampleStub {
+  id: string;
+  cwe: string | null;
+  split?: "fit" | "eval";
+  labels?: boolean;
+  risk?: "low" | "medium" | "high";
+  detectable?: string[];
+  pairedSafe?: boolean;
+}
+
+/** A dataset + rules table small enough to reason about by hand. */
+async function synthetic(samples: SampleStub[], rules: unknown[]): Promise<{ dir: string; rules: string }> {
+  const root = await mkdtemp(join(tmpdir(), "crs-plan-"));
+  tempDirs.push(root);
+  const dir = join(root, "dataset");
+  await mkdir(join(dir, "samples"), { recursive: true });
+  const manifest = { version: "test", content_sha256_root: "x", samples: [] as unknown[] };
+  for (const [index, stub] of samples.entries()) {
+    const split = stub.split ?? "eval";
+    const row = {
+      sample_id: stub.id,
+      group_id: `g${index}`,
+      split,
+      cwe: stub.cwe,
+      risk_level: stub.risk ?? "high",
+      paired_safe: stub.pairedSafe ?? false,
+      language: "ts",
+      path: `src/${stub.id}.ts`,
+      before: "const a = 1;\n",
+      after: "const a = 2;\n",
+      changed_lines: 1,
+      expected_detectable_by: stub.detectable ?? ["semgrep", "aor"],
+      labels: stub.labels === false ? [] : [{ path: `src/${stub.id}.ts`, startLine: 1, endLine: 1, cwe: stub.cwe }],
+    };
+    await writeFile(join(dir, "samples", `${stub.id}.json`), JSON.stringify(row), "utf8");
+    manifest.samples.push({ ...row, content_sha256: "x" });
+  }
+  await writeFile(join(dir, "manifest.json"), JSON.stringify(manifest), "utf8");
+  const rulesPath = join(root, "rules_table.json");
+  await writeFile(rulesPath, JSON.stringify({ rules }), "utf8");
+  return { dir, rules: rulesPath };
+}
 
 describe("live drill plan", () => {
-  it("plans 20 semgrep-detectable eval positives, 8 low-risk samples and one dep probe", () => {
-    const plan = planDrill("datasets/self-built");
+  it("plans 20 stratified positives, 8 low-risk samples and one dep probe", () => {
+    const plan = planDrill(DATASET);
     expect(plan.positives).toHaveLength(20);
     expect(plan.lowRisk).toHaveLength(8);
     expect(plan.probe.kind).toBe("dep-probe");
@@ -17,22 +76,90 @@ describe("live drill plan", () => {
     for (const sample of plan.lowRisk) expect(sample.kind).toBe("low-risk");
   });
 
+  it("caps each class and still covers at least five classes", () => {
+    const plan = planDrill(DATASET);
+    const perClass = new Map<string, number>();
+    for (const sample of plan.positives) {
+      const key = sample.cwe ?? "null";
+      perClass.set(key, (perClass.get(key) ?? 0) + 1);
+    }
+    expect(perClass.size).toBeGreaterThanOrEqual(5);
+    for (const [cwe, count] of perClass) {
+      expect(count, `${cwe} exceeds the per-class cap`).toBeLessThanOrEqual(POSITIVE_CAP_PER_CLASS);
+    }
+  });
+
+  it("orders positives by sha256(sample_id), not by id prefix", () => {
+    const plan = planDrill(DATASET);
+    const ids = plan.positives.map((sample) => sample.sampleId);
+    // `localeCompare` ordering clusters by class prefix and was how the drill
+    // ended up with ten CWE-022 and ten CWE-502 samples and nothing else.
+    expect(ids).not.toEqual([...ids].sort((a, b) => a.localeCompare(b)));
+    expect(planDrill(DATASET).positives.map((sample) => sample.sampleId)).toEqual(ids);
+  });
+
   it("keeps the live set free of duplicate paths", () => {
-    const plan = planDrill("datasets/self-built");
+    const plan = planDrill(DATASET);
     const paths = allSamples(plan).map((sample) => sample.path);
     expect(new Set(paths).size).toBe(paths.length);
   });
 
-  it("selects only eval-split, labelled, semgrep-detectable positives", () => {
-    const manifest = JSON.parse(readFileSync("datasets/self-built/manifest.json", "utf8")) as {
-      samples: Array<{ sample_id: string; split: string; expected_detectable_by: string[] }>;
-    };
-    const byId = new Map(manifest.samples.map((entry) => [entry.sample_id, entry]));
-    for (const sample of planDrill("datasets/self-built").positives) {
+  it("selects only eval-split, labelled positives", () => {
+    const manifest = readSync(join(DATASET, "manifest.json"), "utf8");
+    const byId = new Map(
+      (JSON.parse(manifest) as { samples: Array<{ sample_id: string; split: string }> }).samples.map((entry) => [
+        entry.sample_id,
+        entry,
+      ]),
+    );
+    for (const sample of planDrill(DATASET).positives) {
       const entry = byId.get(sample.sampleId);
       expect(entry?.split).toBe("eval");
-      expect(entry?.expected_detectable_by).toContain("semgrep");
+      const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
+        labels: unknown[];
+      };
+      expect(row.labels.length).toBeGreaterThan(0);
     }
+  });
+
+  it("lists samples the ruleset cannot see instead of silently dropping them", () => {
+    const plan = planDrill(DATASET);
+    // The frozen table has no CWE-502 rule for TypeScript at all.
+    expect(plan.coverage.declared["502"]).toBeUndefined();
+    const uncovered = plan.coverage.uncovered;
+    expect(uncovered.length).toBeGreaterThan(0);
+    expect(new Set(uncovered.map((sample) => sample.cwe))).toEqual(new Set(["CWE-502"]));
+    expect(plan.positives.some((sample) => sample.cwe === "CWE-502")).toBe(false);
+    expect(plan.warnings.some((warning) => warning.includes("outside the recall denominator"))).toBe(true);
+  });
+
+  it("picks defect-free low-risk rows so line1's precision has a denominator", () => {
+    for (const sample of planDrill(DATASET).lowRisk) {
+      const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
+        labels: unknown[];
+        risk_level: string;
+      };
+      expect(row.risk_level).toBe("low");
+      expect(row.labels).toEqual([]);
+    }
+  });
+
+  it("does not select positives by expected_detectable_by", async () => {
+    const { dir, rules } = await synthetic(
+      [
+        { id: "ts-cwe079-0001", cwe: "CWE-079", detectable: ["aor"] },
+        { id: "ts-cwe079-0002", cwe: "CWE-079", detectable: ["semgrep"] },
+        { id: "ts-cwe502-0001", cwe: "CWE-502", detectable: ["both"] },
+        { id: "ts-cwe798-0003", cwe: "CWE-798", risk: "low", labels: false, pairedSafe: true },
+      ],
+      [{ id: "xss", languages: ["javascript", "typescript"], cwe: ["079"] }],
+    );
+    const plan = planDrill(dir, { limitPositives: 2, rulesTablePath: rules });
+    expect(new Set(plan.positives.map((sample) => sample.sampleId))).toEqual(
+      new Set(["ts-cwe079-0001", "ts-cwe079-0002"]),
+    );
+    expect(plan.coverage.uncovered.map((sample) => sample.sampleId)).toEqual(["ts-cwe502-0001"]);
+    expect(plan.lowRisk.map((sample) => sample.sampleId)).toEqual(["ts-cwe798-0003"]);
   });
 
   it("asks the driver for one write per entry and no shell", () => {

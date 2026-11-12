@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { evaluateAcceptance, type AcceptanceRowLike, type BlockGaps, type SampleTruth } from "../../scripts/acceptance.js";
 
-function truthOf(sample: string, risk: string, detectable: string[]): SampleTruth {
+function truthOf(sample: string, risk: string, detectable: string[], sampleCwe: string | null = "CWE-079"): SampleTruth {
   return {
     sample_id: sample,
     split: "eval",
     risk_level: risk,
     paired_safe: false,
+    sample_cwe: sampleCwe,
     labels: detectable.length > 0 ? [{ path: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }] : [],
     expected_detectable_by: detectable,
   };
@@ -109,7 +110,10 @@ describe("acceptance", () => {
     rows.push(row({ sample: "corr", baseline: "B4", ts: base + 970 }));
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines.map((line) => line.pass)).toEqual([true, true, true, true, true]);
-    expect(report.lines[0]!.metrics).toMatchObject({ n: 20, k: 20 });
+    // `corr` is a labelled eval sample that was only warned (twice, so two
+    // rows), so it is two missed positives; the old `expected_detectable_by`
+    // selector hid it from the denominator entirely.
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 22, k: 20, recall: 20 / 22 });
     expect(report.verdict).toContain("5/5");
   });
 
@@ -197,8 +201,80 @@ describe("acceptance", () => {
         }),
       );
     }
+    // Precision needs a defect-free denominator; without these eight rows the
+    // run would report a vacuous tp/tp = 1. A live run emits a pre row for
+    // every write, so the negatives carry the same phase as the positives.
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push(
+        row({
+          sample,
+          baseline: "B4",
+          ts: 300 + index,
+          change_event: { sessionId: "s1", ts: 300 + index, phase: "pre" },
+        }),
+      );
+    }
     const report = evaluateAcceptance(rows, truth, gaps);
-    expect(report.lines[0]!.metrics).toMatchObject({ n: 20, k: 20, recall: 1, precision: 1 });
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 20, k: 20, recall: 1, precision: 1, negatives: 8 });
+  });
+
+  it("does not use expected_detectable_by as the recall denominator", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["aor-only", truthOf("aor-only", "high", ["aor"])],
+      ["low-0", truthOf("low-0", "low", [])],
+    ]);
+    const rows = [
+      row({
+        sample: "aor-only",
+        baseline: "B4",
+        ts: 10,
+        disposition: { preDecision: "deny", postDecision: "none", finalDisposition: "mechanical_block", text: "x" },
+      }),
+      row({ sample: "low-0", baseline: "B4", ts: 20 }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 1, k: 1, recall: 1 });
+  });
+
+  it("reports classes the ruleset cannot see as an explicit excluded row", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["covered", truthOf("covered", "high", ["both"], "CWE-079")],
+      ["uncovered", truthOf("uncovered", "high", ["both"], "CWE-502")],
+      ["low-0", truthOf("low-0", "low", [], "CWE-798")],
+    ]);
+    const rows = [
+      row({
+        sample: "covered",
+        baseline: "B4",
+        ts: 10,
+        disposition: { preDecision: "deny", postDecision: "none", finalDisposition: "mechanical_block", text: "x" },
+      }),
+      row({ sample: "uncovered", baseline: "B4", ts: 20 }),
+      row({ sample: "low-0", baseline: "B4", ts: 30 }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps, {
+      coverage: { language: "typescript", perCwe: { "079": 35, "502": 0 } },
+    });
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 1, k: 1, excluded: 1, excluded_classes: "502" });
+    expect(report.resultsTable).toContain("CWE-502");
+    expect(report.resultsTable).toContain("ruleset declares no rule");
+  });
+
+  it("refuses a precision that has no defect-free denominator", () => {
+    const truth = new Map<string, SampleTruth>([["p", truthOf("p", "high", ["both"])]]);
+    const rows = [
+      row({
+        sample: "p",
+        baseline: "B4",
+        ts: 10,
+        disposition: { preDecision: "deny", postDecision: "none", finalDisposition: "mechanical_block", text: "x" },
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 1, precision: null, negatives: 0 });
+    expect(report.lines[0]!.pass).toBe(false);
   });
 
   it("passes line3 when the corrected file no longer carries the class", () => {
