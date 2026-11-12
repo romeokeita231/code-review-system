@@ -1,0 +1,401 @@
+{
+ "ticket": "#41 第 1 步 —— 候选清点（不写标签、不跑探测器）",
+ "generated": "2026-11-12",
+ "rule": "本文件只出候选：路径 + sink 行号 + 拟 CWE + sink 是否存在 + 控制状态。disposition 是清点结论（能否当候选、是否假阳性诱饵），不是数据集标注；标注按 #7 §5 走人工 + κ≥0.70，在第 3 步做。",
+ "repos": [
+  {
+   "id": "juice-shop",
+   "url": "https://github.com/juice-shop/juice-shop",
+   "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
+   "commit_date": "2026-11-08",
+   "ts_files": 664,
+   "js_files": 9
+  },
+  {
+   "id": "goof",
+   "url": "https://github.com/snyk-labs/nodejs-goof",
+   "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
+   "commit_date": "2026-05-01",
+   "ts_files": 0,
+   "js_files": 10
+  }
+ ],
+ "method": "research/dataset-candidates/scan_sinks.py 跑 `git grep -nE`（排除 node_modules / *.spec.* / test / data/static/codefixes / frontend/src/assets），逐条人工核对 sink 处的数据流与控制。",
+ "columns": {
+  "sink": "present | absent —— 危险 API 调用是否真的在该行",
+  "control": "absent | weak | present —— 该 sink 上游是否已有正确性控制",
+  "disposition": "candidate_positive（可进样本候选）| fp_bait（sink 在但已被控制住，用作精度负样本诱饵）| sink_only（有 sink 但数据不可控/来源不明，不作候选）"
+ },
+ "rows": [
+  {
+   "repo": "juice-shop",
+   "path": "routes/dataErasure.ts",
+   "line": 104,
+   "cwe": "022",
+   "sink": "path.resolve(req.body.layout).toLowerCase()",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "控制是黑名单（含 ftp / ctf.key / encryptionkeys），req.body.layout 直达 resolve。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/fileServer.ts",
+   "line": 32,
+   "cwe": "022",
+   "sink": "res.sendFile(path.resolve('ftp/', file))",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "endsWithAllowlistedFileType + cutOffPoisonNullByte 都挡不住 ../；file 取自路由参数。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/vulnCodeSnippet.ts",
+   "line": 90,
+   "cwe": "022",
+   "sink": "fs.readFile('./data/static/codefixes/' + key + '.info.yml')",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "key 取自 req.body.key，直接拼进路径。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/vulnCodeFixes.ts",
+   "line": 83,
+   "cwe": "022",
+   "sink": "yaml.load(fs.readFileSync('./data/static/codefixes/' + key + '.info.yml'))",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "与 vulnCodeSnippet.ts:90 同型；不同文件不同 sink，可各算一条。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/fileUpload.ts",
+   "line": 31,
+   "cwe": "022",
+   "sink": "path.resolve('uploads/complaints/' + fileName)",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "fileName 取自上传文件名；控制是 absolutePath.includes(path.resolve('.'))，挡不住逃逸到兄弟目录。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/logfileServer.ts",
+   "line": 14,
+   "cwe": "022",
+   "sink": "res.sendFile(path.resolve('logs/', file))",
+   "control": "present",
+   "disposition": "fp_bait",
+   "note": "file.includes('/') 直接拒掉路径分隔符，sink 在但不可达。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/quarantineServer.ts",
+   "line": 14,
+   "cwe": "022",
+   "sink": "res.sendFile(path.resolve('ftp/quarantine/', file))",
+   "control": "present",
+   "disposition": "fp_bait",
+   "note": "同上，!/includes('/') 守卫。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/keyServer.ts",
+   "line": 14,
+   "cwe": "022",
+   "sink": "res.sendFile(path.resolve('encryptionkeys/', file))",
+   "control": "present",
+   "disposition": "fp_bait",
+   "note": "同上。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/videoHandler.ts",
+   "line": 82,
+   "cwe": "022",
+   "sink": "fs.readFileSync('frontend/dist/frontend/assets/public/videos/' + subtitles)",
+   "control": "absent",
+   "disposition": "sink_only",
+   "note": "subtitles 的来源未确认（该路由的挑战是字幕内容 XSS，不是路径），需在标注阶段确认数据是否可控。"
+  },
+  {
+   "repo": "goof",
+   "path": "routes/index.js",
+   "line": 174,
+   "cwe": "078",
+   "sink": "exec('identify ' + url, ...)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "juice-shop 全仓 0 条 078 sink（唯一命中是 RegExp.exec 与测试夹具）；078 的唯一真实来源是 goof。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/search-result/search-result.component.ts",
+   "line": 146,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(queryParam)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "queryParam 来自 URL；上游自带 vuln-code-snippet vuln-line 标记（localXssChallenge / xssBonusChallenge）。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/search-result/search-result.component.ts",
+   "line": 113,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(tableData[i].description)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "商品描述来自服务端，可被写入；vuln-line restfulXssChallenge。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/data-export/data-export.component.ts",
+   "line": 72,
+   "cwe": "079",
+   "sink": "window.open(...).document.write(this.userData)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "userData 是导出接口回包，直接 document.write 到新窗口。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/track-result/track-result.component.ts",
+   "line": 49,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(`<code>${results.data[0].orderId}</code>`)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "orderId 来自接口。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/administration/administration.component.ts",
+   "line": 74,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(`<span class=...>${user.email}</span>`)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "user.email 由用户可改。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/administration/administration.component.ts",
+   "line": 92,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(feedback.comment)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "反馈内容由任意用户提交。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/last-login-ip/last-login-ip.component.ts",
+   "line": 40,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(`<small>${payload.data.lastLoginIp}</small>`)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "lastLoginIp 来自会话数据。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "frontend/src/app/score-board/score-board.component.ts",
+   "line": 103,
+   "cwe": "079",
+   "sink": "sanitizer.bypassSecurityTrustHtml(challenge.description)",
+   "control": "absent",
+   "disposition": "sink_only",
+   "note": "description 是应用自有挑战文案，不可由用户输入，当正样本会把 FP 记成 TP。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/search.ts",
+   "line": 23,
+   "cwe": "089",
+   "sink": "models.sequelize.query(`SELECT * FROM Products WHERE (... LIKE '%${criteria}%' ...)`)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "模板串拼接；vuln-line unionSqlInjectionChallenge / dbSchemaChallenge。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/login.ts",
+   "line": 34,
+   "cwe": "089",
+   "sink": "models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email}' ...`)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "vuln-line loginAdminChallenge / loginBenderChallenge / loginJimChallenge。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/userProfile.ts",
+   "line": 65,
+   "cwe": "094",
+   "sink": "username = eval(code)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "code 取自 username 的 #{...} 片段。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/b2bOrder.ts",
+   "line": 23,
+   "cwe": "094",
+   "sink": "vm.runInContext('safeEval(orderLinesData)', sandbox)",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "orderLinesData 来自 body；控制是 vm 沙箱 + safeEval，逃逸即 RCE（rceChallenge / rceOccupyChallenge）。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/fileUpload.ts",
+   "line": 114,
+   "cwe": "094",
+   "sink": "vm.runInContext('JSON.stringify(yaml.load(data))', sandbox)",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "上传文件内容进 yaml.load；沙箱超时是唯一控制。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "lib/xml.ts",
+   "line": 38,
+   "cwe": "094",
+   "sink": "vm.runInContext('libxml2.XmlDocument.fromString(data, { option })', sandbox)",
+   "control": "weak",
+   "disposition": "candidate_positive",
+   "note": "XML 内容进 libxml2 沙箱（XXE 面）；属「沙箱当控制」的弱控制。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/captcha.ts",
+   "line": 22,
+   "cwe": "094",
+   "sink": "eval(expression)",
+   "control": "n/a",
+   "disposition": "sink_only",
+   "note": "expression 由三个 Math.random 整数与运算符拼成，无外部输入 —— eval 在但不是缺陷；当正样本就是 FP。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "lib/insecurity.ts",
+   "line": 21,
+   "cwe": "798",
+   "sink": "const privateKey = '-----BEGIN RSA PRIVATE KEY-----\\r\\n...'",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "完整 RSA 私钥字面量（约 1.6 KB）硬编码在源码里。"
+  },
+  {
+   "repo": "goof",
+   "path": "app.js",
+   "line": 83,
+   "cwe": "798",
+   "sink": "var token = 'SECRET_TOKEN_f8ed84e8f41e4146403dd4a6bbcea5e418d23a9'",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "硬编码 token 常量。"
+  },
+  {
+   "repo": "goof",
+   "path": "app.js",
+   "line": 43,
+   "cwe": "798",
+   "sink": "secret: 'keyboard cat'",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "session secret 硬编码。"
+  },
+  {
+   "repo": "goof",
+   "path": "mongoose-db.js",
+   "line": 52,
+   "cwe": "798",
+   "sink": "new User({ username: 'admin@snyk.io', password: 'SuperSecretPassword' })",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "种子脚本里的明文口令。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "lib/insecurity.ts",
+   "line": 53,
+   "cwe": "798",
+   "sink": "expressJwt({ secret: '' + Math.random() })",
+   "control": "n/a",
+   "disposition": "sink_only",
+   "note": "随机 secret，不是硬编码凭证；属弱随机，不属 798。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "routes/profileImageUrlUpload.ts",
+   "line": 24,
+   "cwe": "918",
+   "sink": "await fetch(url)",
+   "control": "absent",
+   "disposition": "candidate_positive",
+   "note": "url = req.body.imageUrl，无目标白名单（项目自己用 abused_ssrf_bug 标记）。"
+  },
+  {
+   "repo": "juice-shop",
+   "path": "lib/startup/validatePreconditions.ts",
+   "line": 165,
+   "cwe": "918",
+   "sink": "await fetch(domain, { signal: ... })",
+   "control": "n/a",
+   "disposition": "sink_only",
+   "note": "domain 来自配置文件，不是请求输入。"
+  }
+ ],
+ "per_class": {
+  "798": {
+   "candidate_positive": 4,
+   "fp_bait": 0,
+   "sink_only": 1
+  },
+  "918": {
+   "candidate_positive": 1,
+   "fp_bait": 0,
+   "sink_only": 1
+  },
+  "022": {
+   "candidate_positive": 5,
+   "fp_bait": 3,
+   "sink_only": 1
+  },
+  "078": {
+   "candidate_positive": 1,
+   "fp_bait": 0,
+   "sink_only": 0
+  },
+  "079": {
+   "candidate_positive": 7,
+   "fp_bait": 0,
+   "sink_only": 1
+  },
+  "089": {
+   "candidate_positive": 2,
+   "fp_bait": 0,
+   "sink_only": 0
+  },
+  "094": {
+   "candidate_positive": 4,
+   "fp_bait": 0,
+   "sink_only": 1
+  }
+ },
+ "diff_provenance": {
+  "question": "自建样本的 before/after 能否取真实提交（而不是自拟）",
+  "probe": "git log -S'models.sequelize.query' -- routes/search.ts（23854 提交全历史，blob:none 惰性取）",
+  "result": "唯一命中 d6dc878b1 2021-03-05 'Migrate /routes/*.js to .ts' —— TS 形态的 sink 是被整批迁移提交引入的，不是漏洞引入提交",
+  "cost": "单次 -S 探测 105 s（惰性 blob 取 + 代理）",
+  "consequence": "23 个站点的 TS 现状没有「干净的漏洞引入 diff」可取；真实 diff 只有 2016 年代 ES5 引入版（before 文件不存在或为 .js 旧布局）与批量迁移提交两种。自建正样本只能走「真实文件 + 自拟最小 diff」，origin.kind 记 self_rewritten，contamination_risk 记 authored-diff。"
+ },
+ "totals": {
+  "candidate_positive": 24,
+  "classes_with_source": 7,
+  "classes_with_at_least_5": 2,
+  "classes_with_at_least_3": 4
+ }
+}

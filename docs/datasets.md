@@ -50,22 +50,67 @@ Juice Shop with a `tsc --noEmit` gate, CWE-502 replaced by CWE-918, `origin` /
 | `appsecco/dvna` | 151 | **0** | 14 |
 | `juice-shop/juice-shop` | 1498 | 664 | 9 |
 
-Two of the three parents named by §4 contain **no TypeScript at all**, while §13
-fixes `language: "ts"`. The parent list therefore cannot yield ready-made rows:
-Juice Shop is the only parent that is already TypeScript (an Angular front end plus
-an Express server).
+`language` is now `ts | js` (#41 裁定), so the two JavaScript-only parents are
+admissible after all; the question is no longer which language can be used but how
+many real defects the parents actually contain.
 
-Three ways to build the set, in descending order of fit:
+### 第 1 步：候选清点 (2026-11-12)
 
-1. **Port a child of `nodejs-goof` / `dvna` into TypeScript inside a project whose
-   `tsc --noEmit` passes.** The schema already has `origin.kind = self_rewritten`
-   for exactly this, and §4.4 requires structural rewriting anyway. This keeps the
-   Express context (imports, routes, DAOs) that the current hand-written samples
-   lack, and is the only route that covers all seven classes.
-2. Use Juice Shop alone for the classes it actually contains (injection, XSS, broken
-   access control) and accept a smaller set.
-3. Relax §13 to `language: "js"`, which would invalidate the TypeScript ruleset
-   coverage numbers the drill depends on.
+Full table, evidence and per-row judgement: `research/dataset-candidates/inventory.md`
+(+ `inventory.json`). Method: `git grep` for each class, then read every hit to check
+the data flow and the control. No detector was run; no label was written.
+
+| class | real candidate sites | where |
+| --- | --- | --- |
+| 022 | 5 | `dataErasure`, `fileServer`, `vulnCodeSnippet`, `vulnCodeFixes`, `fileUpload` |
+| 078 | 1 | goof `routes/index.js:174` (`exec('identify ' + url)`) |
+| 079 | 7 | `search-result` ×2, `data-export`, `track-result`, `administration` ×2, `last-login-ip` |
+| 089 | 2 | `routes/search.ts:23`, `routes/login.ts:34` |
+| 094 | 4 | `userProfile` (`eval`), `b2bOrder` / `fileUpload` / `lib/xml.ts` (vm) |
+| 798 | 4 | juice-shop RSA private key literal; goof token / session secret / seed password |
+| 918 | 1 | `routes/profileImageUrlUpload.ts:24` (`fetch(req.body.imageUrl)`) |
+
+- **All seven classes have a real source; no class reaches five.** 022 (5) and 079 (7)
+  do; 094 and 798 sit at 4; 089 at 2; 078 and 918 at 1. Total 24 sites, so line 1's
+  `n ≥ 20` is reachable while "≥5 classes × ≥5 positives" is not.
+- Juice Shop has **zero** 078 sinks (its only `child_process` hit is a Cypress fixture
+  and every `exec` hit is `RegExp.exec`); 078 comes from goof and from nowhere else.
+- Three sites are `fp_bait` — the same dangerous call already guarded upstream
+  (`logfileServer`, `quarantineServer`, `keyServer` all reject `/` in the param). Real
+  code, real sink, real control: a better precision denominator than an authored
+  "safe variant". Five more are `sink_only` and must never become positives (e.g.
+  `routes/captcha.ts:22` evals an expression built only from `Math.random`).
+- The 169 files under `data/static/codefixes/` are **fragments** — no imports,
+  `botName` / `productModel` / `req` undefined — so they cannot be samples and would
+  fail `tsc --noEmit`. That is the same defect E2 named, in canned form.
+
+**Diff provenance is the binding constraint, not class count.**
+
+```
+git log -S'models.sequelize.query' -- routes/search.ts     # 23,854-commit history
+→ d6dc878b1 2021-03-05 "Migrate /routes/*.js to .ts"
+```
+
+The TypeScript form of the sink arrived in a bulk migration commit, not in a
+vulnerability-introducing one (a single `-S` probe over the lazy blob filter costs
+~105 s through the proxy). A real `before`/`after` therefore only exists either as a
+2016-era ES5 introduction (the file was `.js`, or did not exist yet) or as one of these
+migration commits. Self-built positives can only be **real file + authored minimal
+diff**, with `origin.kind = self_rewritten` and `contamination_risk = authored-diff`
+recorded. That is not "hand-written samples" (§4 forbids inventing code) but it must be
+stated, or the rows will be read as upstream commits.
+
+Two readings of the step-2 rule disagree and the choice is a spec decision:
+
+- **Strict (≥5 classes × ≥5 rows):** no class qualifies → the self-built set is not an
+  evaluation set; keep it as a measured coverage report on real repos and let line 1
+  rest on AACR (22 rows, conformance PASS).
+- **By totals (n ≥ 20 with all seven classes present):** 23 rows satisfy `n ≥ 20`; the
+  three thin classes (089 `n=2`, 078 `n=1`, 918 `n=1`) report `n` and an interval only,
+  never a threshold.
+
+Neither reading changes line 1's block facet, which is `na` regardless (#41 第 0 步:
+no certified TS block rule).
 
 Annotation stays human (§5: 主标本人, advisor spot-check at κ ≥ 0.70). The
 machine-checkable part — provenance, `origin`/`contamination_risk`, the `tsc` gate,
