@@ -1,0 +1,226 @@
+{
+  "source": {
+    "repo": "alibaba/aacr-bench",
+    "dataset": "v1",
+    "files": [
+      "dataset/v1/positive_samples.json",
+      "dataset/v1/negative_samples.json"
+    ]
+  },
+  "filters": {
+    "languages": [
+      "TypeScript"
+    ],
+    "category": "Security Vulnerability",
+    "side": "right",
+    "maxBytes": 524288
+  },
+  "counts": {
+    "raw_comments_all": 1506,
+    "security_ts_pos": 7,
+    "security_ts_neg": 8,
+    "pool_before_left_drop": 15,
+    "not_typescript_file": 5,
+    "imported": 22,
+    "imported_positive": 7,
+    "imported_negative": 15,
+    "imported_security_negative": 8,
+    "imported_control_negative": 7,
+    "control_arm_pool": 103,
+    "control_arm_taken": 7
+  },
+  "ratio": {
+    "before": "7:8",
+    "after": "7:15",
+    "security_stratum": "7:8"
+  },
+  "drops": [
+    {
+      "reason": "not_typescript_file",
+      "count": 5,
+      "examples": [
+        "https://github.com/CherryHQ/cherry-studio/pull/5540 src/renderer/src/i18n/locales/ru-ru.json",
+        "https://github.com/immich-app/immich/pull/17535 server/src/queries/person.repository.sql",
+        "https://github.com/immich-app/immich/pull/17535 server/src/queries/person.repository.sql"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "sample_id": "aacr-ts-0001",
+      "pr": "https://github.com/cline/cline/pull/4786",
+      "path": "src/core/controller/index.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "461-461"
+    },
+    {
+      "sample_id": "aacr-ts-0002",
+      "pr": "https://github.com/cline/cline/pull/4786",
+      "path": "src/core/controller/index.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "461-461"
+    },
+    {
+      "sample_id": "aacr-ts-0003",
+      "pr": "https://github.com/cline/cline/pull/4786",
+      "path": "src/services/auth/AuthService.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "33-33"
+    },
+    {
+      "sample_id": "aacr-ts-0004",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/8154",
+      "path": "packages/cli/src/config/settings.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "715-715"
+    },
+    {
+      "sample_id": "aacr-ts-0005",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/8154",
+      "path": "packages/cli/src/utils/commentJson.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "59-59"
+    },
+    {
+      "sample_id": "aacr-ts-0006",
+      "pr": "https://github.com/n8n-io/n8n/pull/15057",
+      "path": "packages/cli/src/databases/repositories/workflow.repository.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "300-314"
+    },
+    {
+      "sample_id": "aacr-ts-0007",
+      "pr": "https://github.com/n8n-io/n8n/pull/20188",
+      "path": "packages/cli/src/controllers/users.controller.ts",
+      "label": 1,
+      "arm": "security_pos",
+      "lines": "99-99"
+    },
+    {
+      "sample_id": "aacr-ts-0008",
+      "pr": "https://github.com/cline/cline/pull/4786",
+      "path": "src/extension.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "319-319"
+    },
+    {
+      "sample_id": "aacr-ts-0009",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/4163",
+      "path": "packages/core/src/tools/glob.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "127-134"
+    },
+    {
+      "sample_id": "aacr-ts-0010",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/4163",
+      "path": "packages/core/src/tools/grep.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "104-111"
+    },
+    {
+      "sample_id": "aacr-ts-0011",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/4163",
+      "path": "packages/core/src/tools/read-file.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "88-90"
+    },
+    {
+      "sample_id": "aacr-ts-0012",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/4163",
+      "path": "packages/core/src/tools/read-many-files.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "310-316"
+    },
+    {
+      "sample_id": "aacr-ts-0013",
+      "pr": "https://github.com/google-gemini/gemini-cli/pull/4163",
+      "path": "packages/core/src/utils/fileUtils.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "39-39"
+    },
+    {
+      "sample_id": "aacr-ts-0014",
+      "pr": "https://github.com/n8n-io/n8n/pull/20210",
+      "path": "packages/testing/playwright/services/user-api-helper.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "29-29"
+    },
+    {
+      "sample_id": "aacr-ts-0015",
+      "pr": "https://github.com/immich-app/immich/pull/16893",
+      "path": "web/src/service-worker/index.ts",
+      "label": 0,
+      "arm": "security_neg",
+      "lines": "44-45"
+    },
+    {
+      "sample_id": "aacr-ts-0016",
+      "pr": "https://github.com/cline/cline/pull/4786",
+      "path": "src/core/controller/index.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "460-460"
+    },
+    {
+      "sample_id": "aacr-ts-0017",
+      "pr": "https://github.com/n8n-io/n8n/pull/20210",
+      "path": "packages/testing/playwright/tests/ui/39-projects.spec.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "119-120"
+    },
+    {
+      "sample_id": "aacr-ts-0018",
+      "pr": "https://github.com/immich-app/immich/pull/17535",
+      "path": "server/src/repositories/person.repository.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "266-266"
+    },
+    {
+      "sample_id": "aacr-ts-0019",
+      "pr": "https://github.com/immich-app/immich/pull/14777",
+      "path": "server/src/services/asset.service.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "253-261"
+    },
+    {
+      "sample_id": "aacr-ts-0020",
+      "pr": "https://github.com/cline/cline/pull/4676",
+      "path": "src/core/controller/models/updateApiConfigurationProto.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "18-18"
+    },
+    {
+      "sample_id": "aacr-ts-0021",
+      "pr": "https://github.com/immich-app/immich/pull/18043",
+      "path": "web/src/service-worker/index.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "62-77"
+    },
+    {
+      "sample_id": "aacr-ts-0022",
+      "pr": "https://github.com/CherryHQ/cherry-studio/pull/5637",
+      "path": "src/renderer/src/middleware/extractReasoningMiddleware.ts",
+      "label": 0,
+      "arm": "control",
+      "lines": "32-32"
+    }
+  ]
+}

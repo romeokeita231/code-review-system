@@ -1,0 +1,234 @@
+{
+  "dataset_version": "aacr-v1-import-1",
+  "schema_version": 1,
+  "dataset": "aacr",
+  "source": {
+    "repo": "alibaba/aacr-bench",
+    "dataset": "v1",
+    "license": "Apache-2.0"
+  },
+  "split_rule": "aacr-eval-v1",
+  "content_sha256_root": "d7ec0fadc7e3bb9231acbdf4048ef8be656d4456a77aa9dfc2c828e2ccc7f4a3",
+  "samples": [
+    {
+      "sample_id": "aacr-ts-0001",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 7,
+      "content_sha256": "358f1cf797c2a629c271c9b362836d481c2f881dd9d4beb6803629c1832d6e23",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0002",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 7,
+      "content_sha256": "358f1cf797c2a629c271c9b362836d481c2f881dd9d4beb6803629c1832d6e23",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0003",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 46,
+      "content_sha256": "c722a3ad9a5321b2f36e22e65d38eee5c7119df011b89ba40fd8694edd811171",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0004",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 56,
+      "content_sha256": "2f071742ef95394f6bb8111b52b7a3da4ac1e6f76027c3baa887bcec659fdcac",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0005",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 172,
+      "content_sha256": "c1d7f83e3d22a32d915b697a1727c12bb3226ea6afc065f41770f65d74131062",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0006",
+      "group_id": "aacr:n8n-io/n8n",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 24,
+      "content_sha256": "c8d4c2c51ea8842118855a8118b50781bf63fc9bf3d15ac69c58b0fa27060e47",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0007",
+      "group_id": "aacr:n8n-io/n8n",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 14,
+      "content_sha256": "c42a2ae9a163350d0a6767e13d947ea00400de662bc4992f6e8212e4bc06b8a9",
+      "label": 1
+    },
+    {
+      "sample_id": "aacr-ts-0008",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 16,
+      "content_sha256": "cba24b4c3e026c3605f7456842409c2a26e63bbf399d3eb2fe21407c57476dd6",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0009",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 56,
+      "content_sha256": "0fff8a2fbe22d46784bc2b9bfee13e7c074650cd8d67d967828005a83df497eb",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0010",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 32,
+      "content_sha256": "a06e5e658b9b79bbd7ffc1d4feceba730e6ceb281491dfc17c9e0eb1f0ba412d",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0011",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 17,
+      "content_sha256": "bc93b0c63fc84d9e97c7d9767fa7efe06c32a34d21a83a0ec160ffa9a9e865b5",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0012",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 31,
+      "content_sha256": "f468d96c02eddecd35495c516dc4cf90fa6af32f8a86212a44249bf59735ff6a",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0013",
+      "group_id": "aacr:google-gemini/gemini-cli",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 4,
+      "content_sha256": "b34ccaa39f8db6c1b2ce96e30b2927db777cad26d9f0b2857d8d23598bb8867a",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0014",
+      "group_id": "aacr:n8n-io/n8n",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 70,
+      "content_sha256": "3e4c291ddb54e686972f9b311523e41b0aceb4b3caef1e66312eb9646ef1ed97",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0015",
+      "group_id": "aacr:immich-app/immich",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 89,
+      "content_sha256": "9046ca0d4758fa06f3230827d12e1c43dc390bd761d3d769cf815318c2a741ae",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0016",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 7,
+      "content_sha256": "358f1cf797c2a629c271c9b362836d481c2f881dd9d4beb6803629c1832d6e23",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0017",
+      "group_id": "aacr:n8n-io/n8n",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 12,
+      "content_sha256": "5ca451ce984d29fad16d5f6dae51d478b623c0c73a2b585d63bad4591a18332e",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0018",
+      "group_id": "aacr:immich-app/immich",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 180,
+      "content_sha256": "027c10c8ca0c95f25e7f44f67af0a24e3819833a86d3c44d0c6092f50fd75135",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0019",
+      "group_id": "aacr:immich-app/immich",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 15,
+      "content_sha256": "9dfc026347cb65ff9e935e2881cc9996a982c26ca379aad3151cb8786212cd54",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0020",
+      "group_id": "aacr:cline/cline",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 21,
+      "content_sha256": "2f4d443a0366d9a89e542dd8139b794ef954544215fb19de83f00be87c7b393b",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0021",
+      "group_id": "aacr:immich-app/immich",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 75,
+      "content_sha256": "0131fe01554572309cf32cd63045a92fe5f9e3e939bc3c519d05fb2bb14a5fac",
+      "label": 0
+    },
+    {
+      "sample_id": "aacr-ts-0022",
+      "group_id": "aacr:CherryHQ/cherry-studio",
+      "split": "eval",
+      "risk_level": "high",
+      "contamination_risk": "low",
+      "changed_lines": 105,
+      "content_sha256": "bf18acfde685e40ab13ea4ec9365ff1f27ecc35b07ffc2fc1c07240decf5eb0d",
+      "label": 0
+    }
+  ]
+}

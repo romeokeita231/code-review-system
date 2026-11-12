@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { verifyConformance, verifyDataset } from "../../scripts/verify-dataset.js";
 
 const DATASET = fileURLToPath(new URL("../../datasets/self-built", import.meta.url));
+const AACR = fileURLToPath(new URL("../../datasets/aacr", import.meta.url));
 const tempDirs: string[] = [];
 
 async function copyDataset(): Promise<string> {
@@ -217,5 +218,28 @@ describe("verifyConformance", () => {
     expect(rules).toContain("risk_level");
     expect(rules).toContain("classes");
     expect(result.violations.some((violation) => violation.detail.includes("CWE-502"))).toBe(true);
+  });
+
+  it("accepts the imported AACR set and keeps its accounting coherent", async () => {
+    const result = await verifyConformance(AACR);
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+
+    const report = await readJson<{
+      counts: Record<string, number>;
+      ratio: Record<string, string>;
+      samples: Array<{ sample_id: string; arm: string; label: number }>;
+    }>(join(AACR, "import-report.json"));
+    const manifest = await readJson<{ samples: Array<{ sample_id: string }> }>(join(AACR, "manifest.json"));
+
+    expect(report.counts["imported"]).toBe(report.samples.length);
+    expect(report.counts["imported"]).toBe(manifest.samples.length);
+    // §3 asks for an equal-sized non-Security control arm.
+    expect(report.counts["imported_control_negative"]).toBe(report.counts["imported_positive"]);
+    expect(report.ratio["security_stratum"]).toBe(
+      `${report.counts["imported_positive"]}:${report.counts["imported_security_negative"]}`,
+    );
+    const ids = new Set(manifest.samples.map((row) => row.sample_id));
+    for (const sample of report.samples) expect(ids.has(sample.sample_id)).toBe(true);
   });
 });
