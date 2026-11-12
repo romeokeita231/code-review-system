@@ -1,10 +1,3 @@
-dsh:
-  name: code-review-system
-  hooks:
-    - stage: tools/pre-execute
-      handler: bundle.preExecute
-    - stage: tools/post-execute
-      handler: bundle.postExecute
-  config:
-    path: configs/b4.json
-    artifact: artifacts/calibration.json
+- insert:
+    - id: code-review-system
+      name: code-review-system

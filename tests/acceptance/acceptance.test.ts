@@ -28,7 +28,11 @@ function row(over: Partial<AcceptanceRowLike> & { sample: string; baseline: stri
     sources: over.sources ?? [],
     tokens: over.tokens ?? 100,
     latency_ms: over.latency_ms ?? 1000,
-    change_event: { sessionId: over.change_event?.sessionId ?? "s1", ts: over.ts },
+    change_event: {
+      sessionId: over.change_event?.sessionId ?? "s1",
+      ts: over.ts,
+      phase: over.change_event?.phase,
+    },
   };
 }
 
@@ -84,6 +88,25 @@ describe("acceptance", () => {
         ],
       }),
     );
+    // The correction pass rewrites the warned sample; that later row must no
+    // longer carry the same class for line 3 to hold.
+    rows.push(row({ sample: "deps-1", baseline: "B4", ts: base + 950 }));
+    truth.set("corr", truthOf("corr", "high", ["aor"]));
+    rows.push(
+      row({
+        sample: "corr",
+        baseline: "B4",
+        ts: base + 960,
+        disposition: {
+          preDecision: "allow",
+          postDecision: "inject_warn",
+          finalDisposition: "instruction_correction",
+          text: "[CRS-WARN] src/a.ts:1 CWE-79 rule | review",
+        },
+        findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+      }),
+    );
+    rows.push(row({ sample: "corr", baseline: "B4", ts: base + 970 }));
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines.map((line) => line.pass)).toEqual([true, true, true, true, true]);
     expect(report.lines[0]!.metrics).toMatchObject({ n: 20, k: 20 });
@@ -143,6 +166,113 @@ describe("acceptance", () => {
         baseline: "B4",
         ts: 20,
         findings_merged: [{ file: "src/a.ts", startLine: 5, endLine: 6, cwe: "CWE-79" }],
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[2]!.pass).toBe(false);
+    expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+  });
+
+  it("counts each sample once when a live write emits pre and post rows", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      const sample = `s-${index}`;
+      truth.set(sample, truthOf(sample, "high", ["semgrep"]));
+      rows.push(
+        row({
+          sample,
+          baseline: "B4",
+          ts: 100 + index,
+          change_event: { sessionId: "s1", ts: 100 + index, phase: "pre" },
+          disposition: { preDecision: "deny", postDecision: "not_run", finalDisposition: "mechanical_block", text: "x" },
+        }),
+      );
+      rows.push(
+        row({
+          sample,
+          baseline: "B4",
+          ts: 200 + index,
+          change_event: { sessionId: "s1", ts: 200 + index, phase: "post" },
+        }),
+      );
+    }
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 20, k: 20, recall: 1, precision: 1 });
+  });
+
+  it("passes line3 when the corrected file no longer carries the class", () => {
+    const truth = new Map<string, SampleTruth>([["a", truthOf("a", "high", ["aor"])]]);
+    const rows = [
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 10,
+        change_event: { sessionId: "s1", ts: 10, phase: "post" },
+        disposition: {
+          preDecision: "allow",
+          postDecision: "inject_warn",
+          finalDisposition: "instruction_correction",
+          text: "[CRS-WARN] src/a.ts:1 CWE-79 r",
+        },
+        findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+      }),
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 20,
+        change_event: { sessionId: "s1", ts: 20, phase: "post" },
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[2]!.pass).toBe(true);
+    expect(report.lines[2]!.metrics).toMatchObject({ warned: 1, corrected: 1, repeats: 0 });
+  });
+
+  it("fails line3 when the same class reappears in the corrected sample", () => {
+    const truth = new Map<string, SampleTruth>([["a", truthOf("a", "high", ["aor"])]]);
+    const rows = [
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 10,
+        change_event: { sessionId: "s1", ts: 10, phase: "post" },
+        disposition: {
+          preDecision: "allow",
+          postDecision: "inject_warn",
+          finalDisposition: "instruction_correction",
+          text: "[CRS-WARN] src/a.ts:1 CWE-79 r",
+        },
+        findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+      }),
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 20,
+        change_event: { sessionId: "s1", ts: 20, phase: "post" },
+        findings_merged: [{ file: "src/a.ts", startLine: 3, endLine: 4, cwe: "CWE-79" }],
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[2]!.pass).toBe(false);
+    expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+  });
+
+  it("fails line3 when a warned sample is never corrected", () => {
+    const truth = new Map<string, SampleTruth>([["a", truthOf("a", "high", ["aor"])]]);
+    const rows = [
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 10,
+        change_event: { sessionId: "s1", ts: 10, phase: "post" },
+        disposition: {
+          preDecision: "allow",
+          postDecision: "inject_warn",
+          finalDisposition: "instruction_correction",
+          text: "[CRS-WARN] src/a.ts:1 CWE-79 r",
+        },
+        findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
       }),
     ];
     const report = evaluateAcceptance(rows, truth, gaps);

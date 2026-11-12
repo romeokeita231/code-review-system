@@ -39,11 +39,10 @@ export interface AcceptanceRowLike {
   sources: Array<{ source: string; status: string; findings: Array<{ file: string; cwe: string | null; evidence: string | null }> }>;
   tokens: { total: number | null } | number | null;
   latency_ms: number;
-  change_event: { sessionId: string; ts: number } | null;
+  change_event: { sessionId: string; ts: number; phase?: string } | null;
 }
 
-async function collectJsonl(root: string): Promise<string[]> {
-  const out: string[] = [];
+export async function collectJsonl(root: string): Promise<string[]> {  const out: string[] = [];
   const entries = await readdir(root, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(root, entry.name);
@@ -119,8 +118,16 @@ export function evaluateAcceptance(
   if (modes.size > 1) throw new Error(`live and replay rows must not be mixed: ${[...modes].join(",")}`);
   const mode = [...modes][0] ?? "unknown";
   const ordered = [...rows].sort((a, b) => (a.change_event?.ts ?? 0) - (b.change_event?.ts ?? 0));
+  // A live write emits one row per phase. The blocking assertion is a pre
+  // decision, while correction anchors only exist on post rows; comparing the
+  // phases as one population would double every sample and mix mechanisms.
+  const preRows = ordered.filter((row) => row.change_event?.phase === "pre");
+  const postRows = ordered.filter((row) => row.change_event?.phase !== "pre");
+  // Replay records carry a single already-decided row per sample, so they have
+  // no pre rows to separate; live rows always do.
+  const blockingRows = preRows.length > 0 ? preRows : ordered;
 
-  const mainRows = ordered.filter((row) => row.baseline === "B4");
+  const mainRows = blockingRows.filter((row) => row.baseline === "B4");
   const positives = mainRows.filter((row) => {
     const sample = truth.get(row.sample);
     return (
@@ -184,32 +191,61 @@ export function evaluateAcceptance(
     metrics: { registry_hits: registryHits.length },
   };
 
-  const warned = ordered.filter((row) => row.disposition.postDecision === "inject_warn");
+  const warned = postRows.filter((row) => row.disposition.postDecision === "inject_warn");
+  const perSample = new Map<string, AcceptanceRowLike[]>();
+  for (const row of postRows) {
+    const list = perSample.get(row.sample) ?? [];
+    list.push(row);
+    perSample.set(row.sample, list);
+  }
   const repeats: string[] = [];
+  const corrected: string[] = [];
+  const classed: AcceptanceRowLike[] = [];
   for (const row of warned) {
-    const index = ordered.indexOf(row);
     const classes = new Set(
       (truth.get(row.sample)?.labels ?? [])
         .map((label) => label.cwe)
         .filter((cwe): cwe is string => cwe !== null),
     );
-    for (const later of ordered.slice(index + 1, index + 3)) {
-      const hit = later.findings_merged.find((finding) => finding.cwe !== null && classes.has(finding.cwe));
-      if (hit) repeats.push(`${row.sample}->${later.sample}:${hit.cwe}`);
+    // A warned sample without ground-truth classes (e.g. the dependency probe)
+    // cannot carry line 3's assertion either way.
+    if (classes.size === 0) continue;
+    classed.push(row);
+    // Line 3: after the correction lands, the same class must not reappear in
+    // that sample's later writes (the corrected file), for up to two fixes.
+    const later = (perSample.get(row.sample) ?? []).filter(
+      (candidate) =>
+        (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
+    );
+    const reappeared = later.some((candidate) =>
+      candidate.findings_merged.some((finding) => finding.cwe !== null && classes.has(finding.cwe)),
+    );
+    if (later.length === 0) {
+      repeats.push(`${row.sample}:unfixed`);
+      continue;
     }
+    if (reappeared) repeats.push(`${row.sample}:same-class`);
+    else corrected.push(row.sample);
   }
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
-    pass: warned.length > 0 && repeats.length === 0,
-    detail: `warned=${warned.length} repeats=${repeats.length}${repeats.length > 0 ? ` first=${repeats[0]}` : ""}`,
-    metrics: { warned: warned.length, repeats: repeats.length },
+    pass: classed.length > 0 && corrected.length === classed.length && repeats.length === 0,
+    detail:
+      `warned=${warned.length} classed=${classed.length} corrected=${corrected.length} repeats=${repeats.length}` +
+      `${repeats.length > 0 ? ` first=${repeats[0]}` : ""}`,
+    metrics: {
+      warned: warned.length,
+      classed: classed.length,
+      corrected: corrected.length,
+      repeats: repeats.length,
+    },
   };
 
   const lowRisk = [...truth.values()].filter((sample) => sample.risk_level === "low").slice(0, 8);
   const pairs: Array<{ sample: string; latencyRatio: number; tokenRatio: number | null }> = [];
   for (const sample of lowRisk) {
-    const b4 = ordered.find((row) => row.sample === sample.sample_id && row.baseline === "B4");
-    const b4g = ordered.find((row) => row.sample === sample.sample_id && row.baseline === "B4g");
+    const b4 = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4");
+    const b4g = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4g");
     if (!b4 || !b4g) continue;
     const latencyRatio = b4g.latency_ms === 0 ? Number.POSITIVE_INFINITY : b4.latency_ms / b4g.latency_ms;
     const t4 = tokensOf(b4);
