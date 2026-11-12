@@ -16,6 +16,9 @@ const baseConfig = (): RunConfig =>
 
 const artifact: CalibrationArtifact = {
   version: "calib-test",
+  dataset_version: "ds-test",
+  ruleset_fingerprint: "fp-test",
+  categories: ["CWE-78", "CWE-79"],
   pPrior: 0.3,
   shrinkageN0: 10,
   pMax: 0.95,

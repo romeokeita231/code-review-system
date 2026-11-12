@@ -11,13 +11,57 @@ actually passed a gate.
 | SecurityEval | — | fit only (class priors) | not imported |
 | CWE-Bench-Java | — | external sanity only | not imported |
 
+## #7 errata: D1 (negatives) and D2 (calibration)
+
+Two rules the spec stated loosely enough that the old set satisfied them by
+accident. Both are now machine-checked.
+
+**D1 — a sample has to be a real change, and a safe variant has to name the
+control.** `--conformance` gained four hard failures:
+
+| rule | what it rejects |
+| --- | --- |
+| `noop` | `sha256(before) === sha256(after)`, or a diff that touches only comments/blank lines |
+| `rationale` | a `variant_of` row with no `rationale`, or one that is not a control name (`已修改`, `modified`, `safe version`, … are rejected; the named control is still the annotator's call) |
+| `variant` | a variant whose `file_path` or `sample_cwe` differs from the row it is a variant of |
+| `version` | a `self` row that is not `schema_version: 2`, or a manifest that is not `ds-2` |
+
+All 210 old pair-safe variants trip `noop` (they are `before === after`), which is
+the point: they were a precision denominator that was true by construction. The
+rebuilt set is `schema_version: 2` / `ds-2`; external imports (AACR) stay at 1.
+
+**D2 — calibration categories are derived, not listed.** `CALIBRATION_CATEGORIES`
+(hand-written `[…, CWE-502, …]`, CWE-918 missing) is gone. The set is
+
+```
+categories = (dataset manifest 的 sample_cwe 集合) ∩ (规则表声明的 CWE 集合)
+```
+
+computed by `calibrationCategories()` over the languages the config actually
+scans. `artifacts/calibration.json` now carries `dataset_version`,
+`ruleset_fingerprint` (sha256 of `rules_table.json`) and `categories`;
+`assertCalibrationMatches()` is a **hard failure** on any mismatch, and the drill's
+`check` stage runs it before a live run. Re-running `npm run calibrate` on the
+current drifted set shows the effect: 75 `CWE-502` findings are dropped from the
+fit and reported as `categories_dropped`, because the ruleset never declared 502 —
+their grids would otherwise have survived the 502→918 change and applied a
+threshold nobody fitted.
+
+**Degraded calibration rule (spec-level).** With 7 classes × 30 declarations the
+per-class threshold is unreachable by construction: every `category.*` entry is
+`skipped: class_declarations_below_30` and only the global `block`/`warn` pair is
+fitted. That is not a bug to be worked around. When a class has fewer than 30
+declarations, report its descriptive numbers (n, interval) and **no threshold**;
+the pipeline uses the global threshold for every class. A per-class threshold may
+only appear once that class passes 30.
+
 ## self-built
 
 `npx tsx scripts/verify-dataset.ts` checks the set against its own manifest
 (hashes, counts, pairing, split leakage). It passes.
 
 `npx tsx scripts/verify-dataset.ts --conformance` checks it against the spec and
-fails with ~2600 violations across 5 rules: field names (`cwe`/`path`/`paired_safe`
+fails with ~3300 violations across 7 rules: field names (`cwe`/`path`/`paired_safe`
 instead of `sample_cwe`/`file_path`/`variant_of`), `sample_id` pattern, `medium` risk
 levels that §9 cannot derive, CWE-502 where §6 asks for CWE-918, and 60 rows per class
 instead of a 3:2 fit/eval split.

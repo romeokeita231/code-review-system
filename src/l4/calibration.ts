@@ -7,6 +7,11 @@ export interface CalibrationSpec {
   pPrior: number;
   shrinkageN0: number;
   pMax: number;
+  /** Provenance of the fit; recorded so a stale artifact is detectable (#7 D2). */
+  datasetVersion: string;
+  rulesetFingerprint: string;
+  /** `calibrationCategories(dataset, ruleset)` — never a hand-written list. */
+  categories: string[];
 }
 
 export interface CalibrationSample {
@@ -102,6 +107,9 @@ export function fitCalibration(
 
   return {
     version: `calib-${fitRoot.slice(0, 12)}`,
+    dataset_version: spec.datasetVersion,
+    ruleset_fingerprint: spec.rulesetFingerprint,
+    categories: [...spec.categories].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     pPrior: spec.pPrior,
     shrinkageN0: spec.shrinkageN0,
     pMax: spec.pMax,

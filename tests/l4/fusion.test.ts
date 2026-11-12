@@ -112,7 +112,14 @@ describe("calibration", () => {
         { source: "semgrep", category: "CWE-78", raw: 0.9, label: 1 },
         { source: "semgrep", category: "CWE-78", raw: 0.95, label: 1 },
       ],
-      { pPrior: 0.3, shrinkageN0: 10, pMax: 0.95 },
+      {
+        pPrior: 0.3,
+        shrinkageN0: 10,
+        pMax: 0.95,
+        datasetVersion: "ds-test",
+        rulesetFingerprint: "fp-test",
+        categories: ["CWE-78"],
+      },
       "fitroot",
     );
     const grid = artifact.grids[0]!;
