@@ -224,11 +224,14 @@ export async function loadTruth(datasetDir: string): Promise<Map<string, SampleT
   for (const entry of manifest.samples) {
     const sample = JSON.parse(
       await readFile(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
-    ) as Omit<SampleTruth, "sample_cwe"> & { cwe: string | null };
+    ) as Omit<SampleTruth, "sample_cwe"> & { cwe: string | null; sample_cwe?: string | null };
     truth.set(entry.sample_id, {
       ...sample,
       language: String((sample as { language?: unknown }).language ?? ""),
-      sample_cwe: sample.cwe,
+      // The self set names the class `sample_cwe`; the imported sets use `cwe`.
+      // Reading only `cwe` left every ds-2 row classless, so `covered()` was
+      // false for all of them and line 1 reported an empty denominator.
+      sample_cwe: sample.sample_cwe ?? sample.cwe ?? null,
       labels: labelSpansOf(sample as unknown as Record<string, unknown>),
       expected_detectable_by: entry.expected_detectable_by,
     });

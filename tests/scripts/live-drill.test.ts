@@ -19,6 +19,7 @@ import {
   toAcceptanceRows,
   writePrompt,
 } from "../../scripts/live-drill.js";
+import { loadTruth } from "../../scripts/acceptance.js";
 
 const DATASET = "datasets/self-built";
 const tempDirs: string[] = [];
@@ -448,5 +449,25 @@ describe("evaluate refuses a drifted measurement", () => {
     const report = readSync(join(root, "out", "report.md"), "utf8");
     expect(report).toContain("instruments (observed");
     expect(report).toContain("04deca6");
+  });
+
+  it("reads the self set's spans and class, so the denominator is not empty", async () => {
+    // Both fields have a different name on ds-2 than on the imported sets:
+    // spans are `defects[]` and the class is `sample_cwe`. Reading `labels`/`cwe`
+    // left every self row classless and spanless, and line 1 reported n=0.
+    const truth = await loadTruth(DATASET);
+    const positive = truth.get("ts-cwe079-0001")!;
+    expect(positive.labels).toEqual([
+      {
+        path: "frontend/src/app/search-result/search-result.component.ts",
+        startLine: 146,
+        endLine: 146,
+        cwe: "CWE-79",
+      },
+    ]);
+    expect(positive.sample_cwe).toBe("CWE-79");
+    const negative = truth.get("ts-cwe022-9010")!;
+    expect(negative.labels).toEqual([]);
+    expect(negative.event_kind).toBe("create");
   });
 });
