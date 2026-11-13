@@ -588,6 +588,20 @@ describe("evaluate refuses a drifted measurement", () => {
     expect(report).toContain("04deca6");
   });
 
+  it("refuses to evaluate a run staged against a pin that has since moved", async () => {
+    const { root, outDir } = await collectedRun(false);
+    const runPath = join(outDir, "run.json");
+    const manifest = JSON.parse(readSync(runPath, "utf8")) as { frozen_instruments: { aor_model: { id: string } } };
+    manifest.frozen_instruments.aor_model.id = "deepseek-v3";
+    await writeFile(runPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: { "079": 1 },
+      }),
+    ).rejects.toThrow(/changed after .* was staged/);
+  });
+
   it("reads the self set's spans and class, so the denominator is not empty", async () => {
     // Both fields have a different name on ds-2 than on the imported sets:
     // spans are `defects[]` and the class is `sample_cwe`. Reading `labels`/`cwe`

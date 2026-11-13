@@ -1347,6 +1347,18 @@ export async function evaluate(
   // The run directory names its dataset and its pin; both are checked before any
   // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
   const run = readRunManifest(outDir, datasetDir);
+  // A pin edited after the run was staged is the same failure as a pin that was
+  // never frozen: the goalposts moved between the measurement and the report.
+  // The run carries its own copy, so this compares two records, not a record
+  // with a memory.
+  const now = loadFrozenPin();
+  if (JSON.stringify(run.frozen_instruments) !== JSON.stringify(now)) {
+    throw new Error(
+      `refusing to evaluate: ${PREREGISTRATION} changed after ${outDir} was staged\n` +
+        `  run:  ${JSON.stringify(run.frozen_instruments)}\n` +
+        `  now:  ${JSON.stringify(now)}`,
+    );
+  }
   // Only the collected acceptance rows. `B4/review.jsonl` is the plugin's own
   // shape (one row per phase, `pre_decision` not `disposition`); reading the
   // whole tree mixed the two shapes and crashed on the first plugin row.
