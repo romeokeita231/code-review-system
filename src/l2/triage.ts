@@ -22,12 +22,28 @@ export interface TriageBoundaries {
   tier1: { filesMax: number; nodesMax: number };
 }
 
+/**
+ * The static ladder: one input, `changedFiles`.
+ *
+ * Not `risk_level`, not line count, not the defect class — a three-file write is
+ * tier 0 whatever it contains, and a one-file write is tier 0 even when it is a
+ * whole vulnerable module. `staticTier` is the fallback whenever the graph
+ * cannot answer (`index_not_ready`, `index_stale`, or a query that misses
+ * `budgets.crgQueryMs`), so on a machine where the graph query is slower than
+ * that budget this is the *only* rule in force.
+ */
 export function staticTier(changedFiles: number, boundaries: TriageBoundaries): Tier {
   if (changedFiles <= boundaries.tier0.filesMax) return 0;
   if (changedFiles <= boundaries.tier1.filesMax) return 1;
   return 2;
 }
 
+/**
+ * The computed ladder. Inputs: `impactedFiles`, `impactedNodes`, `truncated`
+ * and `unresolvedCallSites` — and `changedFiles` only in the degraded branch.
+ * `risk_level` appears nowhere; cost is a function of change shape, not of how
+ * dangerous the change is judged to be.
+ */
 export function computeTier(input: TriageInput, boundaries: TriageBoundaries): TriageResult {
   if (!input.indexReady || input.indexStale) {
     return {

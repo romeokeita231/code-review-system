@@ -22,3 +22,19 @@
 - 「B4 − B3 即仲裁层贡献」被替换为两条可归因的 delta。
 - 任何按档位汇总的表格必须按 `mode` 分面，否则 B0 会污染结论。
 - tier 0 的单源阻断成绩须单列披露。
+
+## 勘误一（2026-11-13）：档位只由改动文件数决定，`risk_level` 不参与
+
+原文与 #26 的叙述把成本分档写成「风险等级驱动」，与实现不一致。`src/l2/triage.ts` 实际读取的输入是：
+
+- `staticTier(changedFiles)`：**只读 `changedFiles`**。`changedFiles <= tier0.filesMax(3)` → 0，`<= tier1.filesMax(10)` → 1，否则 2。行数、CWE、`risk_level` 一律不读。
+- `computeTier(...)`：读 `impactedFiles`、`impactedNodes`、`truncated`、`unresolvedCallSites`；`changedFiles` 只在 `indexReady=false` 或 `indexStale=true` 的降级分支里被读。
+- 生产路径 `orchestrator.decideTier` 在 `triage` 适配器缺失或抛错时直接 `staticTier`；否则查图。
+
+两处后果：
+
+1. **一次三文件的写入，无论内容多危险，都是 tier 0**。`risk_level: high` 的样本只要单文件写入就落 tier 0，AOR 被摘掉（`orchestrator.ts:409`），semgrep 与 registry 仍跑。
+2. **live 路径上查图这一步在实践中不生效**：`budgets.crgQueryMs = 300`，而 `code-review-graph impact` 是 Python CLI，启动就超过该预算。实测（2026-11-13，`ts-cwe079-0001` 单文件 post 事件，真 semgrep/crg/ocr）：`tier_source: "static"`、`skip_reason: "index_not_ready"`。所以 live 轨的档位实际就是文件数。
+
+`risk_level` 的唯一用途是数据集池的划分（低风险负样本池），不是成本门控。任何按 `risk_level` 分档汇总的报告都是错的。
+
