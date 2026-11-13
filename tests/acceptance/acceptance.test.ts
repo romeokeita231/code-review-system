@@ -167,19 +167,32 @@ describe("acceptance", () => {
     }
     const bare = evaluateAcceptance(rows, truth, gaps).lines[3]!;
     expect(bare.pass).toBe(true);
+    // Nobody said where these rows came from, so the report says nobody said.
+    // A fixture's ratio is shaped exactly like a measurement (ADR-0008).
+    expect(bare.detail).toContain("source=unknown");
     expect(bare.detail).toContain("upstream_tier0=na");
     expect(bare.detail).toContain("counterfactual=not_measured");
     expect(bare.metrics).toMatchObject({ upstream_tier0: null, upstream_tier0_measured: null });
 
     const measured = evaluateAcceptance(rows, truth, gaps, {
+      rowsSource: "live",
       stagedContext: tier0Counterfactual("artifacts/staged-context.json"),
     }).lines[3]!;
     expect(measured.pass).toBe(true);
+    expect(measured.detail).toContain("source=live");
     expect(measured.detail).toContain("upstream_tier0=0/8");
     expect(measured.detail).toContain("本语料 18 个可测行无一为 tier 0");
     expect(measured.detail).toContain("最小 3 个 importer");
     expect(measured.detail).toContain("观测到的比值属于构造拓扑");
-    expect(measured.metrics).toMatchObject({ upstream_tier0: 0, upstream_tier0_measured: 8 });
+    expect(measured.metrics).toMatchObject({
+      rows_source: "live",
+      upstream_tier0: 0,
+      upstream_tier0_measured: 8,
+    });
+
+    const synthetic = evaluateAcceptance(rows, truth, gaps, { rowsSource: "synthetic" }).lines[3]!;
+    expect(synthetic.detail).toContain("source=synthetic");
+    expect(synthetic.metrics).toMatchObject({ rows_source: "synthetic" });
   });
 
   it("reads the frozen counterfactual and refuses one that contradicts itself", () => {

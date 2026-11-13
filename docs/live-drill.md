@@ -223,9 +223,32 @@ in the line's `detail`, read from `artifacts/staged-context.json`:
 > 本行验证阶梯在「爆炸半径确实小于边界」时的花费单调性；本语料 18 个可测行无一为 tier 0（最小 3 个
 > importer，边界 `filesMax=3`），故该语料上阶梯不产生节省。观测到的比值属于构造拓扑。
 
-The wording was frozen before the run (preregistration v6). A report whose artefact is missing
-prints `upstream_tier0=na` and `counterfactual=not_measured` instead of the sentence; one whose
-artefact disagrees with the copy `run.json` froze at staging is refused.
+The wording was frozen before the run (preregistration v6, revised to v7). A report whose artefact
+is missing prints `upstream_tier0=na` and `counterfactual=not_measured` instead of the sentence;
+one whose artefact disagrees with the copy `run.json` froze at staging is refused. The detail also
+starts with `source=live|synthetic|unknown`, because a fixture's `1000/1100` renders as
+`median_token_ratio=0.909`, which is shaped exactly like a measurement (ADR-0008's fifth
+occurrence). `unknown` is printed, not assumed: a caller that does not say where its rows came
+from does not get to look live.
+
+**The ratio is a total difference, and it cannot be split.** Three channels push the same way and
+only the first is the mechanism under test:
+
+| channel | B4 | B4g | origin |
+| --- | --- | --- | --- |
+| rows that reach AOR | 10 | 19 | measured — the nine low-risk rows are tier 0, and AOR is skipped only at tier 0 (`src/l2/orchestrator.ts:409`) |
+| `aor.tierTokens` | 60 000 | 150 000 | constructed (`configs/b4.json`) |
+| `--max-tools` | template default | 100 | constructed (`src/l3/aor.ts:183`, tier 2 only) |
+
+So the registered reading is weaker than "the ladder saved tokens", and says so:
+
+> 该比值是 B4 与 B4g 的总计差异，不可拆为「阶梯省了多少」；三者同向，故 `ratio ≤ 1` 证据力很弱
+> ——证明的是接线正确 + B4 不叫 AOR。
+
+`ratio ≤ 1` is definitional rather than observed: ADR-0006 gives tier 2 a larger budget and a tool
+cap tier 1 does not get, so a ratio above 1 would be a wiring bug. And "B4 不叫 AOR" is scoped to
+the eight paired rows — there B4 is tier 0 — not to the ten positives, where B4 is tier 1 and
+does call AOR.
 
 What the line verifies is monotonicity **when the radius really is below the boundary**. That
 condition holds for every paired row, so the line is not vacuous — and it is not line 1b's

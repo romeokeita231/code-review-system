@@ -212,10 +212,18 @@ async function main(): Promise<void> {
     "utf8",
   );
 
-  const result = await evaluate(outDir, datasetDir, "artifacts/block-gaps.json", join(root, "out"), {
-    language: plan.coverage.language,
-    perCwe: plan.coverage.declared,
-  });
+  const result = await evaluate(
+    outDir,
+    datasetDir,
+    "artifacts/block-gaps.json",
+    join(root, "out"),
+    { language: plan.coverage.language, perCwe: plan.coverage.declared },
+    {
+      // Nothing below ran a detector. Without this the fixture's 1000/1100 would
+      // render as `median_token_ratio=0.909`, which reads as a measurement.
+      rowsSource: "synthetic",
+    },
+  );
 
   process.stdout.write(
     "WIRING CHECK - synthetic rows, no detector ran, nothing here is a result.\n" +

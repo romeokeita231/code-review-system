@@ -2027,6 +2027,13 @@ export async function evaluate(
   gapsPath: string,
   acceptanceOut: string,
   coverage: RuleCoverage,
+  /**
+   * Whether the rows under this directory were produced by running the detectors.
+   * Stated by the caller rather than inferred from the rows: a synthetic row is
+   * shaped exactly like a measured one, so line 4 would otherwise render a
+   * fixture's ratio as a result (ADR-0008).
+   */
+  options: { rowsSource?: "live" | "synthetic" } = {},
 ): Promise<{ pass: number; lines: Array<{ name: string; pass: boolean; detail: string }> }> {
   // The run directory names its dataset and its pin; both are checked before any
   // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
@@ -2238,6 +2245,7 @@ export async function evaluate(
   const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, {
     coverage,
     frozenInstruments: run.frozen_instruments,
+    ...(options.rowsSource === undefined ? {} : { rowsSource: options.rowsSource }),
     ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
   });
   await mkdir(acceptanceOut, { recursive: true });
@@ -2617,6 +2625,9 @@ async function main(): Promise<void> {
       resolve(arg("--gaps", "artifacts/block-gaps.json")),
       acceptanceOut,
       coverage,
+      // `--stage evaluate` only ever reads a directory `run` produced here; a
+      // synthetic report is built by `wiring:check`, which declares its own.
+      { rowsSource: "live" },
     );
     process.stdout.write(
       `${result.lines.map((line) => `${line.pass ? "PASS" : "FAIL"} ${line.name} :: ${line.detail}`).join("\n")}\n`,

@@ -136,6 +136,13 @@ export interface AcceptanceOptions {
    */
   stagedContext?: Tier0Counterfactual;
   /**
+   * Who produced the rows. Absent means the caller did not say, and line 4 then
+   * prints `source=unknown` rather than claiming a measurement: a synthetic
+   * fixture's 1000/1100 renders as `0.909`, identical in shape to a measured
+   * ratio, so the origin has to be stated rather than inferred (ADR-0008).
+   */
+  rowsSource?: "live" | "synthetic";
+  /**
    * What the five numbers are allowed to have been produced on. When given, a
    * mismatch refuses the report instead of warning about it: the failure mode
    * this guards is a complete-looking artefact built on a different binary.
@@ -418,6 +425,7 @@ export function evaluateAcceptance(
   const modes = new Set(rows.map((row) => row.mode));
   if (modes.size > 1) throw new Error(`live and replay rows must not be mixed: ${[...modes].join(",")}`);
   const mode = [...modes][0] ?? "unknown";
+  const rowsSource = options.rowsSource ?? "unknown";
   const ordered = [...rows].sort((a, b) => (a.change_event?.ts ?? 0) - (b.change_event?.ts ?? 0));
   // A live write emits one row per phase. The blocking assertion is a pre
   // decision, while correction anchors only exist on post rows; comparing the
@@ -727,11 +735,12 @@ export function evaluateAcceptance(
     name: "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
     pass: pairs.length === 8 && medianTokens !== null && medianTokens <= 1,
     detail:
-      `pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
+      `source=${rowsSource} pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
       `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"} ` +
       `available_pairs=${pairedCandidates.length} ${tier0} ${counterfactualNote}`,
     metrics: {
       pairs: pairs.length,
+      rows_source: rowsSource,
       median_token_ratio: medianTokens,
       median_latency_ratio: medianLatency,
       upstream_tier0: counterfactual?.pairs_tier0 ?? null,
