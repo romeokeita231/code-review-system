@@ -28,7 +28,28 @@ npx tsx scripts/live-drill.ts --stage check
 the binary moved from the pinned `04deca6` to `4236c87` between two sessions while the
 config kept claiming the pin. The gate caught it; the updater was the hole.
 
-Two changes, both structural:
+It then moved a **second** time at 12:56:59 — after the pin had been restored — because the
+updater is spawned *detached* and the child from an earlier invocation landed minutes later,
+with `OCR_NO_UPDATE=1` already in its environment. The lesson is the one that governs the
+whole instrument chapter: **a pin is a property that has to be re-observed before every run,
+not a state that is reached once.** But observation is not protection either: a check that
+can only report the drift after the one blind run is spent protects nothing.
+
+So the updater is gone from the filesystem, not disabled by a variable:
+
+- `scripts/update.js` is renamed to `scripts/update.js.disabled` inside the installed
+  `@alibaba-group/open-code-review` package. The launcher then spawns nothing — a file that
+  is not there cannot be unset, raced, or inherited. `OCR_NO_UPDATE=1` stays as well
+  (`TOOL_ENV`), because two independent mechanisms cost nothing.
+- The `ocr updater` gate fails if the file comes back (a reinstall restores it), so the
+  mechanism is checked rather than assumed.
+- `run` takes `ocr --version` **and** the binary's sha256 before the first baseline and
+  again after the last one, and writes both into `run.json.ocr_identity`. `evaluate` refuses
+  to print a number when they differ (`instrument_drifted`), or when the closing observation
+  is missing. The version line names the commit; the hash catches a rebuild that keeps the
+  commit string.
+
+Two more changes, both structural:
 
 - `TOOL_ENV = { OCR_NO_UPDATE: "1" }` is passed to every process this system spawns
   (`src/config/index.ts`, used by `src/l3/semgrep.ts`, the instrument probe and the drill),
@@ -50,7 +71,7 @@ The old `dataset detectability` check is **gone**, not relaxed: it scanned plann
 freeze. It also measured ds-1. Its replacement is the fit-run coverage matrix
 (`npm run record:fit`), which only ever touches fit rows.
 
-### Gates: seven have no bypass
+### Gates: eight have no bypass
 
 `--allow-degraded` used to be one switch for the whole preflight, which meant "waive
 anything" — the same shape as the deleted `--allow-short`. It is now a per-gate whitelist,
@@ -59,6 +80,7 @@ and these gates are not on it:
 | gate | why it can never be waived |
 | --- | --- |
 | `ocr pin` | instrument identity: a drifted binary makes every number unreproducible |
+| `ocr updater` | the mechanism behind the pin: the updater is removed from the package, and a gate that only *reports* a drift after the one blind run has been spent is not a protection |
 | `calibration artifact` | dataset identity: a stale artifact applies thresholds fitted on another class set |
 | `DEEPSEEK_API_KEY` | measurement feasibility: without it no live session exists to measure |
 | `plugin bundle` | shipped identity: the rows are written by `dist/plugin.js`, so a bundle older than `src/` measures the previous system, and its rows are in a shape `evaluate` refuses — discovered after the eval is spent |
@@ -371,12 +393,24 @@ right after the anchor, so clipping cannot remove it.
   proves the create branch is not dead code; `n = 1` and no precision claim is made for it.
   `event_kind` is derived from `before === ""`, and the dataset gate fails if either kind
   disappears from the pool.
-- **A bigger create does not move its tier.** The static rule counts changed *files*
-  (`triage.tier0.filesMax = 3`), so one write is always tier 0 regardless of line count,
-  and AOR is skipped for it (`semgrep` and `registry` still run). The 30-line change makes
-  the sample a real write and keeps it out of the low-risk pool; reaching tier 1 on a
-  create needs a >3-file write, which is a different sample shape. `prepare` prints this
-  as a `NOTE`, so the report's create caveat is not read as "AOR covered it".
+- **A bigger create does not move its tier, and neither does anything else in this drill.**
+  The static rule counts changed *files* (`triage.tier0.filesMax = 3`), so one write is
+  always tier 0 regardless of line count, and AOR is skipped for it (`semgrep` and
+  `registry` still run). The 30-line change makes the sample a real write and keeps it out
+  of the low-risk pool; it does not reach tier 1.
+  This is not a property of the create: **the drill writes one file per tool call, so every
+  row is tier 0** — 10 positives and 9 negatives alike. Measured on 2026-11-13 with the real
+  sources (`ts-cwe079-0001`, post event, 214 lines): `tier: 0`, `tier_source: "static"`,
+  `skip_reason: "index_not_ready"`, and `sources` contains semgrep only. The same event with
+  four files gives `tier: 1` and AOR runs (81,686 tokens, 34 s). The 300 ms
+  `crgQueryMs` budget means the graph never answers in a live run, so the file count is the
+  whole rule.
+  Consequence: on this plan P2 (AOR recall ≥ 3× semgrep) and P4 (the three-cell table) have
+  no AOR rows to read, and lines 3/5 keep only semgrep's warn, which fires for CWE-089
+  alone. Reaching tier ≥ 1 needs a change event that carries ≥ 4 files, and the host's tool
+  contract has no such call — a 4-file `ChangeEvent` is a system change, not a staging
+  change. `prepare` prints this as a `NOTE` so the report's create caveat cannot be read as
+  "AOR covered it".
 - **JavaScript is `out_of_scope`.** 6 of the 35 rows are `.js`; the shipped config has no
   JavaScript subset and no `sMax['javascript']`, so they are never scanned. This is the
   second appearance of "declared != shipped" (the first was `ts_all` vs `ts_dedup`): the

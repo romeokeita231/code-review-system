@@ -56,6 +56,34 @@ binary. The gate caught it (`ocr v1.13.8 (4236c87)` while the config pinned `04d
 the file was re-copied from `%LOCALAPPDATA%\crs\bin`. Treat "pinned" as a property that has
 to be re-observed before every run, not as a state that was achieved once.
 
+### The updater is removed, not disabled
+
+The two brakes above are declarations. The one that failed did so because a detached child
+had already been spawned *with* `OCR_NO_UPDATE=1` in its environment — the variable was
+never the thing that stopped it, and a human running `npm i -g` is outside its reach.
+
+So the file itself is gone for the eval window:
+
+```
+C:\nvm4w\nodejs\node_modules\@alibaba-group\open-code-review\scripts\update.js
+  -> update.js.disabled
+```
+
+The launcher still tries to spawn the path (it computes it unconditionally), and Node
+exits immediately because the module does not exist; nothing is installed. A reinstall of
+the package restores the real updater, which is why this is a *re-observed* property rather
+than an installation step:
+
+- the `ocr updater` gate fails when `scripts/update.js` exists again;
+- `run` records `ocr --version` and the binary's sha256 in `run.json` before the first
+  baseline and after the last one (`ocr_identity.before/after`);
+- `evaluate` refuses to print a number when the two differ (`instrument_drifted`) or when
+  the closing observation is missing.
+
+The second bullet is a rebuild detector as well: a binary rebuilt from the same commit
+reports the same version line and a different hash.
+
+
 ## The AOR model — `deepseek-flash` (served)
 
 The binary is only half of the instrument. What `ocr` reports is decided by the model it

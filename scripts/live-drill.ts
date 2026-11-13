@@ -422,6 +422,34 @@ export interface OneShot {
   restarts: Array<{ archived: string; reason: string }>;
 }
 
+/**
+ * One observation of the binary that produces the AOR numbers.
+ *
+ * The version line carries the commit; the hash catches a rebuilt binary that
+ * reports the same commit, and the path says which installation was read.
+ */
+export interface OcrIdentity {
+  version: string;
+  binary: string | null;
+  sha256: string | null;
+  at: string;
+}
+
+/**
+ * The same observation taken before and after the run.
+ *
+ * `ocr` updates itself from a detached child, so the binary can move *while*
+ * the eval is running: a version check before the run cannot see it, and one
+ * after the run cannot say when it happened. Two observations bracket the
+ * window, and a difference is reported as `instrument_drifted` rather than as
+ * a footnote.
+ */
+export interface OcrIdentityRecord {
+  before: OcrIdentity | null;
+  after: OcrIdentity | null;
+  drifted: boolean;
+}
+
 export interface RunManifest {
   dataset_version: string;
   dataset_dir: string;
@@ -434,6 +462,8 @@ export interface RunManifest {
   /** A proxy, and the manifest says so: the bundle is compared by mtime. */
   bundle_check: "mtime" | null;
   evidence: RunEvidence;
+  /** The AOR binary before and after the run; a difference is not quotable. */
+  ocr_identity: OcrIdentityRecord;
   cost: {
     estimate_tokens: number | null;
     ceiling_tokens: number | null;
@@ -465,8 +495,113 @@ async function bundleEvidence(): Promise<RunEvidence["bundle"]> {
   };
 }
 
-async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
-  const manifest: RunManifest = {
+/** First line of a command's output, or "" when it could not run. */
+async function firstLineOf(command: string, args: string[]): Promise<string> {
+  const result = await execa(command, args, { reject: false, timeout: 60_000 });
+  return `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n")[0]?.trim() ?? "";
+}
+
+/**
+ * The installed `@alibaba-group/open-code-review` package.
+ *
+ * Read from the `ocr` shim on PATH, which is the binary that actually runs,
+ * rather than from a path typed here: a second global install would otherwise
+ * make the check describe a package nobody invokes.
+ */
+export async function ocrPackageDir(): Promise<string | null> {
+  const locate = process.platform === "win32" ? "where" : "which";
+  const shim = await firstLineOf(locate, ["ocr"]);
+  const prefix = dirname(process.execPath);
+  const candidates: string[] = [];
+  if (shim.length > 0) {
+    candidates.push(join(dirname(shim), "node_modules", "@alibaba-group", "open-code-review"));
+  }
+  candidates.push(join(prefix, "node_modules", "@alibaba-group", "open-code-review"));
+  candidates.push(join(prefix, "..", "lib", "node_modules", "@alibaba-group", "open-code-review"));
+  return candidates.find((candidate) => existsSync(join(candidate, "package.json"))) ?? null;
+}
+
+/** The native binary inside the installed package, whatever its platform dir. */
+async function findNativeBinary(root: string, depth = 0): Promise<string | null> {
+  if (depth > 6) return null;
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && /^opencodereview(\.exe)?$/.test(entry.name)) return join(root, entry.name);
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === ".git") continue;
+    const found = await findNativeBinary(join(root, entry.name), depth + 1);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/**
+ * What `ocr` is, right now.
+ *
+ * `ocr --version` names the build; the hash names the file. Both are recorded
+ * because a rebuild can keep the commit string, and a missing hash says the
+ * check could not be made rather than that the binary matched.
+ */
+export async function ocrIdentity(): Promise<OcrIdentity> {
+  const version = await firstLineOf("ocr", ["--version"]);
+  const pkg = await ocrPackageDir();
+  const binary = pkg === null ? null : await findNativeBinary(pkg);
+  const sha256 =
+    binary === null ? null : createHash("sha256").update(await readFile(binary)).digest("hex");
+  return { version, binary, sha256, at: new Date().toISOString() };
+}
+
+/** Did the AOR binary move between the two observations? */
+export function ocrDrifted(before: OcrIdentity, after: OcrIdentity): boolean {
+  if (before.sha256 !== null && after.sha256 !== null) return before.sha256 !== after.sha256;
+  return before.version !== after.version;
+}
+
+/**
+ * Where the self-updater lives, and whether it is still there.
+ *
+ * `OCR_NO_UPDATE=1` is a declaration that can be unset — and the update that
+ * replaced the binary on 2026-11-13 arrived through a detached child that had
+ * been spawned *before* the pin was restored, so no environment variable at
+ * that moment could have stopped it. Renaming the file is a fact: the launcher
+ * has nothing to spawn.
+ */
+export async function ocrUpdaterFile(): Promise<{ path: string; present: boolean } | null> {
+  const pkg = await ocrPackageDir();
+  if (pkg === null) return null;
+  const path = join(pkg, "scripts", "update.js");
+  return { path, present: existsSync(path) };
+}
+
+/** Take one observation and write it into `run.json`, keeping the other side. */
+export async function recordOcrIdentity(
+  outDir: string,
+  phase: "before" | "after",
+): Promise<OcrIdentityRecord> {
+  const manifestPath = join(outDir, "run.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as RunManifest;
+  const record: OcrIdentityRecord = manifest.ocr_identity ?? {
+    before: null,
+    after: null,
+    drifted: false,
+  };
+  record[phase] = await ocrIdentity();
+  record.drifted =
+    record.before !== null && record.after !== null
+      ? ocrDrifted(record.before, record.after)
+      : false;
+  manifest.ocr_identity = record;
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return record;
+}
+
+async function writeRunManifest(options: StageOptions): Promise<RunManifest> {  const manifest: RunManifest = {
     dataset_version: options.plan.datasetVersion,
     dataset_dir: resolve(options.datasetDir),
     config_hash: sha256(await readFile(options.baseConfig, "utf8")),
@@ -488,6 +623,9 @@ async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
     degraded_gates: [...(options.degradedGates ?? [])],
     bundle_check: options.evidence.bundle?.check ?? null,
     evidence: options.evidence,
+    // Filled by the run stage: staging is not running, and an identity taken
+    // before any row exists would describe the wrong window.
+    ocr_identity: { before: null, after: null, drifted: false },
     cost: {
       estimate_tokens: options.evidence.cost_estimate?.tokens ?? null,
       ceiling_tokens: options.evidence.cost_estimate?.ceiling_tokens ?? null,
@@ -829,12 +967,44 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     // `ocr` self-updates. The budgets in #22 were measured on one commit, so a
     // drifted binary makes every AOR number unquotable until it is re-pinned.
     const matches = probe.exitCode === 0 && text.includes(options.aorCommit);
+    const identity = await ocrIdentity();
+    const stamp =
+      identity.sha256 === null ? "sha256 unresolved" : `sha256 ${identity.sha256.slice(0, 12)}`;
     checks.push({
       name: "ocr pin",
       ok: matches,
       detail: matches
-        ? text
-        : `${text} - config pins ${options.aorCommit}; re-pin before quoting AOR numbers`,
+        ? `${text} ${stamp}`
+        : `${text} ${stamp} - config pins ${options.aorCommit}; re-pin before quoting AOR numbers`,
+    });
+  }
+  // The pin above is an observation; this is the mechanism behind it. The
+  // environment variable was set at user scope and the binary still moved,
+  // because the updater had already been spawned detached. A file that is not
+  // there cannot be spawned, unset, or raced.
+  try {
+    const updater = await ocrUpdaterFile();
+    if (updater === null) {
+      checks.push({
+        name: "ocr updater",
+        ok: false,
+        detail: "could not locate the installed open-code-review package",
+      });
+    } else {
+      checks.push({
+        name: "ocr updater",
+        ok: !updater.present,
+        detail: updater.present
+          ? `${updater.path} still exists: the launcher can spawn it at any moment; ` +
+            "rename it before the eval window"
+          : `${updater.path} is absent: the launcher has nothing to spawn`,
+      });
+    }
+  } catch (error) {
+    checks.push({
+      name: "ocr updater",
+      ok: false,
+      detail: (error as Error).message.slice(-300),
     });
   }
   await run("code-review-graph", "code-review-graph", ["--help"]);
@@ -1347,6 +1517,27 @@ export async function evaluate(
   // The run directory names its dataset and its pin; both are checked before any
   // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
   const run = readRunManifest(outDir, datasetDir);
+  // The binary is the instrument underneath the instrument. A run whose `ocr`
+  // changed between the first and the last row has numbers from two rulers and
+  // no way to say which row came from which; a run with no closing observation
+  // has no way to say it did not.
+  const identity = run.ocr_identity;
+  if (identity !== undefined && identity !== null) {
+    if (identity.drifted) {
+      throw new Error(
+        `refusing to evaluate: instrument_drifted - ${outDir} was measured across two different ` +
+          `\`ocr\` binaries\n` +
+          `  before: ${identity.before?.version ?? "?"} sha256 ${identity.before?.sha256 ?? "?"}\n` +
+          `  after:  ${identity.after?.version ?? "?"} sha256 ${identity.after?.sha256 ?? "?"}`,
+      );
+    }
+    if (identity.before !== null && identity.after === null) {
+      throw new Error(
+        `refusing to evaluate: ${outDir} has no post-run \`ocr\` identity, so its rows cannot be ` +
+          `attributed to the binary that produced them (instrument_drifted unproven, not absent)`,
+      );
+    }
+  }
   // A pin edited after the run was staged is the same failure as a pin that was
   // never frozen: the goalposts moved between the measurement and the report.
   // The run carries its own copy, so this compares two records, not a record
@@ -1406,9 +1597,15 @@ export async function evaluate(
  * earlier); the third keeps a short-lived credential out of a public tree, which
  * is not a judgement call to waive. A gate that protects the measurement must
  * not have a side door - the failure it prevents is invisible in the artefact.
+ *
+ * `ocr updater` is the same argument taken one step further: `ocr pin` observes
+ * whether the binary moved, this one removes the thing that moves it. A check
+ * that can only report a drift after the one blind run has been spent is not a
+ * protection; the file has to be gone before the window opens.
  */
 export const NON_DEGRADABLE_GATES = [
   "ocr pin",
+  "ocr updater",
   "calibration artifact",
   "DEEPSEEK_API_KEY",
   "plugin bundle",
@@ -1503,18 +1700,19 @@ async function main(): Promise<void> {
       plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
   );
 
-  // The one `create` row is deliberately larger than 30 lines, which keeps it
-  // out of the low-risk pool. It does not, on its own, get the write into tier
-  // 1: the static rule counts changed *files* (`filesMax`), and one write is one
-  // file, so the review is tier 0 and AOR is skipped for it. Semgrep and the
-  // registry still run, so the create branch is executed; the AOR leg is not.
-  const createRow = allSamples(plan).find((sample) => sample.eventKind === "create" && sample.kind !== "dep-probe");
-  if (createRow !== undefined) {
-    const tier0 = JSON.parse(readFileSync(baseConfig, "utf8")).triage.tier0.filesMax as number;
+  // The tier is a function of how many files one change event carries, and the
+  // host's write/edit tools take exactly one path. So every staged row is tier
+  // 0, not just the create: AOR is skipped for all of them, and P2/P4 have no
+  // AOR rows to read. This is a property of the change unit, not of any sample.
+  const tier0 = (JSON.parse(readFileSync(baseConfig, "utf8")) as { triage: { tier0: { filesMax: number } } })
+    .triage.tier0.filesMax;
+  if (tier0 >= 1) {
     process.stdout.write(
-      `NOTE create sample ${createRow.sampleId} is one file: the static tier rule counts changed files ` +
-        `(<= ${tier0} -> tier 0), not lines, so AOR is skipped for that row while semgrep and the registry run. ` +
-        `Reaching tier 1 on a create needs a >${tier0}-file write, which is a different sample shape.\n`,
+      `NOTE every staged row writes one file, so every row is tier 0 (triage.tier0.filesMax=${tier0}) ` +
+        `and AOR is skipped for all of them while semgrep and the registry run: P2/P4 and the ` +
+        `[CRS-WARN] lines have no AOR rows. A tier>=1 event needs >${tier0} files in one change, and ` +
+        `the host's write/edit tool carries exactly one path - that is a change to the review unit, ` +
+        `not to the plan.\n`,
     );
   }
 
@@ -1665,6 +1863,10 @@ async function main(): Promise<void> {
       throw new Error("DEEPSEEK_API_KEY is required to run live agent sessions");
     }
     readRunManifest(outDir, datasetDir);
+    // Two observations bracket the window, because `ocr` updates itself from a
+    // detached child: a single check before the run cannot see a swap that lands
+    // during it, and a single check after cannot say when it happened.
+    const before = await recordOcrIdentity(outDir, "before");
     for (const baseline of ["B4", "B4g"] as const) {
       process.stdout.write(`running ${baseline}...\n`);
       const write = await runDsh({ outDir, profile, baseline, timeoutMs: 45 * 60_000 });
@@ -1682,7 +1884,14 @@ async function main(): Promise<void> {
       }
     }
     // Recorded, never enforced here: aborting mid-run would leave a half
-    // dataset and spend the blind run anyway.
+    // dataset and spend the blind run anyway. `evaluate` is where a drifted
+    // binary stops the numbers from being printed.
+    const after = await recordOcrIdentity(outDir, "after");
+    process.stdout.write(
+      `ocr before: ${before.before?.version ?? "?"} sha256 ${before.before?.sha256?.slice(0, 12) ?? "unresolved"}\n` +
+        `ocr after:  ${after.after?.version ?? "?"} sha256 ${after.after?.sha256?.slice(0, 12) ?? "unresolved"}` +
+        `${after.drifted ? " - INSTRUMENT DRIFTED" : ""}\n`,
+    );
     await recordActualCost(outDir);
   }
   if (stage === "collect" || stage === "all") {

@@ -15,6 +15,7 @@ import {
   flagValue,
   newRunDir,
   NON_DEGRADABLE_GATES,
+  ocrDrifted,
   parseDegradedGates,
   POSITIVE_CAP_PER_CLASS,
   planDrill,
@@ -600,6 +601,55 @@ describe("evaluate refuses a drifted measurement", () => {
         perCwe: { "079": 1 },
       }),
     ).rejects.toThrow(/changed after .* was staged/);
+  });
+
+  it("refuses to evaluate a run whose ocr binary moved during the window", async () => {
+    const { root, outDir } = await collectedRun(false);
+    const runPath = join(outDir, "run.json");
+    const manifest = JSON.parse(readSync(runPath, "utf8")) as Record<string, unknown>;
+    manifest["ocr_identity"] = {
+      before: { version: "v1.13.6 (04deca6)", binary: "a", sha256: "aa", at: "t0" },
+      after: { version: "v1.13.8 (4236c87)", binary: "b", sha256: "bb", at: "t1" },
+      drifted: true,
+    };
+    await writeFile(runPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: { "079": 1 },
+      }),
+    ).rejects.toThrow(/instrument_drifted/);
+  });
+
+  it("refuses to evaluate a run with no closing identity", async () => {
+    // A run killed between the last row and the post-run observation is not
+    // "consistent": the window was never closed, so the claim cannot be made.
+    const { root, outDir } = await collectedRun(false);
+    const runPath = join(outDir, "run.json");
+    const manifest = JSON.parse(readSync(runPath, "utf8")) as Record<string, unknown>;
+    manifest["ocr_identity"] = {
+      before: { version: "v1.13.6 (04deca6)", binary: "a", sha256: "aa", at: "t0" },
+      after: null,
+      drifted: false,
+    };
+    await writeFile(runPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: { "079": 1 },
+      }),
+    ).rejects.toThrow(/no post-run/);
+  });
+
+  it("treats a same-hash binary as unchanged and falls back to the version line", () => {
+    const base = { version: "v1.13.6 (04deca6)", binary: "a", sha256: "aa", at: "t0" };
+    expect(ocrDrifted(base, { ...base, at: "t1" })).toBe(false);
+    expect(ocrDrifted(base, { ...base, sha256: "bb" })).toBe(true);
+    // Without a hash the version line is all that is left; a rebuild that keeps
+    // the commit is exactly the case the hash was added for, and here it is
+    // invisible - which is why the record keeps both fields.
+    expect(ocrDrifted({ ...base, sha256: null }, { ...base, sha256: null, version: "v1.13.8" })).toBe(true);
+    expect(ocrDrifted({ ...base, sha256: null }, { ...base, sha256: null })).toBe(false);
   });
 
   it("reads the self set's spans and class, so the denominator is not empty", async () => {
