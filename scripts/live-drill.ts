@@ -147,6 +147,9 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     }
     queues.push({ key, items: [...items] });
   }
+  // Every eval positive the ruleset could see: the denominator line 1 *could*
+  // have had, before the per-class cap trimmed the staged set.
+  const gateable = queues.reduce((sum, queue) => sum + queue.items.length, 0);
 
   const taken = new Map<string, number>();
   const picked: DatasetSample[] = [];
@@ -174,10 +177,11 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
   }));
   const chosen = new Set(positives.map((sample) => sample.sampleId));
 
-  // Low-risk slots serve two lines at once: line 4 pairs B4 against B4g on
-  // them, and line 1 needs defect-free rows at all (otherwise precision has no
-  // false-positive denominator). Pair-safe variants are preferred for that
-  // reason; a defective low-risk sample would inflate precision silently.
+  // Line 4 pairs B4 against B4g on eight low-risk samples, and line 1 needs a
+  // defect-free denominator; since the negatives are now small safe edits they
+  // are `low` risk as well, so one pool serves both lines. A defective low-risk
+  // sample would inflate precision silently, so defect-free rows are taken
+  // first and the leftover slots are reported.
   const spare = loaded.samples
     .filter((sample) => sample.risk_level === "low" && !chosen.has(sample.sample_id))
     .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)));
@@ -194,13 +198,14 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     kind: "low-risk" as const,
   }));
 
-  // Line 1's false-positive denominator is *defect-free*, not *low-risk*:
-  // `risk_level` describes the change (§9), and every ds-2 negative is `high`,
-  // so a `low` filter would stage none and precision would report `na`.
-  // Low-risk rows remain what line 4 needs (B4 vs B4g pairing).
+  // Defect-free rows that line 4 did not take. With eight low-risk negatives
+  // this is empty by construction: the low-risk pool *is* the precision
+  // denominator, and `evaluateAcceptance` counts it from the ground truth, not
+  // from this list.
+  const stagedControlIds = new Set(lowRisk.map((sample) => sample.sampleId));
   const controls = loaded.samples
     .filter((sample) => sample.labels.length === 0 && !chosen.has(sample.sample_id))
-    .filter((sample) => !lowRiskPicks.some((pick) => pick.sample_id === sample.sample_id))
+    .filter((sample) => !stagedControlIds.has(sample.sample_id))
     .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)))
     .slice(0, controlCount)
     .map((sample) => ({
@@ -210,6 +215,8 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
       staged: stagedOf(sample),
       kind: "control" as const,
     }));
+  const defectFreeStaged =
+    lowRiskPicks.filter((sample) => sample.labels.length === 0).length + controls.length;
 
   const warnings: string[] = [];
   if (loaded.skipped > 0) {
@@ -219,7 +226,7 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
   }
   if (positives.length < limitPositives) {
     warnings.push(
-      `only ${positives.length} positives available (wanted ${limitPositives}): ` +
+      `only ${positives.length} of ${gateable} gateable eval positives staged (wanted ${limitPositives}): ` +
         `${queues.length} classes with declared ${coverage.language} rules, ` +
         `${POSITIVE_CAP_PER_CLASS} per class cap, ${uncovered.length} samples outside coverage`,
     );
@@ -239,7 +246,7 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
   if (lowRiskPicks.some((sample) => sample.labels.length > 0)) {
     warnings.push("some low-risk slots are defective samples: line4's pairs are not defect-free");
   }
-  if (controls.length === 0) {
+  if (defectFreeStaged === 0) {
     warnings.push("no defect-free row staged: line1 precision has no false-positive denominator");
   }
 
@@ -777,7 +784,6 @@ async function main(): Promise<void> {
   const ruleset = pinnedTsRuleset(baseConfig);
   const aorCommit = pinnedAorCommit(baseConfig);
   const coverage: RuleCoverage = { language: plan.coverage.language, perCwe: plan.coverage.declared };
-  const allowShort = process.argv.includes("--allow-short");
 
   process.stdout.write(
     `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk, ` +
@@ -788,13 +794,6 @@ async function main(): Promise<void> {
         .join(" ")}\n` +
       plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
   );
-
-  if (plan.positives.length < 20 && !allowShort && (stage === "run" || stage === "all" || stage === "prepare")) {
-    throw new Error(
-      `line1 needs n>=20; the ruleset's declared coverage supports only ${plan.positives.length}. ` +
-        "Re-run with --allow-short only for a wiring test, never for a verdict.",
-    );
-  }
 
   if (stage === "check") {
     const result = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });

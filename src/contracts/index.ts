@@ -83,6 +83,8 @@ export const MergedFinding = Finding.extend({
   sources: z.array(SourceName).min(1),
   rawIds: z.array(z.string().min(1)).min(1),
   evidenceSources: z.array(SourceName),
+  /** Which source contributed the merged severity; null when unknown. */
+  severitySource: SourceName.nullable().optional(),
   cweComparable: z.boolean(),
   conflictResolution: z.enum(["none", "evidence_preferred", "vote", "downgraded"]),
   blockable: z.boolean(),
@@ -138,6 +140,14 @@ export const DispositionMechanism = z.enum([
 ]);
 export type DispositionMechanism = z.infer<typeof DispositionMechanism>;
 
+/**
+ * How this row's operating point was obtained. `severity_policy` means the
+ * artifact could not certify a warn threshold and the warning was triggered by
+ * the sources' own declared severity instead - a policy, not a probability.
+ */
+export const ThresholdSource = z.enum(["artifact", "config", "severity_policy"]);
+export type ThresholdSource = z.infer<typeof ThresholdSource>;
+
 export const Disposition = z.object({
   mechanism: DispositionMechanism,
   findings: z.array(MergedFinding),
@@ -152,6 +162,8 @@ export const Disposition = z.object({
   blockLoop: z.boolean(),
   tier: Tier,
   tierSource: z.enum(["triage", "static", "none"]),
+  /** null when the row never reached a decision (command/no-file events). */
+  thresholdSource: ThresholdSource.nullable(),
   gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),
 });
 export type Disposition = z.infer<typeof Disposition>;
@@ -289,6 +301,7 @@ export const ReviewRow = z.object({
   review_status: ReviewStatus,
   review_skip_reason: ReviewSkipReason.nullable(),
   block_loop: z.boolean(),
+  threshold_source: ThresholdSource.nullable(),
   gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),
   text: z.string().nullable(),
   tokens: z.number().int().nonnegative().nullable(),

@@ -178,6 +178,7 @@ function b0Disposition(sample: DatasetSample, tier: 0 = 0): Disposition {
     blockLoop: false,
     tier,
     tierSource: "none",
+    thresholdSource: null,
     gate: { perFileTier: { [sample.path]: tier } },
   };
 }

@@ -188,6 +188,22 @@
               "severity": {
                 "type": "number"
               },
+              "severitySource": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "semgrep",
+                      "aor",
+                      "crg",
+                      "registry"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "source": {
                 "enum": [
                   "semgrep",
@@ -584,6 +600,21 @@
             "null"
           ]
         },
+        "threshold_source": {
+          "anyOf": [
+            {
+              "enum": [
+                "artifact",
+                "config",
+                "severity_policy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tier": {
           "enum": [
             0,
@@ -658,6 +689,7 @@
         "review_status",
         "review_skip_reason",
         "block_loop",
+        "threshold_source",
         "text",
         "tokens",
         "latency_ms",

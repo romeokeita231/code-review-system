@@ -57,9 +57,29 @@ describe("verifyDataset", () => {
     const manifest = await readJson<{ declared: { samples: number; positives: number; negatives: number } }>(
       join(DATASET, "manifest.json"),
     );
-    expect(manifest.declared.samples).toBe(33);
+    expect(manifest.declared.samples).toBe(34);
     expect(manifest.declared.positives).toBe(26);
-    expect(manifest.declared.negatives).toBe(7);
+    expect(manifest.declared.negatives).toBe(8);
+  });
+
+  it("carries at least eight defect-free low-risk rows", async () => {
+    const manifest = await readJson<{
+      declared: { low_risk_negatives: number; low_risk_negatives_required: number };
+    }>(join(DATASET, "manifest.json"));
+    expect(manifest.declared.low_risk_negatives).toBeGreaterThanOrEqual(8);
+    expect(manifest.declared.low_risk_negatives_required).toBe(8);
+  });
+
+  it("fails the gate when the defect-free low-risk pool drops below eight", { timeout: 30000 }, async () => {
+    const dir = await copyDataset();
+    // A whole-file negative is `high` risk again: the diff covers the file, so
+    // line 4's eight pairs would silently measure a defective population.
+    const target = await findRow(dir, (row) => row["label"] === 0 && String(row["after"]).length > 5000);
+    target.row["before"] = "";
+    await writeJson(target.path, target.row);
+
+    const result = await verifyDataset(dir);
+    expect(result.errors.some((error) => error.includes("defect-free low-risk"))).toBe(true);
   });
 
   it("reports content hash drift and root drift after tampering", { timeout: 30000 }, async () => {
@@ -197,7 +217,7 @@ describe("verifyDataset", () => {
     const dir = await copyDataset();
     const manifestPath = join(dir, "manifest.json");
     const manifest = await readJson<{ declared: Record<string, unknown> }>(manifestPath);
-    manifest.declared["samples"] = 34;
+    manifest.declared["samples"] = 35;
     await writeJson(manifestPath, manifest);
 
     const result = await verifyDataset(dir);
@@ -233,7 +253,7 @@ describe("verifyConformance", () => {
     const result = await verifyConformance(DATASET);
     expect(result.violations).toEqual([]);
     expect(result.ok).toBe(true);
-    expect(result.samples).toBe(33);
+    expect(result.samples).toBe(34);
   });
 
   it("reports a no-op write as a violation", { timeout: 30000 }, async () => {

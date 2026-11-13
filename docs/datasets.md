@@ -6,7 +6,7 @@ actually passed a gate.
 
 | Set | Path | Role | Status |
 | --- | --- | --- | --- |
-| self-built (`ds-2`) | `datasets/self-built` | fit + eval, per-CWE P/R | 33 rows (26 pos / 7 neg), 28 groups; gate + conformance PASS |
+| self-built (`ds-2`) | `datasets/self-built` | fit + eval, per-CWE P/R | 34 rows (26 pos / 8 neg), 29 groups; gate + conformance PASS |
 | AACR-Bench TS | `datasets/aacr` | eval only: Precision / noise rate | imported 2026-11-12, conformance PASS |
 | SecurityEval | — | fit only (class priors) | not imported |
 | CWE-Bench-Java | — | external sanity only | not imported |
@@ -85,11 +85,15 @@ live line 1 measured 0.
 
 | field | value | why |
 | --- | --- | --- |
-| `after` | the upstream blob, byte for byte (`origin.blob_sha`) | the detector sees real code |
-| `before` | our minimal pre-image: `after` plus one re-added control | only builds the change event and `changed_lines`; **no detector sees it** |
+| `after` (positive) | the upstream blob, byte for byte (`origin.blob_sha`) | the detector sees real code |
+| `before` (positive) | our minimal pre-image: `after` plus one re-added control | only builds the change event and `changed_lines`; **no detector sees it** |
+| `after` (negative) | the upstream blob plus one safe edit (`safe_patch` in `rows.json`) | a whole-file creation is always `high` risk; a small safe write is `low` |
 | `defect_origin` | `real` on positives, `null` on negatives | the vulnerable bytes are the upstream author's; the project authored the pre-image only |
 | `origin.kind` | `public_repo` | `after` is upstream; `self_rewritten` would misdescribe it |
 | `contamination_risk` | derived from §10, not filled in | see below |
+
+For a negative, `origin.blob_sha` names the **base** blob the safe edit starts from; it is
+not a byte-identity claim about `after` (that claim belongs to positives).
 
 **Range sentence.** Self-built recall is *real-defect* recall over 26 upstream vulnerable
 files. The limit is the **parent population**: all three sources are deliberately
@@ -97,18 +101,30 @@ vulnerable teaching applications, with source and sink often in one function, no
 sanitisation and no reachability constraint, so they are easier to detect than production
 code. This is not evidence that generalises to production code.
 
-**`contamination_risk` (revised §10).** `high` iff `origin.kind = public_repo` and either
-`origin.advisory` is set or the source is `pedagogical` with `stars >= 1000`; else `low`.
-Star counts are a dated snapshot (`declared.contamination_stars_as_of`). With the
-2026-11-12 snapshot the rule *splits* the set: juice-shop (14,433) gives 27 `high`, while
-goof (549) and dvna (781) stay `low`. The teaching-app flag alone does not establish that
-a file is in a training corpus.
+**`contamination_risk` (revised §10, no free parameter).** `high` iff
+`origin.kind = public_repo` and either `origin.advisory` is set or the source is
+`pedagogical`; else `low`. All three parents are deliberately vulnerable teaching apps
+whose vulnerable files are the reason they exist, so all 34 rows are `high`. Star counts
+(14,433 / 549 / 781 as of 2026-11-12) stay in the manifest as **evidence**
+(`declared.contamination_stars_as_of`) but are not a gate: a star threshold is a free
+parameter that no data can falsify, and 14k vs 549 is a difference in probability, not in
+kind. The rule is a category, and the change from the earlier `>= 1000` split *tightens*
+six rows from `low` to `high`.
 
-**Negatives, held out on purpose.** 7 rows, all from juice-shop, all in eval
+Consequence: with every row `high`, recall **must be reported per detection source**
+(semgrep has no memory channel, AOR does), never as one merged number.
+
+**Negatives, held out on purpose.** 8 rows, all from juice-shop, all in eval
 (`declared.negatives_split: "eval"`): the threshold must never be fitted against the rows
-that measure precision. A file that already hosts a positive cannot host a negative — the
-positive's `before` is that file plus a control, so the pair is a near-duplicate and the
-split would leak the label. The builder throws on it and the gate re-checks it.
+that measure precision. Each is a **small safe edit** — `before` is the pinned blob,
+`after` adds one empty-value guard, extracted constant or null-coalesced binding — so
+`before ≠ after` (D1), `changed_lines ≤ 30`, `defect_origin = null`, and the row is
+`risk_level: low`. The gate refuses fewer than eight such rows (`low_risk_pool`), because
+line 4 pairs B4 against B4g on them: if the pool were defective the pairs would measure a
+different population than line 1's precision denominator. A file that already hosts a
+positive cannot host a negative — the positive's `before` is that file plus a control, so
+the pair is a near-duplicate and the split would leak the label. The builder throws on it
+and the gate re-checks it.
 
 **Supply exhaustion, not "insufficient_n".** CWE-078 (2 rows) and CWE-918 (1 row) are
 below the reporting threshold. Each carries a `declared.supply_exhausted` record that
@@ -137,16 +153,18 @@ measurement — which must never be quoted interchangeably.
 
 ### Two limitations that belong in the paper
 
-1. **No defect-free low-risk row.** 11 of the 33 rows are `risk_level: low` (079/798 with
-   changes ≤30 lines), so the tier ladder does see both levels — but every low row is a
-   *positive*, and line 4 needs 8 **defect-free** low-risk samples to pair B4 against B4g.
-   On `ds-2` those pairs would be built on defective rows, which is why line 4 is
-   unmeasurable here rather than merely thin.
+1. **Calibrated precision has one measurement, and the warning face is uncalibrated.**
+   `fit_negatives = 0` is a design choice, so `thresholds.status` stays `unfittable` and no
+   probability threshold can be certified. Precision is measured once, on eval, and the
+   warning face no longer claims a probability: when no fitted warn point exists it fires
+   on the sources' own declared severity (`threshold_source: "severity_policy"`). The two
+   faces must not be quoted interchangeably.
 2. **Language coverage is part of the claim.** The shipped config scans Python and
    TypeScript; `ds-2` is 27 TypeScript + 6 JavaScript rows. The 6 JavaScript rows are
    `out_of_scope` (never attempted), not misses — see `docs/live-drill.md`. Line 1's
-   `n >= 20` is also out of reach: the eval split has 14 positives (11 TypeScript), so the
-   live drill stages 10 and fails the size gate on the data, not on detection.
+   recall gate needs 20 samples; the eval split has 14 positives (11 TypeScript) and the
+   per-class cap stages 10, so the face is reported as `insufficient_n` with its measured
+   rate, never silently as a pass or a miss.
 
 ## P2 supply check (measured 2026-11-12)
 

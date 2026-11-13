@@ -12,7 +12,10 @@ export interface TemplateLimits {
 export const DEFAULT_LIMITS: TemplateLimits = {
   maxGroups: 3,
   maxChars: 400,
-  perGroupChars: 130,
+  // The provenance tag is mandatory on every injected finding, so it sits right
+  // after the anchor where clipping cannot reach it; the extra width keeps the
+  // fix clause alive behind it.
+  perGroupChars: 150,
   fixClauseChars: 40,
   maxLines: 3,
   maxPathChars: 60,
@@ -26,6 +29,10 @@ export interface TemplateGroup {
   cwe: string | null;
   lines: number[];
   fixClause: string;
+  /** Which sources produced this finding; more than one means agreement. */
+  sources: string[];
+  /** The source whose severity the group carries. */
+  severitySource: string;
 }
 
 export function groupKey(key: { file: string; ruleId: string }): string {
@@ -79,6 +86,8 @@ export function groupsFromFindings(findings: MergedFinding[]): TemplateGroup[] {
       cwe: finding.cwe ?? null,
       lines: [finding.startLine],
       fixClause: fixClauseFor(finding),
+      sources: [...finding.sources].sort(),
+      severitySource: finding.severitySource ?? finding.source,
     });
   }
   return sortGroups([...map.values()]);
@@ -106,12 +115,19 @@ function fixClauseFor(finding: Finding | MergedFinding): string {
   }
 }
 
+function provenanceTag(group: TemplateGroup): string {
+  const via = `${group.sources.join("+")}${group.sources.length > 1 ? "/agree" : ""}`;
+  return `via=${via}/sev=${group.severitySource}`;
+}
+
 function buildLine(group: TemplateGroup, limits: TemplateLimits, anchor: string): string {
   const path = shortenPath(group.file, limits.maxPathChars);
   const cwe = group.cwe ? `${group.cwe} ` : "";
   const lines = lineList(group.lines, limits.maxLines);
   const fix = clip(group.fixClause, limits.fixClauseChars);
-  const head = `${anchor} ${path}:${lines} ${cwe}${group.ruleId}`.replace(/\s+/g, " ").trim();
+  // Provenance first: `sources`, agreement and `severity_source` must survive
+  // clipping, so the tag sits before the path instead of after the fix clause.
+  const head = `${anchor} ${provenanceTag(group)} ${path}:${lines} ${cwe}${group.ruleId}`.replace(/\s+/g, " ").trim();
   const withFix = `${head} | ${fix}`;
   return clip(withFix, limits.perGroupChars);
 }

@@ -28,8 +28,12 @@ export const MIN_PER_CLASS = 3;
 export const SPLIT_BAND = [0.5, 0.7] as const;
 /** The upstream directory that must never be sampled (issue #41 ruling). */
 export const CODEFIXES = "data/static/codefixes/";
-/** §10: at or above this many stars a teaching app sits in every training corpus. */
-export const STAR_THRESHOLD = 1000;
+/**
+ * Line 4 pairs B4 against B4g on eight low-risk samples. Those pairs only mean
+ * something if the samples are defect-free, so the set must carry at least this
+ * many `label = 0 ∧ risk_level = low` rows; the gate fails when it does not.
+ */
+export const MIN_LOW_RISK_NEGATIVES = 8;
 
 const sha256 = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 
@@ -67,9 +71,23 @@ export function changedWindow(after: string, before: string): { start: number; e
   return { start: p + 1, end: Math.max(p + 1, a.length - s) };
 }
 
-/** §9: low iff the class is 079/798 and the change is at most 30 lines, else high. */
-export function specRiskLevel(sampleCwe: string | null, changedLines: number): "low" | "high" {
+/**
+ * §9: a defective change is `low` iff its class is 079/798 and the change is at
+ * most 30 lines. A row with no defects has no class, so for ds-2 - whose
+ * negatives are small safe edits - only the size applies. Imported rows keep
+ * §9 strict: their `risk_level` was assigned by their importer under the older
+ * rule, and re-deriving it would mean rewriting another dataset's provenance.
+ */
+export function specRiskLevel(
+  sampleCwe: string | null,
+  changedLines: number,
+  options: { defectFreeIsLow?: boolean } = {},
+): "low" | "high" {
   const key = sampleCwe === null ? null : sampleCwe.replace(/^CWE-/i, "").padStart(3, "0");
+  if (key === null) {
+    if (options.defectFreeIsLow === false) return "high";
+    return changedLines <= 30 ? "low" : "high";
+  }
   return (key === "079" || key === "798") && changedLines <= 30 ? "low" : "high";
 }
 
@@ -237,6 +255,7 @@ const RULE_ORDER = [
   "split_ratio",
   "classes",
   "declared",
+  "low_risk_pool",
   "manifest",
   "hash",
 ] as const;
@@ -364,10 +383,14 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     const populated = defects.length > 0;
     const sampleCwe = str(row["sample_cwe"]);
     const label = row["label"];
+    // A positive's `before` is authored, so the diff measures the change event.
+    // A negative's `before` is the pinned blob and `after` is that blob plus one
+    // safe edit; only `before === ""` (no such row here) falls back to the whole
+    // file.
     const changedLines =
-      label === 1
-        ? diffCount(before === "" ? [] : before.split("\n"), after.split("\n"))
-        : lineCount(after);
+      before === ""
+        ? lineCount(after)
+        : diffCount(before.split("\n"), after.split("\n"));
     if (sampleSet === "self" && typeof row["changed_lines"] === "number" && row["changed_lines"] !== changedLines) {
       add("changed_lines", id, `${String(row["changed_lines"])} != derived ${changedLines}`);
     }
@@ -385,8 +408,11 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     }
 
     const declaredRisk = str(row["risk_level"]);
-    if (declaredRisk !== null && declaredRisk !== specRiskLevel(sampleCwe, changedLines)) {
-      add("risk_level", id, `${declaredRisk} != §9 derivation ${specRiskLevel(sampleCwe, changedLines)}`);
+    const derivedRisk = specRiskLevel(sampleCwe, changedLines, {
+      defectFreeIsLow: sampleSet === "self",
+    });
+    if (declaredRisk !== null && declaredRisk !== derivedRisk) {
+      add("risk_level", id, `${declaredRisk} != §9 derivation ${derivedRisk}`);
     }
 
     const origin = asRecord(row["origin"]);
@@ -453,14 +479,14 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     }
 
     // §10: contamination is derived, not filled. `high` iff the row is public
-    // and either carries an advisory, or comes from a pedagogical source that
-    // is popular enough to sit in a training corpus; else `low`.
+    // and either carries an advisory, or comes from a pedagogical source -
+    // a category rule with no free parameter. Star counts stay in the manifest
+    // as evidence of how popular the parent is, not as a gate.
     const declaredContamination = str(row["contamination_risk"]);
     const advisory = str(origin["advisory"]) !== null;
     const declaredSource = manifest.sources[str(row["repo"]) ?? ""];
     const expectedContamination =
-      origin["kind"] === "public_repo" &&
-      (advisory || (declaredSource?.pedagogical === true && (declaredSource?.stars ?? 0) >= STAR_THRESHOLD))
+      origin["kind"] === "public_repo" && (advisory || declaredSource?.pedagogical === true)
         ? "high"
         : "low";
     if (declaredContamination !== null && declaredContamination !== expectedContamination) {
@@ -614,6 +640,7 @@ function checkDeclared(
   const perClassStatus: Record<string, string> = {};
   let positives = 0;
   let negatives = 0;
+  let lowRiskNegatives = 0;
   const groups = new Set<string>();
   const splitCount = { fit: 0, eval: 0 };
   const splitPositives = { fit: 0, eval: 0 };
@@ -630,6 +657,13 @@ function checkDeclared(
       if (split === "fit" || split === "eval") splitPositives[split] += 1;
     } else {
       negatives += 1;
+      // Derive the pool from the diff, not from the declared field: a row that
+      // declares `low` while its diff covers the whole file is exactly the
+      // silent inflation this assertion exists to stop.
+      const before = str(row["before"]) ?? "";
+      const after = str(row["after"]) ?? "";
+      const changed = before === "" ? lineCount(after) : diffCount(before.split("\n"), after.split("\n"));
+      if (specRiskLevel(null, changed) === "low") lowRiskNegatives += 1;
     }
   }
   for (const cwe of SPEC_CWES) {
@@ -651,6 +685,19 @@ function checkDeclared(
   expect("split_positives", declared["split_positives"], { ...splitPositives, total: positives });
   expect("split_band", declared["split_band"], [...SPLIT_BAND]);
   expect("min_per_class", declared["min_per_class"], MIN_PER_CLASS);
+  expect("low_risk_negatives", declared["low_risk_negatives"], lowRiskNegatives);
+  expect("low_risk_negatives_required", declared["low_risk_negatives_required"], MIN_LOW_RISK_NEGATIVES);
+
+  // Line 4 pairs B4/B4g on eight low-risk samples; if the pool is not
+  // defect-free the pairs measure a different population than line 1's
+  // precision denominator, and the acceptance line silently becomes easier.
+  if (lowRiskNegatives < MIN_LOW_RISK_NEGATIVES) {
+    add(
+      "low_risk_pool",
+      null,
+      `${lowRiskNegatives} defect-free low-risk rows; line 4 needs ${MIN_LOW_RISK_NEGATIVES}`,
+    );
+  }
 
   // Ruling: a class below the threshold must carry a supply record, not just
   // a status - "insufficient_n" alone cannot tell a reader whether the source

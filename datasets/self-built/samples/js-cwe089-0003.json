@@ -27,7 +27,7 @@
   "rationale": "SQL 字符串字面量引号转义：拼进 WHERE 前把 ' 变成 ''",
   "expected_detectable_by": "semgrep_only",
   "risk_level": "high",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": "real",
   "origin": {
     "kind": "public_repo",

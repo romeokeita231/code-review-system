@@ -25,12 +25,15 @@ function toMerged(group: Finding[]): MergedFinding {
   const sources = [...new Set(group.map((f) => f.source))].sort();
   const cwes = group.map((f) => f.cwe).filter((c): c is string => Boolean(c));
   const evidences = group.map((f) => f.evidence).filter((e): e is string => Boolean(e));
+  const maxSeverity = Math.max(...group.map((f) => f.severity));
+  const severitySource = group.find((f) => f.severity === maxSeverity)?.source ?? null;
   return {
     file: head.file,
     startLine: Math.min(...group.map((f) => f.startLine)),
     endLine: Math.max(...group.map((f) => f.endLine)),
     symbol: head.symbol ?? null,
     severity: Math.max(...group.map((f) => f.severity)),
+    severitySource,
     confidence: head.confidence,
     source: head.source,
     cwe: cwes.length > 0 && new Set(cwes).size === 1 ? cwes[0]! : (head.cwe ?? null),

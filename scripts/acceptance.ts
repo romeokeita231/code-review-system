@@ -2,7 +2,7 @@ import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ReviewRow, RunRecord } from "../src/contracts/index.js";
-import { coverageCounts, cweKey, declaredCoverage, loadRulesTable } from "./coverage.js";
+import { coverageCounts, cweKey, declaredCoverage, loadRulesTable, semgrepLanguage } from "./coverage.js";
 import { arg } from "./shared.js";
 
 export interface LabelSpan {
@@ -17,6 +17,8 @@ export interface SampleTruth {
   split: string;
   risk_level: string;
   paired_safe: boolean;
+  /** Needed to decide whether any shipped subset could scan this row. */
+  language: string;
   /** Ground-truth class; decides whether the pinned ruleset can see it at all. */
   sample_cwe: string | null;
   labels: LabelSpan[];
@@ -35,8 +37,27 @@ export interface RuleCoverage {
 
 export interface AcceptanceOptions {
   minSamples?: number;
+  /** Precision's gate counts findings, not samples; a separate unit needs its own n. */
+  minFindings?: number;
   /** Absent means "coverage unknown" - then every labelled eval sample counts. */
   coverage?: RuleCoverage;
+}
+
+/** Wilson score interval for `k` successes in `n` trials; `null` when `n = 0`. */
+export function wilsonInterval(
+  k: number,
+  n: number,
+  z = 1.96,
+): { low: number; high: number } | null {
+  if (n <= 0) return null;
+  const p = k / n;
+  const denominator = 1 + (z * z) / n;
+  const centre = p + (z * z) / (2 * n);
+  const spread = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return {
+    low: Math.max(0, (centre - spread) / denominator),
+    high: Math.min(1, (centre + spread) / denominator),
+  };
 }
 
 export interface BlockGaps {
@@ -105,6 +126,7 @@ export async function loadTruth(datasetDir: string): Promise<Map<string, SampleT
     ) as Omit<SampleTruth, "sample_cwe"> & { cwe: string | null };
     truth.set(entry.sample_id, {
       ...sample,
+      language: String((sample as { language?: unknown }).language ?? ""),
       sample_cwe: sample.cwe,
       expected_detectable_by: entry.expected_detectable_by,
     });
@@ -150,6 +172,7 @@ export function evaluateAcceptance(
   options: AcceptanceOptions = {},
 ): AcceptanceReport {
   const minSamples = options.minSamples ?? 20;
+  const minFindings = options.minFindings ?? 20;
   const coverage = options.coverage;
   const modes = new Set(rows.map((row) => row.mode));
   if (modes.size > 1) throw new Error(`live and replay rows must not be mixed: ${[...modes].join(",")}`);
@@ -183,10 +206,15 @@ export function evaluateAcceptance(
   // `expected_detectable_by` is a non-truth hint (annotation spec §6) and must
   // not select the denominator. The ruleset's *declared* coverage does, and it
   // is a fact about the pinned rules table, decidable before unblinding.
-  const covered = (row: AcceptanceRowLike): boolean => {
+  const coveredSample = (sample: SampleTruth): boolean => {
     if (coverage === undefined) return true;
-    const key = cweKey(truth.get(row.sample)?.sample_cwe ?? null);
+    const key = cweKey(sample.sample_cwe);
     return key !== null && (coverage.perCwe[key] ?? 0) > 0;
+  };
+  const covered = (row: AcceptanceRowLike): boolean => {
+    const sample = truth.get(row.sample);
+    if (sample === undefined) return coverage === undefined;
+    return coveredSample(sample);
   };
   const positives = scannable.filter(covered);
   const excluded = scannable.filter((row) => !covered(row));
@@ -198,13 +226,54 @@ export function evaluateAcceptance(
   const truePositive = positives.filter(denied);
   const falsePositive = negatives.filter(denied);
   const missed = positives.length - truePositive.length;
+  // Recall's unit is the sample: did the write get caught at all. Precision's
+  // unit is the finding: of everything the pipeline surfaced, how much names a
+  // real defect. Sharing one `n` between them mixed the units, so each face has
+  // its own denominator, its own gate and its own status.
   const n = positives.length;
-  const k = truePositive.length + falsePositive.length;
-  const recall = n === 0 ? 0 : truePositive.length / n;
-  // With no defect-free row in the run there is no false-positive denominator,
-  // and `tp / tp` would report a perfect 1.0 precision that measured nothing.
+  const hits = truePositive.length;
+  const recall = n === 0 ? 0 : hits / n;
+  const recallGated = n >= minSamples;
+  const interval = wilsonInterval(hits, n);
+  const inCoverageLanguage = (sample: SampleTruth): boolean =>
+    coverage === undefined || semgrepLanguage(sample.language) === coverage.language;
+  const evalTruth = [...truth.values()].filter(
+    (sample) => sample.split === "eval" && sample.labels.length > 0,
+  );
+  const gateable = evalTruth.filter(
+    (sample) => inCoverageLanguage(sample) && coveredSample(sample),
+  );
+  const seen = new Set(rows.map((row) => row.sample));
+  const availableN = gateable.length;
+  const stagedN = gateable.filter((sample) => seen.has(sample.sample_id)).length;
+
+  const overlapsTruth = (
+    finding: { startLine: number; endLine: number },
+    sample: SampleTruth,
+  ): boolean =>
+    sample.labels.some(
+      (label) => finding.startLine <= label.endLine && label.startLine <= finding.endLine,
+    );
+  let findingTp = 0;
+  let findingFp = 0;
+  for (const row of postRows) {
+    const sample = truth.get(row.sample);
+    if (sample === undefined || sample.split !== "eval" || row.baseline !== "B4") continue;
+    for (const finding of row.findings_merged) {
+      if (overlapsTruth(finding, sample)) findingTp += 1;
+      else findingFp += 1;
+    }
+  }
+  const findingN = findingTp + findingFp;
   const precisionMeasurable = negatives.length > 0;
-  const precision = !precisionMeasurable || k === 0 ? 0 : truePositive.length / k;
+  const precisionGated = precisionMeasurable && findingN >= minFindings;
+  const precision = precisionMeasurable && findingN > 0 ? findingTp / findingN : null;
+  const recallStatus = recallGated ? "gated" : "insufficient_n";
+  const precisionStatus = !precisionMeasurable
+    ? "no_negatives"
+    : findingN >= minFindings
+      ? "gated"
+      : "insufficient_n";
   const gapSamples = new Set((gaps?.gaps ?? []).map((gap) => gap.sample_id));
   const predictedGap = mainRows.filter((row) => denied(row) && gapSamples.has(row.sample));
   const firstRun = ordered[0]?.change_event?.ts ?? null;
@@ -212,9 +281,10 @@ export function evaluateAcceptance(
   const line1Pass =
     mode === "live" &&
     preregistered &&
-    n >= minSamples &&
-    precisionMeasurable &&
+    recallGated &&
+    precisionGated &&
     recall >= 0.7 &&
+    precision !== null &&
     precision >= 0.9 &&
     predictedGap.length === 0;
   const excludedClasses = [...new Set(excluded.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"))];
@@ -222,16 +292,30 @@ export function evaluateAcceptance(
     name: "line1: block precision/recall on the covered, scannable eval positives",
     pass: line1Pass,
     detail:
-      `mode=${mode} n=${n} k=${k} recall=${recall.toFixed(3)} ` +
-      `precision=${precisionMeasurable ? precision.toFixed(3) : "na"} negatives=${negatives.length} ` +
+      `mode=${mode} recall n=${n} (available=${availableN} staged=${stagedN}) hits=${hits} ` +
+      `recall=${recall.toFixed(3)} wilson=[${interval === null ? "na" : `${interval.low.toFixed(3)},${interval.high.toFixed(3)}`}] ` +
+      `recall_gate=${recallStatus}${recallGated ? "" : " (descriptive, not gated)"} ` +
+      `precision findings=${findingN} tp=${findingTp} precision=${precision === null ? "na" : precision.toFixed(3)} ` +
+      `precision_gate=${precisionStatus} negatives=${negatives.length} ` +
       `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
       `out_of_scope=${outOfScope.length} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
     metrics: {
       n,
-      k,
+      k: hits,
       recall,
-      precision: precisionMeasurable ? precision : null,
+      // The number exists even when the gate does not: "cannot be gated" is not
+      // the same claim as "was not measured".
+      wilson_low: interval?.low ?? null,
+      wilson_high: interval?.high ?? null,
+      recall_status: recallStatus,
+      available: availableN,
+      staged: stagedN,
+      not_staged: availableN - stagedN,
+      precision,
+      findings_n: findingN,
+      findings_tp: findingTp,
+      precision_status: precisionStatus,
       false_positive: falsePositive.length,
       negatives: negatives.length,
       missed,
@@ -378,6 +462,35 @@ export function evaluateAcceptance(
       [line1, line2, line3, line4, line5].map((line) => [line.name, String(line.pass), line.detail]),
     ),
     "",
+    "line1 units (the two faces do not share a denominator):",
+    "",
+    table(
+      ["face", "unit", "n", "gate", "status"],
+      [
+        [
+          "recall",
+          "sample",
+          String(n),
+          `>= ${minSamples}`,
+          recallGated ? "gated" : `insufficient_n (descriptive, not gated)`,
+        ],
+        [
+          "precision",
+          "finding",
+          String(findingN),
+          `>= ${minFindings}`,
+          precisionStatus === "gated"
+            ? "gated"
+            : precisionStatus === "no_negatives"
+              ? "no_negatives (descriptive, not gated)"
+              : "insufficient_n (descriptive, not gated)",
+        ],
+      ],
+    ),
+    ...(availableN === stagedN
+      ? []
+      : ["", `shortfall: ${availableN} eval positives are gateable, ${stagedN} were staged`]),
+    "",
     table(
       ["sample", "B4/B4g token ratio", "B4/B4g latency ratio"],
       pairs.map((pair) => [pair.sample, pair.tokenRatio?.toFixed(3) ?? "na", pair.latencyRatio.toFixed(3)]),
@@ -405,6 +518,21 @@ export function evaluateAcceptance(
     `五条线：${[line1, line2, line3, line4, line5].filter((line) => line.pass).length}/5 通过。`,
     "",
     "结果表见 report.md；本文件只给结论，不把接口通过当质量结论。",
+    "",
+    "line1 的分母按单位分开：召回以样本计（每个漏洞样本是否被抓到），" +
+      `精度以 finding 计（每条 finding 是否落在真值行上）。召回 ${n} / 门槛 ${minSamples}（${recallStatus}，` +
+      `available ${availableN} staged ${stagedN}）；精度 ${findingN} / 门槛 ${minFindings}（${precisionStatus}）。`,
+    ...(recallGated
+      ? []
+      : [
+          "",
+          `召回面 insufficient_n：recall=${recall.toFixed(3)}（${hits}/${n}）` +
+            `${interval === null ? "" : `，Wilson 95% [${interval.low.toFixed(3)}, ${interval.high.toFixed(3)}]`}，` +
+            "仅作描述性报告，不进门禁；“测不了”与“没测”是两回事。",
+        ]),
+    ...(availableN === stagedN
+      ? []
+      : ["", `available ${availableN} 条可门禁的 eval 正样本中有 ${availableN - stagedN} 条未入演练（staged ${stagedN}），短缺来自选样上限而非检测结果。`]),
     ...(coverage === undefined
       ? []
       : [

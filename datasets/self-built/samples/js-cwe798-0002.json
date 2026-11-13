@@ -27,7 +27,7 @@
   "rationale": "移出源码：token 改由环境变量注入",
   "expected_detectable_by": "semgrep_only",
   "risk_level": "low",
-  "contamination_risk": "low",
+  "contamination_risk": "high",
   "defect_origin": "real",
   "origin": {
     "kind": "public_repo",

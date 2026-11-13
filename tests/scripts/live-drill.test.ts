@@ -141,19 +141,22 @@ describe("live drill plan", () => {
     }
   });
 
-  it("stages defect-free rows as line1's false-positive denominator", () => {
-    // `risk_level` describes the change (§9), not defect-freeness, so ds-2's
-    // negatives are all `high`: selecting controls by `low` staged none and
-    // made line1 report `precision: na`.
-    const controls = planDrill(DATASET).controls;
-    expect(controls.length).toBe(7);
-    for (const sample of controls) {
-      expect(sample.kind).toBe("control");
+  it("stages eight defect-free low-risk rows for line4 and line1", () => {
+    // The negatives are small safe edits now, so a defect-free row is `low`
+    // risk: the same eight rows serve line 4's B4/B4g pairs and line 1's
+    // false-positive denominator.
+    const plan = planDrill(DATASET);
+    expect(plan.lowRisk.length).toBe(8);
+    const defectFree = [...plan.lowRisk, ...plan.controls].filter((sample) => {
       const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
         defects: unknown[];
+        risk_level: string;
       };
-      expect(row.defects).toEqual([]);
-    }
+      expect(row.risk_level).toBe("low");
+      return row.defects.length === 0;
+    });
+    expect(defectFree.length).toBeGreaterThanOrEqual(8);
+    expect(plan.warnings.some((warning) => warning.includes("no defect-free row"))).toBe(false);
   });
 
   it("does not select positives by expected_detectable_by", async () => {
@@ -220,6 +223,7 @@ const row = (over: Partial<ReviewRow> = {}): ReviewRow => ({
   review_status: "degraded",
   review_skip_reason: null,
   block_loop: false,
+  threshold_source: null,
   text: null,
   tokens: null,
   latency_ms: 4,

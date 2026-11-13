@@ -313,8 +313,9 @@ describe("review facade", () => {
     });
     expect(uncertified.disposition.preDecision).toBe("allow");
 
-    // A warning is a precision claim; with no fitted warn point there is no
-    // claim to make and no constant to fall back to.
+    // A warning is a precision claim, so no probability threshold may be
+    // invented. It need not be *silent*: the sources' own severity is a policy
+    // with no fitted parameter, and the row says so.
     const warned = await review(event(), {
       runId: "run-10",
       config,
@@ -328,6 +329,25 @@ describe("review facade", () => {
       ],
       artifact: unfittable,
     });
-    expect(warned.disposition.postDecision).not.toBe("inject_warn");
+    expect(warned.disposition.postDecision).toBe("inject_warn");
+    expect(warned.disposition.thresholdSource).toBe("severity_policy");
+    expect(warned.row.threshold_source).toBe("severity_policy");
+    expect(warned.disposition.text).toContain("via=aor/sev=aor");
+
+    // The policy is the source's own "warning or worse", not "any finding".
+    const info = await review(event(), {
+      runId: "run-11",
+      config,
+      sources: [
+        source("semgrep", [result("semgrep", [])]),
+        source("aor", [
+          result("aor", [
+            finding({ source: "aor", cwe: "CWE-79", rawId: "aor-2", severity: 1, evidence: "note" }),
+          ]),
+        ]),
+      ],
+      artifact: unfittable,
+    });
+    expect(info.disposition.postDecision).not.toBe("inject_warn");
   });
 });

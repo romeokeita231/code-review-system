@@ -195,6 +195,15 @@ function reviewStatusOf(results: SourceResult[], skipped: boolean, skipReason: R
 type ThresholdKind = "block" | "warn";
 
 /**
+ * The sources' own severity scale: semgrep INFO/WARNING/ERROR map to 1/2/3 and
+ * AOR P3/P2/P1 (or LOW/MEDIUM/HIGH) map to 1/2/3 as well. `>= 2` therefore
+ * means "the source itself called this a warning or worse". That is a policy,
+ * not a fitted parameter: it claims no calibrated probability, which is why it
+ * can stand in when the artifact could not certify one.
+ */
+const WARN_SEVERITY = 2;
+
+/**
  * A calibrated operating point, or the third state: the artifact exists but
  * could not certify one (`fit_negatives = 0`). `unfittable` is deliberately not
  * a number - substituting a constant here would be indistinguishable from a
@@ -241,6 +250,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
     blockLoop: false,
     tier: 0,
     tierSource: "none",
+    thresholdSource: null,
   });
 
   const finish = (disposition: Disposition): ReviewOutcome => {
@@ -267,6 +277,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       review_status: disposition.reviewStatus,
       review_skip_reason: disposition.skipReason,
       block_loop: disposition.blockLoop,
+      threshold_source: disposition.thresholdSource,
       gate: disposition.gate,
       text: disposition.text,
       tokens,
@@ -346,6 +357,15 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   const semgrepResult = results.find((result) => result.source === "semgrep");
   const blockThreshold = thresholdFor(ctx, "block");
   const warnThreshold = thresholdFor(ctx, "warn");
+  /**
+   * How the warn operating point was obtained. A fitted threshold is a
+   * probability claim and `severity_policy` is not, so the two are recorded as
+   * different things rather than reported as one calibrated number.
+   */
+  const warnThresholdSource = (cwe: string | null): Disposition["thresholdSource"] => {
+    if (ctx.artifact === null) return "config";
+    return warnThreshold(cwe) === "unfittable" ? "severity_policy" : "artifact";
+  };
   const probabilityOf = (finding: Finding): number =>
     singleSourceProbability(finding, ctx.config, ctx.artifact);
   const semgrepFindings = semgrepResult && semgrepResult.status === "ok" ? semgrepResult.findings : [];
@@ -408,6 +428,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
 
   let postDecision: Disposition["postDecision"] = postSources.length > 0 ? "none" : "not_run";
   let text: string | null = null;
+  let warnByPolicy = false;
 
   if (preDecision === "deny") {
     postDecision = "none";
@@ -432,14 +453,21 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       );
     }
   } else if (change.phase === "post" && pFused !== null) {
-    const eligible = merged.filter((finding) => {
-      if (finding.evidenceSources.length === 0) return false;
+    const eligible: MergedFinding[] = [];
+    for (const finding of merged) {
+      if (finding.evidenceSources.length === 0) continue;
       const threshold = warnThreshold(finding.cwe ?? null);
-      // A warning is a precision claim. With no fitted warn threshold there is
-      // nothing to claim, and 0.7 would be exactly the invented constant that
-      // calibration exists to replace.
-      return threshold !== "unfittable" && finding.confidence >= threshold;
-    });
+      if (threshold === "unfittable") {
+        // No fitted warn point: warn on the source's own declared severity.
+        // This keeps the instruction-correction mechanism measurable without
+        // pretending a probability was calibrated; the row carries
+        // `threshold_source: severity_policy`.
+        warnByPolicy = true;
+        if (finding.severity >= WARN_SEVERITY) eligible.push(finding);
+        continue;
+      }
+      if (finding.confidence >= threshold) eligible.push(finding);
+    }
     if (eligible.length > 0) {
       postDecision = "inject_warn";
       text = formatMessage("[CRS-WARN]", eligible);
@@ -449,6 +477,10 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   const finalMechanism = mechanismOf(
     preDecision === "deny" ? "deny" : postDecision === "inject_warn" ? "inject_warn" : "none",
   );
+  const deciding = merged[0];
+  const thresholdSource: Disposition["thresholdSource"] = warnByPolicy
+    ? "severity_policy"
+    : warnThresholdSource(deciding?.cwe ?? null);
 
   const disposition: Disposition = {
     mechanism: finalMechanism,
@@ -464,6 +496,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
     blockLoop,
     tier,
     tierSource: tierDecision.tierSource,
+    thresholdSource,
     gate: { perFileTier: tierDecision.perFileTier },
   };
 

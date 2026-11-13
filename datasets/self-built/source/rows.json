@@ -288,8 +288,22 @@
       "patch": null,
       "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb",
       "language": "ts",
-      "rationale": "file.includes('/') 直接拒绝任何路径分隔符，sink 在但不可达",
-      "evidence": null
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符，sink 在但不可达；安全改动：入参为空时提前返回 400，空文件名原本会解析到目录本身，属行为不变的空值检查",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 12,
+          "del": 0,
+          "ins": [
+            "    if (file.length === 0) {",
+            "      res.status(400)",
+            "      next(new Error('File name is required'))",
+            "      return",
+            "    }",
+            ""
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe022-9002",
@@ -301,8 +315,22 @@
       "patch": null,
       "blob_sha": "e7a2e841f36077ae62cb211e516428e886304017",
       "language": "ts",
-      "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
-      "evidence": null
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符；安全改动：入参为空时提前返回 400，空文件名原本会解析到目录本身，属行为不变的空值检查",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 12,
+          "del": 0,
+          "ins": [
+            "    if (file.length === 0) {",
+            "      res.status(400)",
+            "      next(new Error('File name is required'))",
+            "      return",
+            "    }",
+            ""
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe022-9003",
@@ -314,8 +342,22 @@
       "patch": null,
       "blob_sha": "b9a4d9495bc8f1d1739cc7e1df4b2e1a7524ae6c",
       "language": "ts",
-      "rationale": "file.includes('/') 直接拒绝任何路径分隔符",
-      "evidence": null
+      "rationale": "file.includes('/') 直接拒绝任何路径分隔符；安全改动：入参为空时提前返回 400，空文件名原本会解析到目录本身，属行为不变的空值检查",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 12,
+          "del": 0,
+          "ins": [
+            "    if (file.length === 0) {",
+            "      res.status(400)",
+            "      next(new Error('File name is required'))",
+            "      return",
+            "    }",
+            ""
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe022-9008",
@@ -327,8 +369,17 @@
       "patch": null,
       "blob_sha": "3dfe8c1d371dc9ff1e01be83480d488667ddb891",
       "language": "ts",
-      "rationale": "subtitles 取自 application.promotion.subtitles 配置项，非请求可达输入",
-      "evidence": null
+      "rationale": "subtitles 取自 application.promotion.subtitles 配置项，非请求可达输入；安全改动：读取前先经 utils.extractFilename 剥离目录部分，配置值均为纯文件名时行为不变",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 80,
+          "del": 1,
+          "ins": [
+            "  const subtitles = utils.extractFilename(config.get<string>('application.promotion.subtitles') ?? 'owasp_promo.vtt')"
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe079-0001",
@@ -508,8 +559,18 @@
       "patch": null,
       "blob_sha": "f6cc2e08c0c99eeacf322ca495a8d58854f45b8b",
       "language": "ts",
-      "rationale": "challenge.description 是应用自带挑战文案，请求不可写",
-      "evidence": null
+      "rationale": "challenge.description 是应用自带挑战文案，请求不可写；安全改动：模板绑定改用 ?? '' 兜底，描述缺失时渲染空串而不是 undefined",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 101,
+          "del": 2,
+          "ins": [
+            "          originalDescription: challenge.description ?? '',",
+            "          description: this.sanitizer.bypassSecurityTrustHtml(challenge.description ?? '')"
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe089-0001",
@@ -665,8 +726,52 @@
       "patch": null,
       "blob_sha": "d874df7bbd159aa811f6b14f06f378750011760e",
       "language": "ts",
-      "rationale": "eval 的实参由 Math.random 整数与运算符拼成，无外部输入可达",
-      "evidence": null
+      "rationale": "eval 的实参由 Math.random 整数与运算符拼成，无外部输入可达；安全改动：运算符表提为模块常量 CAPTCHA_OPERATORS，取值不变",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 7,
+          "del": 0,
+          "ins": [
+            "",
+            "const CAPTCHA_OPERATORS = ['*', '+', '-'] as const"
+          ]
+        },
+        {
+          "at": 11,
+          "del": 1,
+          "ins": [
+            "    const operators = CAPTCHA_OPERATORS"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ts-cwe601-0001",
+      "repo": "juice-shop",
+      "path": "routes/redirect.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "591f388daaaf30638ef860f9bad29a9111873243",
+      "language": "ts",
+      "rationale": "redirect 目标先经 security.isRedirectAllowed 白名单校验，未通过直接 406，sink 在但只能跳到白名单域；安全改动：toUrl 缺失或非字符串时提前返回 400，原本会以字符串 'undefined' 为目标进入白名单校验",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 14,
+          "del": 0,
+          "ins": [
+            "    if (typeof toUrl !== 'string' || toUrl.length === 0) {",
+            "      res.status(400)",
+            "      next(new Error('Missing redirect target'))",
+            "      return",
+            "    }",
+            ""
+          ]
+        }
+      ]
     },
     {
       "id": "ts-cwe798-0001",
@@ -728,8 +833,21 @@
       "patch": null,
       "blob_sha": "145c2fdd5f7bef9dc4a53f8f1d3cbf4da13a51a8",
       "language": "ts",
-      "rationale": "domain 取自启动配置，非请求输入",
-      "evidence": null
+      "rationale": "domain 取自启动配置，非请求输入；安全改动：checkIfDomainReachable 对空串提前返回 false，空串原本也会被 fetch 拒绝并落入同一分支",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 163,
+          "del": 0,
+          "ins": [
+            "  if (domain.length === 0) {",
+            "    logger.warn('Empty domain passed to the reachability check')",
+            "    return false",
+            "  }",
+            ""
+          ]
+        }
+      ]
     }
   ]
 }

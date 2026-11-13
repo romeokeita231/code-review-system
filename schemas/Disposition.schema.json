@@ -95,6 +95,22 @@
               "severity": {
                 "type": "number"
               },
+              "severitySource": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "semgrep",
+                      "aor",
+                      "crg",
+                      "registry"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "source": {
                 "enum": [
                   "semgrep",
@@ -244,6 +260,21 @@
             "null"
           ]
         },
+        "thresholdSource": {
+          "anyOf": [
+            {
+              "enum": [
+                "artifact",
+                "config",
+                "severity_policy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tier": {
           "enum": [
             0,
@@ -274,7 +305,8 @@
         "skipReason",
         "blockLoop",
         "tier",
-        "tierSource"
+        "tierSource",
+        "thresholdSource"
       ],
       "type": "object"
     }

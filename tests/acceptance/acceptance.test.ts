@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { evaluateAcceptance, type AcceptanceRowLike, type BlockGaps, type SampleTruth } from "../../scripts/acceptance.js";
 
-function truthOf(sample: string, risk: string, detectable: string[], sampleCwe: string | null = "CWE-079"): SampleTruth {
+function truthOf(
+  sample: string,
+  risk: string,
+  detectable: string[],
+  sampleCwe: string | null = "CWE-079",
+): SampleTruth {
   return {
     sample_id: sample,
     split: "eval",
     risk_level: risk,
     paired_safe: false,
+    language: "ts",
     sample_cwe: sampleCwe,
     labels: detectable.length > 0 ? [{ path: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }] : [],
     expected_detectable_by: detectable,
@@ -199,6 +205,7 @@ describe("acceptance", () => {
           baseline: "B4",
           ts: 200 + index,
           change_event: { sessionId: "s1", ts: 200 + index, phase: "post" },
+          findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
         }),
       );
     }
@@ -261,6 +268,88 @@ describe("acceptance", () => {
     expect(report.lines[0]!.metrics).toMatchObject({ n: 1, k: 1, excluded: 1, excluded_classes: "502" });
     expect(report.resultsTable).toContain("CWE-502");
     expect(report.resultsTable).toContain("ruleset declares no rule");
+  });
+
+  it("counts precision per finding, not per sample", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["p", truthOf("p", "high", ["aor"])],
+      ["neg", truthOf("neg", "low", [])],
+    ]);
+    const rows = [
+      row({
+        sample: "p",
+        baseline: "B4",
+        ts: 10,
+        findings_merged: [
+          { file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" },
+          { file: "src/a.ts", startLine: 2, endLine: 3, cwe: "CWE-79" },
+          { file: "src/a.ts", startLine: 40, endLine: 41, cwe: "CWE-79" },
+        ],
+      }),
+      row({
+        sample: "neg",
+        baseline: "B4",
+        ts: 20,
+        findings_merged: [{ file: "src/a.ts", startLine: 5, endLine: 5, cwe: "CWE-79" }],
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    // Two findings overlap the label, one is off-label and one sits on a
+    // defect-free row: precision is 2/4, which no sample-level count can show.
+    expect(report.lines[0]!.metrics).toMatchObject({
+      n: 1,
+      recall: 0,
+      findings_n: 4,
+      findings_tp: 2,
+      precision: 0.5,
+      precision_status: "insufficient_n",
+    });
+    expect(report.lines[0]!.pass).toBe(false);
+  });
+
+  it("reports recall descriptively when fewer samples than the gate were staged", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      const sample = `s-${index}`;
+      truth.set(sample, truthOf(sample, "high", ["semgrep"]));
+      rows.push(
+        row({
+          sample,
+          baseline: "B4",
+          ts: 10 + index,
+          disposition: {
+            preDecision: "deny",
+            postDecision: "none",
+            finalDisposition: "mechanical_block",
+            text: "[CRS-BLOCK] src/a.ts:1 CWE-79 r",
+          },
+          findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+        }),
+      );
+    }
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `neg-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push(row({ sample, baseline: "B4", ts: 100 + index }));
+    }
+    const report = evaluateAcceptance(rows, truth, gaps);
+    expect(report.lines[0]!.pass).toBe(false);
+    expect(report.lines[0]!.metrics).toMatchObject({
+      n: 10,
+      recall: 1,
+      recall_status: "insufficient_n",
+      available: 10,
+      staged: 10,
+      not_staged: 0,
+      findings_n: 10,
+      precision_status: "insufficient_n",
+    });
+    // The number survives the failed gate: a report that says only
+    // "insufficient_n" would hide a measured 10/10.
+    expect(report.lines[0]!.metrics!["wilson_low"]).toBeGreaterThan(0.7);
+    expect(report.resultsTable).toContain("descriptive, not gated");
+    expect(report.verdict).toContain("召回面 insufficient_n");
   });
 
   it("refuses a precision that has no defect-free denominator", () => {

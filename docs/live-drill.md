@@ -47,13 +47,40 @@ metric, and using it as the selector let the dataset define its own denominator.
    declares at least one rule for it and for `typescript`. Everything else is listed
    in `coverage.uncovered` and printed as a warning — never sliced away silently.
 
-`plan: ...` and `coverage declared: ...` print on every stage. If the plan cannot reach
-20 positives, `--stage run` refuses unless `--allow-short` is passed; that flag is for
-wiring tests only.
+`plan: ...` and `coverage declared: ...` print on every stage. The plan always reports
+**available vs staged**: `--allow-short` is gone, because 20 was never a fact about the
+data — the run proceeds, and line 1 records the recall face as `insufficient_n` with its
+measured rate instead of refusing to measure.
 
 The evaluator applies the same rule to the rows it reads (`line1 denominator by class`
 at the end of `report.md`), so a class the ruleset cannot see gets its own row marked
 `outside line1` with its declared rule count.
+
+## Line 1's two units, two gates (2026-11-13)
+
+`n >= 20` never named its unit. Recall counts **samples** (did the write get caught),
+precision counts **findings** (does each surfaced finding sit on a real defect). One
+number cannot gate both:
+
+| face | unit | n | gate | when short |
+| --- | --- | --- | --- | --- |
+| recall | sample | `n` (covered, scannable eval positives) | `>= 20` | `insufficient_n`, still reports k/n + Wilson 95% |
+| precision | finding | merged findings on eval rows | `>= 20` | `insufficient_n`, still reports tp/n |
+
+`report.md` prints both rows plus `available` / `staged`: `ds-2` has 11 gateable eval
+positives, the per-class cap stages 10, so the shortfall is visible and is **not** a
+detector result. A rate reported under `insufficient_n` is marked `descriptive, not
+gated` — "cannot be gated" and "was not measured" are different claims.
+
+Preregistered before any eval output (issue #41 comment, 2026-11-13):
+
+- **P1** semgrep's eval hits ⊆ CWE-089, `k <= 2/11`.
+- **P2** AOR sample recall > semgrep sample recall, gap `>= 3x`. If it fails, the
+  two-source architecture did not earn its token cost there — a finding, not a null.
+- **P3** `semgrep ∩ AOR ⊆ semgrep hits`, `|intersection| <= 2`, so fused precision is
+  descriptive only.
+- **P4** `AOR-only` cell's TP rate is below the `both` cell. If not, the fusion lower
+  bound earns nothing.
 
 ## Two denominators, one gate: `out_of_scope` vs `timeout`
 
@@ -131,22 +158,26 @@ npx tsx scripts/live-drill.ts --stage all
 ```
 
 Stages: `check` → `prepare` → `run` → `collect` → `evaluate` (`--stage <name>` runs one).
-`prepare` stages 20 eval positives + 8 low-risk samples + one dependency-hallucination
-probe per baseline (`B4`, `B4g`) in `runs/live/scratch/<baseline>`, each its own git
-repo with the pinned rulesets copied in. `run` drives one headless DSH session per
-baseline (write pass, then a correction pass on the same session id), `collect` maps
-plugin `ReviewRow`s to the evaluator shape, and `evaluate` writes
+`prepare` stages the eval positives the ruleset can gate (10 of 11 on `ds-2`) + 8
+defect-free low-risk rows + one dependency-hallucination probe per baseline (`B4`,
+`B4g`) in `runs/live/scratch/<baseline>`, each its own git repo with the pinned rulesets
+copied in. `run` drives one headless DSH session per baseline (write pass, then a
+correction pass on the same session id), `collect` maps plugin `ReviewRow`s to the
+evaluator shape, and `evaluate` writes
 `artifacts/acceptance/{report.md,verdict.md,verdict.json}`.
 
 `--allow-degraded` skips the gate for a wiring-only run; it cannot produce a passing
 verdict.
 
-The 8 low-risk slots are taken from defect-free (`defects: []`) `risk_level=low` rows
-first, and line 4 pairs B4 against B4g on them. Line 1's false-positive denominator is a
-separate list: `plan.controls` stages the defect-free rows regardless of `risk_level`
-(`ds-2`: 7), because §9's `low` describes the *change*, not defect-freeness. With no
-control row at all the evaluator reports `precision: na` and fails line 1 instead of
-printing a vacuous `tp/tp = 1.0`.
+The 8 low-risk slots are exactly the defect-free (`defects: []`) `risk_level=low` rows:
+since the negatives are now small safe edits, one pool serves line 4's B4/B4g pairs and
+line 1's false-positive denominator. `plan.controls` therefore stages nothing extra on
+`ds-2`; it remains for datasets whose negatives are `high` risk. With no defect-free row
+at all the evaluator reports `precision: na` and fails line 1 instead of printing a
+vacuous `tp/tp = 1.0`.
+
+Every injected message carries its provenance: `via=<sources>[/agree]/sev=<source>` sits
+right after the anchor, so clipping cannot remove it.
 
 ## Two Windows-only traps
 
@@ -158,27 +189,24 @@ printing a vacuous `tp/tp = 1.0`.
    against its root, so a scratch repo needs the same tree; `prepare` copies the
    snapshots. Without it every scan reports `rules_missing`.
 
-## Known blockers (2026-11-12, after the ds-2 freeze)
+## Known blockers (2026-11-13, after the ds-2 re-encode)
 
 - **`ocr` self-updates** past the pinned `04deca6` (observed v1.13.8 / `4236c87`); the
   `ocr pin` gate fails until it is re-pinned. No AOR number may be quoted meanwhile.
-- **Warn is unfittable.** `artifacts/calibration.json` carries
-  `thresholds.status: "unfittable"` (`fit_negatives = 0`, 4 findings), and a consumer
-  that needs a threshold propagates that state rather than substituting a constant. Line
-  1's block facet does not depend on it — certified rules gate the block face — but lines
-  3–5 drive `[CRS-WARN]` and therefore cannot be measured until a warn operating point
-  exists. That is the recorded cost of measuring precision once: fitting a warn point
-  requires negatives inside fit, which would end the blind measurement.
-- **Line 1 cannot reach `n >= 20` on `ds-2`.** The eval split has 14 positives, 11 of them
-  TypeScript (the drill stages one language), and `POSITIVE_CAP_PER_CLASS = 4` spreads
-  those over 5 covered classes: 10 are staged. `evaluateAcceptance` requires `n >= 20`, so
-  the gate fails before recall is considered. That is a dataset-size fact, not a detector
-  result; `--allow-short` remains wiring-only.
-- **Line 4 has no defect-free pairing pool.** 11 of 33 rows are `risk_level: low`
-  (079/798 with changes <=30 lines), but every one of them is a positive, so the 3 staged
-  low-risk slots are defective and the B4/B4g pairs are not clean. Line 4 wants 8
-  defect-free low-risk samples; `ds-2` has none.
-- **JavaScript is `out_of_scope`.** 6 of the 33 rows are `.js`; the shipped config has no
+- **Warn is a policy, not a probability.** `artifacts/calibration.json` carries
+  `thresholds.status: "unfittable"` (`fit_negatives = 0`, 4 findings). Any path that
+  claims a probability still propagates `unfittable` and refuses to invent a constant;
+  the warn face instead fires on the sources' own declared severity (semgrep
+  WARNING/ERROR, AOR P2/P1) and records `threshold_source: "severity_policy"`. That is
+  what makes lines 3–5 measurable again without a fitted warn point. The statement "warn
+  is uncalibrated" must follow every number taken from it.
+- **Line 1's recall face is `insufficient_n`, not a failure to run.** 14 eval positives,
+  11 TypeScript (the drill stages one language), `POSITIVE_CAP_PER_CLASS = 4` over 5
+  covered classes: 10 staged of 11 available, gate 20. The measured rate and its Wilson
+  interval are printed as `descriptive, not gated`; `--allow-short` no longer exists.
+- **Line 4's pool exists now.** 8 defect-free low-risk rows (the re-encoded negatives);
+  `low_risk_pool` fails the dataset gate below 8.
+- **JavaScript is `out_of_scope`.** 6 of the 34 rows are `.js`; the shipped config has no
   JavaScript subset and no `sMax['javascript']`, so they are never scanned. This is the
   second appearance of "declared != shipped" (the first was `ts_all` vs `ts_dedup`): the
   rules table says what exists, the config says what runs, and nothing forces agreement.

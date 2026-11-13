@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN_LOW_RISK_NEGATIVES, specRiskLevel } from "./verify-dataset.js";
 
 const SPEC_CWES = ["022", "078", "079", "089", "094", "798", "918"] as const;
 const MIN_PER_CLASS = 3;
@@ -40,7 +41,10 @@ interface Row {
   label: 0 | 1;
   cwe: string | null;
   defect: { start: number; end: number } | null;
+  /** Positive rows only: the control re-added to the blob to build `before`. */
   patch: Patch[] | null;
+  /** Negative rows only: one safe edit applied to the blob to build `after`. */
+  safe_patch?: Patch[] | null;
   blob_sha: string;
   language: string;
   rationale: string;
@@ -93,12 +97,6 @@ function rebuildAfter(afterLines: string[], patch: readonly Patch[]): string {
   return out.join("\n");
 }
 
-/** §9: low iff the class is 079/798 and the change is at most 30 lines. */
-function specRiskLevel(sampleCwe: string | null, changedLines: number): "low" | "high" {
-  const key = sampleCwe === null ? null : sampleCwe.replace(/^CWE-/i, "").padStart(3, "0");
-  return (key === "079" || key === "798") && changedLines <= 30 ? "low" : "high";
-}
-
 function git(clone: string, args: string[]): string {
   return execFileSync("git", ["-C", clone, ...args], { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
 }
@@ -108,20 +106,21 @@ function classKey(row: Row): string | null {
   return row.cwe === null ? null : row.cwe.padStart(3, "0");
 }
 
-/** A source this popular is in every training corpus; the rule is §10's. */
-const STAR_THRESHOLD = 1000;
-
 /**
- * §10 contamination, as a derivation rather than a hand-filled field:
+ * §10 contamination, as a category rule with no free parameter:
  *
- *   high  <=>  origin.kind = public_repo and (origin.advisory or (source.pedagogical and source.stars >= 1000))
+ *   high  <=>  origin.kind = public_repo and (origin.advisory or source.pedagogical)
  *
- * Every self row is `public_repo` with no advisory, so the second disjunct is
- * the one that can fire. Star counts are a snapshot (see `stars_as_of`), not a
- * property of the pinned commit.
+ * Every self row is a pinned `public_repo` blob with no advisory, so the second
+ * disjunct decides. All three parents are deliberately vulnerable teaching
+ * apps: the vulnerable files are the reason the repository exists and have been
+ * public for years, so they are in any corpus that scraped them. Star counts are
+ * kept in the manifest as evidence but are not a gate - a threshold on stars is
+ * a free parameter that cannot be falsified, and 14k vs 549 is a difference in
+ * probability, not in kind.
  */
 function contaminationRisk(source: Provenance["sources"][string]): "low" | "high" {
-  return source.pedagogical && source.stars >= STAR_THRESHOLD ? "high" : "low";
+  return source.pedagogical ? "high" : "low";
 }
 
 function cloneOf(root: string, repo: string): string {
@@ -249,15 +248,24 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
   const rootLines: string[] = [];
   const perClass = new Map<string, number>();
   const splitById = new Map<string, string>();
+  let lowRiskNegatives = 0;
 
   for (const row of [...rows].sort((a, b) => a.id.localeCompare(b.id))) {
     const key = `${row.repo}\u0000${row.path}`;
     const blob = blobs.get(key)!;
-    const afterLines = blob.split("\n");
-    const after = blob;
-    const before = row.label === 1 ? rebuildAfter(afterLines, row.patch ?? []) : "";
-    const beforeLines = before === "" ? [] : before.split("\n");
-    const changed = row.label === 1 ? diffCount(beforeLines, afterLines) : lineCount(after);
+    const blobLines = blob.split("\n");
+    // A positive's `after` is the pinned blob byte for byte and `before` is that
+    // blob plus the re-added control. A negative's `before` is the blob and
+    // `after` is the blob plus one safe edit (`safe_patch`): a whole-file
+    // creation is always `high` risk, so it could never fill line 4's pool.
+    if (row.label === 0 && (row.safe_patch ?? []).length === 0) {
+      throw new Error(`${row.id}: a negative row needs a safe_patch, or before === after`);
+    }
+    const after = row.label === 1 ? blob : rebuildAfter(blobLines, row.safe_patch ?? []);
+    const before = row.label === 1 ? rebuildAfter(blobLines, row.patch ?? []) : blob;
+    const beforeLines = before.split("\n");
+    const afterLines = after.split("\n");
+    const changed = before === "" ? lineCount(after) : diffCount(beforeLines, afterLines);
     const sampleCwe = row.label === 1 ? `CWE-${row.cwe}` : null;
     const split = splitOf.get(key)!;
     splitById.set(row.id, split);
@@ -279,6 +287,8 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
         : [];
 
     const content = sha256(`${before}\u0000${after}`);
+    const risk = specRiskLevel(sampleCwe, changed);
+    if (row.label === 0 && risk === "low") lowRiskNegatives += 1;
     const sample = {
       sample_id: row.id,
       schema_version: 2,
@@ -297,7 +307,7 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       variant_of: null,
       rationale: row.rationale,
       expected_detectable_by: row.label === 1 ? "semgrep_only" : null,
-      risk_level: specRiskLevel(sampleCwe, changed),
+      risk_level: risk,
       contamination_risk: contaminationRisk(provenance.sources[row.repo]!),
       defect_origin: row.label === 1 ? "real" : null,
       origin: {
@@ -363,10 +373,14 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       negatives_split: "eval",
       defect_origin: "real",
       defect_origin_basis:
-        "the vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+        "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+      negative_encoding:
+        "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective.",
       contamination_rule:
-        "high iff origin.kind=public_repo and (origin.advisory or (source.pedagogical and source.stars >= 1000)); else low",
+        "high iff origin.kind=public_repo and (origin.advisory or source.pedagogical); else low. Category rule, no free parameter: star counts are evidence, not a gate.",
       contamination_stars_as_of: provenance.stars_as_of,
+      low_risk_negatives_required: MIN_LOW_RISK_NEGATIVES,
+      low_risk_negatives: lowRiskNegatives,
       supply_exhausted: provenance.exhaustion,
     },
     retired: provenance.retired,

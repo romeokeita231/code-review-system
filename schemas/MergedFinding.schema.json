@@ -80,6 +80,22 @@
         "severity": {
           "type": "number"
         },
+        "severitySource": {
+          "anyOf": [
+            {
+              "enum": [
+                "semgrep",
+                "aor",
+                "crg",
+                "registry"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "source": {
           "enum": [
             "semgrep",
