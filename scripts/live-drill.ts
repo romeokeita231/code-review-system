@@ -1,14 +1,14 @@
 import { execa } from "execa";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
 import { calibrationCategories } from "../src/contracts/index.js";
 import { assertCalibrationMatches, loadCalibration, sha256, TOOL_ENV } from "../src/config/index.js";
 import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
+import { evaluateAcceptance, labelSpansOf, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
 import {
   coverageCounts,
@@ -288,20 +288,7 @@ export interface LoadedDataset {
 
 /** Defect spans: `defects[]` on the self set, `labels[]` on the imported ones. */
 function labelsOf(file: Record<string, unknown>): Array<{ path: string; startLine: number; endLine: number; cwe: string | null }> {
-  const defects = file["defects"];
-  if (Array.isArray(defects)) {
-    return defects.map((defect) => {
-      const row = (typeof defect === "object" && defect !== null ? defect : {}) as Record<string, unknown>;
-      return {
-        path: String(row["file"] ?? ""),
-        startLine: Number(row["line_start"] ?? 0),
-        endLine: Number(row["line_end"] ?? 0),
-        cwe: row["cwe"] === null || row["cwe"] === undefined ? null : String(row["cwe"]),
-      };
-    });
-  }
-  const labels = file["labels"];
-  return Array.isArray(labels) ? (labels as ReturnType<typeof labelsOf>) : [];
+  return labelSpansOf(file);
 }
 
 function loadDatasetSync(datasetDir: string, requestedLanguage?: string): LoadedDataset {
@@ -638,6 +625,19 @@ export function pinnedAorCommit(baseConfig: string): string {
  * yet crash before rule matching (`CertOpenSystemStore returned NULL` in its
  * OCaml CA bootstrap), which otherwise only surfaces as a degraded scan.
  */
+/** Newest mtime under `dir`; null when the tree is empty. */
+async function newestSource(dir: string): Promise<{ path: string; at: number } | null> {
+  let newest: { path: string; at: number } | null = null;
+  for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (!/\.(ts|tsx|json)$/.test(entry.name)) continue;
+    const path = join(entry.parentPath ?? dir, entry.name);
+    const at = (await stat(path)).mtimeMs;
+    if (newest === null || at > newest.at) newest = { path, at };
+  }
+  return newest;
+}
+
 export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
   const env = { ...process.env, PATH: toolPath(), ...TOOL_ENV };
@@ -717,6 +717,27 @@ export async function preflight(profile: string, options: PreflightOptions = {})
   } catch (error) {
     checks.push({
       name: "calibration artifact",
+      ok: false,
+      detail: (error as Error).message.slice(-400),
+    });
+  }
+  // The rows come from `dist/plugin.js`, not from `src/`. A bundle older than the
+  // tree passes every other gate and then writes rows in the old shape, which the
+  // evaluator refuses - after the one eval has been spent. This is the same
+  // "declared != shipped" family as `ts_all` vs `ts_dedup`, so it is a gate.
+  try {
+    const bundle = resolve("dist/plugin.js");
+    if (!existsSync(bundle)) throw new Error("dist/plugin.js is missing: run `npm run build`");
+    const bundleMtime = (await stat(bundle)).mtimeMs;
+    const newest = await newestSource("src");
+    if (newest === null) throw new Error("no sources under src/ to compare against");
+    if (newest.at > bundleMtime) {
+      throw new Error(`${newest.path} is newer than dist/plugin.js: run \`npm run build\``);
+    }
+    checks.push({ name: "plugin bundle", ok: true, detail: `dist/plugin.js covers ${newest.path}` });
+  } catch (error) {
+    checks.push({
+      name: "plugin bundle",
       ok: false,
       detail: (error as Error).message.slice(-400),
     });
@@ -904,12 +925,21 @@ export async function evaluate(
 
 /**
  * Gates that protect the one-shot measurement. They have no `--allow-degraded`
- * bypass: a degraded instrument, dataset or API key produces numbers that look
- * finished and cannot be reproduced. Other gates (a missing optional tool, a
- * warning-only scan) may be waived one name at a time with
+ * bypass: a degraded instrument, dataset, plugin bundle or API key produces
+ * numbers that look finished and cannot be reproduced. Other gates (a missing
+ * optional tool, a warning-only scan) may be waived one name at a time with
  * `--allow-degraded=<gate>[,<gate>]`.
+ *
+ * `plugin bundle` is the fourth: the rows are written by `dist/plugin.js`, so a
+ * bundle older than `src/` measures the previous version of the system and its
+ * rows are in a shape the evaluator refuses - discovered after the eval is spent.
  */
-export const NON_DEGRADABLE_GATES = ["ocr pin", "calibration artifact", "DEEPSEEK_API_KEY"] as const;
+export const NON_DEGRADABLE_GATES = [
+  "ocr pin",
+  "calibration artifact",
+  "DEEPSEEK_API_KEY",
+  "plugin bundle",
+] as const;
 
 export function parseDegradedGates(argv: readonly string[], known: readonly string[]): string[] {
   const values: string[] = [];

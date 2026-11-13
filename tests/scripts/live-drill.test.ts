@@ -7,6 +7,8 @@ import type { ReviewRow } from "../../src/contracts/index.js";
 import {
   allSamples,
   assertRunDir,
+  evaluate,
+  frozenInstrumentsOf,
   newRunDir,
   NON_DEGRADABLE_GATES,
   parseDegradedGates,
@@ -387,5 +389,64 @@ describe("run identity", () => {
     };
     expect(sample.before).toBe("");
     expect(staged).toBe(sample.after);
+  });
+});
+
+describe("evaluate refuses a drifted measurement", () => {
+  async function collectedRun(drifted: boolean): Promise<{ root: string; outDir: string }> {
+    const root = await mkdtemp(join(tmpdir(), "crs-eval-"));
+    tempDirs.push(root);
+    const outDir = newRunDir(root, "ds-2.0.0", "eval", new Date("2026-11-13T04:30:05"));
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      join(outDir, "run.json"),
+      `${JSON.stringify(
+        {
+          dataset_version: "ds-2.0.0",
+          dataset_dir: DATASET,
+          config_hash: "hash",
+          frozen_instruments: frozenInstrumentsOf("configs/b4.json"),
+          created_at: "2026-11-13T04:30:05Z",
+          plan: { positives: 1, low_risk: 1, controls: 0, probe: 1, negatives_create: 1 },
+          degraded_gates: [],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const instrumentRow = {
+      semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "observed" as const },
+      ocr: drifted
+        ? { name: "ocr", version: "v1.13.8", commit: "4236c87", source: "observed" as const }
+        : { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" as const },
+    };
+    const rows = [
+      toAcceptanceRows([row()], new Map([["src/a.ts", "ts-cwe079-0001"]]), "B4")[0]!,
+    ].map((entry) => ({ ...entry, instrument: instrumentRow }));
+    await writeFile(join(outDir, "rows.jsonl"), `${rows.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+    return { root, outDir };
+  }
+
+  it("refuses to write a report when the pinned ocr commit changed", async () => {
+    const { root, outDir } = await collectedRun(true);
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: {},
+      }),
+    ).rejects.toThrow(/refusing to report/);
+  });
+
+  it("writes a report that names the instruments it was produced on", async () => {
+    const { root, outDir } = await collectedRun(false);
+    const result = await evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+      language: "typescript",
+      perCwe: {},
+    });
+    expect(result.lines).toHaveLength(5);
+    const report = readSync(join(root, "out", "report.md"), "utf8");
+    expect(report).toContain("instruments (observed");
+    expect(report).toContain("04deca6");
   });
 });

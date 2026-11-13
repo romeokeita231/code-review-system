@@ -61,6 +61,7 @@ and three gates are not on it:
 | `ocr pin` | instrument identity: a drifted binary makes every number unreproducible |
 | `calibration artifact` | dataset identity: a stale artifact applies thresholds fitted on another class set |
 | `DEEPSEEK_API_KEY` | measurement feasibility: without it no live session exists to measure |
+| `plugin bundle` | shipped identity: the rows are written by `dist/plugin.js`, so a bundle older than `src/` measures the previous system, and its rows are in a shape `evaluate` refuses — discovered after the eval is spent |
 
 
 ```bash
@@ -253,7 +254,8 @@ right after the anchor, so clipping cannot remove it.
 
 - **`DEEPSEEK_API_KEY` is the only red gate.** The `ocr` pin is green again:
   `open-code-review v1.13.6 (04deca6)`, rebuilt from the pinned commit and protected by
-  `OCR_NO_UPDATE=1`. Nothing else in the preflight fails.
+  `OCR_NO_UPDATE=1`. Everything else in the preflight passes, including `plugin bundle`
+  (`dist/plugin.js` rebuilt after the `instrument` change).
 - **A row now names the binary that answered.** `ReviewRow.instrument` carries
   `{semgrep, ocr}` with `{name, version, commit, source}` next to the declared `toolchain`;
   `evaluate` **refuses** (not warns) when a row's identity is missing, `declared` instead of

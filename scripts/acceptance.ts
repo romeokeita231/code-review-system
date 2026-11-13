@@ -193,6 +193,29 @@ export async function loadRuns(root: string): Promise<AcceptanceRowLike[]> {
   return rows;
 }
 
+/**
+ * Defect spans for one sample file. The self set stores them as `defects[]`
+ * (`line_start`/`line_end`, `file`); the imported sets store `labels[]`. Reading
+ * only `labels` left every ds-2 row with `undefined` spans, so the evaluator
+ * crashed on the last step of a run it had otherwise completed.
+ */
+export function labelSpansOf(file: Record<string, unknown>): LabelSpan[] {
+  const defects = file["defects"];
+  if (Array.isArray(defects)) {
+    return defects.map((defect) => {
+      const row = (typeof defect === "object" && defect !== null ? defect : {}) as Record<string, unknown>;
+      return {
+        path: String(row["file"] ?? ""),
+        startLine: Number(row["line_start"] ?? 0),
+        endLine: Number(row["line_end"] ?? 0),
+        cwe: row["cwe"] === null || row["cwe"] === undefined ? null : String(row["cwe"]),
+      };
+    });
+  }
+  const labels = file["labels"];
+  return Array.isArray(labels) ? (labels as LabelSpan[]) : [];
+}
+
 export async function loadTruth(datasetDir: string): Promise<Map<string, SampleTruth>> {
   const manifest = JSON.parse(await readFile(join(datasetDir, "manifest.json"), "utf8")) as {
     samples: Array<{ sample_id: string; split: string; risk_level: string; paired_safe: boolean; expected_detectable_by: string[] }>;
@@ -206,6 +229,7 @@ export async function loadTruth(datasetDir: string): Promise<Map<string, SampleT
       ...sample,
       language: String((sample as { language?: unknown }).language ?? ""),
       sample_cwe: sample.cwe,
+      labels: labelSpansOf(sample as unknown as Record<string, unknown>),
       expected_detectable_by: entry.expected_detectable_by,
     });
   }
