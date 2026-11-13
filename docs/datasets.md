@@ -119,11 +119,12 @@ Consequence: with every row `high`, recall **must be reported per detection sour
 that measure precision. Eight are **small safe edits** — `before` is the pinned blob,
 `after` adds one empty-value guard, extracted constant or null-coalesced binding — so
 `before ≠ after` (D1), `changed_lines ≤ 30`, `defect_origin = null`, and the row is
-`risk_level: low`. The ninth (`ts-cwe022-9010`) is the **create** smoke sample: `before` is
-empty and `after` is the vetted text of `ts-cwe022-9001`, so the create branch is exercised
-instead of being dead code. It is a smoke sample — `n = 1`, and no precision claim is made
-for it — because the alternative was a whole-file creation, which is always `high` risk and
-could never fill line 4's pool.
+`risk_level: low`. The ninth (`ts-cwe022-9010`) is the **create** behaviour sample: `before`
+is empty and `after` is the vetted text of `ts-cwe601-0001` (38 changed lines, so
+`risk_level: high` and outside the low-risk pool). Its job is to prove the create branch is
+executed instead of being dead code; it is `n = 1`, no precision claim is made for it, and
+`prepare` prints a `NOTE` that the create write is still tier 0 (the static tier counts
+changed files, not lines), so `semgrep` and the registry review it while AOR does not.
 
 `event_kind ∈ {edit, create}` is **derived from `before === ""`**, never filled in: the
 builder writes it, the gate re-derives it and fails a row whose declared kind disagrees with
@@ -132,10 +133,11 @@ denominator as `8 edit + 1 create` so the two populations cannot be averaged sil
 
 The gate refuses fewer than eight defect-free low-risk rows (`low_risk_pool`), because line
 4 pairs B4 against B4g on them: if the pool were defective the pairs would measure a
-different population than line 1's precision denominator. A file that already hosts a
-positive cannot host a negative — the positive's `before` is that file plus a control, so
-the pair is a near-duplicate and the split would leak the label. The builder throws on it
-and the gate re-checks it.
+different population than line 1's precision denominator. The pool is the eight safe edits;
+the create sample is staged but is not `low` risk, so it cannot enter it. A file that
+already hosts a positive cannot host a negative — the positive's `before` is that file plus
+a control, so the pair is a near-duplicate and the split would leak the label. The builder
+throws on it and the gate re-checks it.
 
 **Supply exhaustion, not "insufficient_n".** CWE-078 (2 rows) and CWE-918 (1 row) are
 below the reporting threshold. Each carries a `declared.supply_exhausted` record that

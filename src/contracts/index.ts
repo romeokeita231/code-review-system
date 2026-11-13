@@ -305,10 +305,42 @@ export const Instrument = z.object({
 });
 export type Instrument = z.infer<typeof Instrument>;
 
-/** The two instruments a live acceptance run must identify. */
+/**
+ * The model behind AOR, which is the instrument `ocr` the binary points at.
+ *
+ * Pinning `ocr` by commit says which client asked the question; it says nothing
+ * about the model that answered. That model is configurable, and a service can
+ * change it under a fixed id, so the row records the answer rather than the
+ * request:
+ *
+ * - `id` is the model the service reported for this process (`deepseek-flash`
+ *   answers a request for `deepseek-chat`). It is the ruler: it wrote the
+ *   findings.
+ * - `params.configured` is what the client asked for, read from ocr's own
+ *   config. Kept beside the answer so an alias is visible instead of being
+ *   guessed at, and so a config change mid-run shows up as a difference.
+ * - `params.url` is the endpoint the answer came from.
+ *
+ * If a build ever compiles the model in, the honest value is still a statement:
+ * `bundled@<commit>`. "Fixed" has to be recorded too, or the field goes empty
+ * and nobody can tell a fixed model from an unrecorded one.
+ */
+export const AorModel = z.object({
+  provider: z.string().min(1),
+  id: z.string().min(1),
+  params: z.object({
+    url: z.string().min(1).nullable(),
+    configured: z.string().min(1).nullable(),
+  }),
+  source: z.enum(["observed", "declared"]),
+});
+export type AorModel = z.infer<typeof AorModel>;
+
+/** The instruments a live acceptance run must identify, deepest last. */
 export const Instruments = z.object({
   semgrep: Instrument,
   ocr: Instrument,
+  aor_model: AorModel,
 });
 export type Instruments = z.infer<typeof Instruments>;
 

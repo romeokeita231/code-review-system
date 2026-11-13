@@ -492,11 +492,26 @@ describe("acceptance", () => {
   });
 });
 
-const FROZEN = { semgrep: { version: "1.184.0" }, ocr: { commit: "04deca6" } };
+const FROZEN = {
+  semgrep: { version: "1.184.0" },
+  ocr: { commit: "04deca6" },
+  aor_model: {
+    provider: "deepseek",
+    id: "deepseek-flash",
+    url: "https://api.deepseek.com",
+    configured: "deepseek-chat",
+  },
+};
 
 const instrument = (over: Partial<AcceptanceRowLike["instrument"]> = {}): AcceptanceRowLike["instrument"] => ({
   semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "observed" },
   ocr: { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" },
+  aor_model: {
+    provider: "deepseek",
+    id: "deepseek-flash",
+    params: { url: "https://api.deepseek.com", configured: "deepseek-chat" },
+    source: "observed",
+  },
   ...over,
 });
 
@@ -549,9 +564,56 @@ describe("instrument identity", () => {
     const truth = new Map([["a", truthOf("a", "high", ["semgrep"])]]);
     expect(() =>
       evaluateAcceptance([oneRow()], truth, gaps, {
-        frozenInstruments: { semgrep: { version: "1.184.0" }, ocr: { commit: "deadbee" } },
+        frozenInstruments: { ...FROZEN, ocr: { commit: "deadbee" } },
       }),
     ).toThrow(/refusing to report/);
+  });
+
+  it("refuses a row whose AOR model is not the frozen model", () => {
+    const drifted = instrument({
+      aor_model: {
+        provider: "deepseek",
+        id: "deepseek-chat",
+        params: { url: "https://api.deepseek.com", configured: "deepseek-chat" },
+        source: "observed",
+      },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: drifted })], FROZEN)).toThrow(
+      /aor model deepseek-chat != frozen deepseek-flash/,
+    );
+  });
+
+  it("refuses a row whose endpoint or requested model moved", () => {
+    const moved = instrument({
+      aor_model: {
+        provider: "deepseek",
+        id: "deepseek-flash",
+        params: { url: "https://api.example.com", configured: "deepseek-chat" },
+        source: "observed",
+      },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: moved })], FROZEN)).toThrow(
+      /aor endpoint https:\/\/api.example.com/,
+    );
+    const reasked = instrument({
+      aor_model: {
+        provider: "deepseek",
+        id: "deepseek-flash",
+        params: { url: "https://api.deepseek.com", configured: "deepseek-v4" },
+        source: "observed",
+      },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: reasked })], FROZEN)).toThrow(
+      /aor requested model deepseek-v4/,
+    );
+  });
+
+  it("refuses a row with no aor model at all", () => {
+    const missing = instrument();
+    delete (missing as { aor_model?: unknown }).aor_model;
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: missing })], FROZEN)).toThrow(
+      /no aor model identity/,
+    );
   });
 
   it("prints the observed identity when it matches the pin", () => {
@@ -566,11 +628,23 @@ describe("instrument identity", () => {
 describe("event kinds in the false-positive denominator", () => {
   it("splits the denominator by event kind and refuses a claim for a single create", () => {
     const truth = new Map<string, SampleTruth>([
+      ["pos", truthOf("pos", "high", ["semgrep"])],
       ["neg-edit", { ...truthOf("neg-edit", "low", []), event_kind: "edit" }],
       ["neg-create", { ...truthOf("neg-create", "low", []), event_kind: "create" }],
     ]);
     const report = evaluateAcceptance(
       [
+        row({
+          sample: "pos",
+          baseline: "B4",
+          ts: 0,
+          disposition: {
+            preDecision: "deny",
+            postDecision: "none",
+            finalDisposition: "mechanical_block",
+            text: "[CRS-BLOCK]",
+          },
+        }),
         row({ sample: "neg-edit", baseline: "B4", ts: 1 }),
         row({ sample: "neg-create", baseline: "B4", ts: 2 }),
       ],
@@ -580,5 +654,19 @@ describe("event kinds in the false-positive denominator", () => {
     expect(report.lines[0]!.metrics).toMatchObject({ negatives: 2, negatives_edit: 1, negatives_create: 1 });
     expect(report.resultsTable).toContain("1 edit, 1 create");
     expect(report.verdict).toContain("不支撑任何精度主张");
+  });
+
+  it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
+    // The wiring bug this guards: truth and rows disagree about which samples
+    // exist, so `available` is 0 next to a pile of rows. That is not a small
+    // sample, and it once rendered as a completed measurement.
+    const truth = new Map<string, SampleTruth>([["pos", truthOf("pos", "high", ["semgrep"])]]);
+    expect(() =>
+      evaluateAcceptance([row({ sample: "pos", baseline: "B4", ts: 1 })], truth, gaps, {
+        // The class is not in the declared coverage, so every candidate row is
+        // excluded and the denominator is empty next to a non-empty row set.
+        coverage: { language: "typescript", perCwe: {} },
+      }),
+    ).toThrow(/the truth and the rows do not describe the same population/);
   });
 });

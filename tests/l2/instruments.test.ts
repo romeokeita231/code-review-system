@@ -5,6 +5,7 @@ import { parseConfig } from "../../src/config/index.js";
 import {
   declaredInstruments,
   instrumentFor,
+  parseAorProbe,
   parseOcrVersion,
   parseSemgrepVersion,
 } from "../../src/l2/instruments.js";
@@ -63,11 +64,47 @@ describe("instrument identity", () => {
       instrument: {
         semgrep: { name: "semgrep", version: "9.9.9", commit: null, source: "observed" },
         ocr: { name: "ocr", version: "v9.9.9", commit: "deadbee", source: "observed" },
+        aor_model: {
+          provider: "deepseek",
+          id: "deepseek-flash",
+          params: { url: "https://api.deepseek.com", configured: "deepseek-chat" },
+          source: "observed",
+        },
       },
     });
     expect(outcome.row.instrument.semgrep.version).toBe("9.9.9");
     expect(outcome.row.instrument.ocr.commit).toBe("deadbee");
+    // The model is the deepest instrument: without it a row cannot say what
+    // actually wrote its AOR findings.
+    expect(outcome.row.instrument.aor_model.id).toBe("deepseek-flash");
     // The declaration stays beside it: a reader can see the two disagree.
     expect(outcome.row.toolchain.semgrep).not.toBe(outcome.row.instrument.semgrep.version);
+  });
+
+  it("reads the served model out of `ocr llm test`, not the configured one", () => {
+    // `deepseek-chat` was requested; the service answered `deepseek-flash`. The
+    // answer is the ruler, and the probe is the only place it is printed.
+    const parsed = parseAorProbe(
+      [
+        "Source: provider:deepseek",
+        "URL:    https://api.deepseek.com",
+        "Model:  deepseek-flash",
+        "I am open-code-review, a code review assistant.",
+        "\u2713 Connection test successful",
+        "\u2713 Tool-call round trip verified",
+      ].join("\n"),
+    );
+    expect(parsed).toEqual({
+      provider: "deepseek",
+      url: "https://api.deepseek.com",
+      served: "deepseek-flash",
+      roundTrip: true,
+    });
+  });
+
+  it("does not claim a round trip when the probe did not report one", () => {
+    const parsed = parseAorProbe("Error: llm request failed: 401 unauthorized");
+    expect(parsed.served).toBeNull();
+    expect(parsed.roundTrip).toBe(false);
   });
 });

@@ -32,6 +32,17 @@
         "P3": "semgrep cap AOR is a subset of semgrep hits, |intersection| <= 2; degenerate (vacuous) when semgrep k = 0",
         "P4": "the AOR-only contingency cell has a lower TP rate than the both cell; table is {semgrep-only, AOR-only, both}"
       }
+    },
+    {
+      "version": 3,
+      "at": "2026-11-13T14:35:00+08:00",
+      "note": "v2 is unchanged. This revision records the instrument the five lines will be measured on, including the model behind AOR, and the AOR token ceiling. Written before any eval row exists.",
+      "changes": [
+        "frozen.instruments.ocr.commit = 04deca6: pinned by build commit, not by release tag (v1.13.7 was tagged at b1dcffb)",
+        "frozen.instruments.aor_model: provider deepseek, id deepseek-flash (the id the service reports), configured deepseek-chat (the id the client asks for), endpoint https://api.deepseek.com",
+        "frozen.cost.ceiling_tokens = 2000000: the prepare-time cost probe x rows must stay under it, or the run is refused",
+        "P3 keeps the degenerate branch from v2; no bound was relaxed and no direction was flipped"
+      ]
     }
   ],
   "observations": {
@@ -40,5 +51,27 @@
     "staged_language": "ts",
     "cwe089_eval_samples": 1,
     "warn_rule": "zero-parameter structured decision: severity >= warn, threshold_source = severity_policy"
+  },
+  "frozen": {
+    "at": "2026-11-13T14:35:00+08:00",
+    "basis": "recorded before the run; the run refuses if config, probe or rows disagree with any value here",
+    "instruments": {
+      "semgrep": {
+        "version": "1.184.0"
+      },
+      "ocr": {
+        "commit": "04deca6"
+      },
+      "aor_model": {
+        "provider": "deepseek",
+        "id": "deepseek-flash",
+        "url": "https://api.deepseek.com",
+        "configured": "deepseek-chat"
+      }
+    },
+    "cost": {
+      "ceiling_tokens": 2000000,
+      "basis": "one file probe x 2 (preview + scan) x 38 staged rows x 1.5 correction headroom; above it the run stops before staging"
+    }
   }
 }

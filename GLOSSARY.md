@@ -69,6 +69,18 @@ _Avoid_: 失败，fallback
 与 `toolchain` 分开记：后者是配置声明「本应使用什么」。消费者在数字之前核对，不一致即拒发。
 _Avoid_: 版本号，工具链（作量具身份时）
 
+**模型身份**：
+AOR 背后作答的模型（`aor_model = {provider, id, params}`）。`id` 是服务端**作答**的模型，
+`params.configured` 是客户端**请求**的值；`ocr` 的 commit 只固定了谁在提问，不由它决定。
+随量具身份一起冻结、一起拒发。
+_Avoid_: 模型版本，LLM 配置
+
+**一次性锁**：
+`--allow-eval=<run name>` 是启动一次 eval 的 token，名字写进 `run.json`；同 `dataset_version`
+已有运行目录即拒绝，除非显式 `--archive-and-restart="<理由>"`。第二次在看过第一次结果之后
+运行，盲性作废且产物上看不出来，所以用锁而不是用规矩。
+_Avoid_: 重跑，allow-eval（作裸开关时）
+
 **事件类型**：
 `edit` 或 `create`，由 `before === ""` 机械推出，不许手填；精度分母按此分列。
 _Avoid_: 新建/修改（作字段名时）

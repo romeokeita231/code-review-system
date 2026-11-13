@@ -50,11 +50,11 @@ The old `dataset detectability` check is **gone**, not relaxed: it scanned plann
 freeze. It also measured ds-1. Its replacement is the fit-run coverage matrix
 (`npm run record:fit`), which only ever touches fit rows.
 
-### Gates: three have no bypass
+### Gates: seven have no bypass
 
 `--allow-degraded` used to be one switch for the whole preflight, which meant "waive
 anything" — the same shape as the deleted `--allow-short`. It is now a per-gate whitelist,
-and three gates are not on it:
+and these gates are not on it:
 
 | gate | why it can never be waived |
 | --- | --- |
@@ -62,10 +62,73 @@ and three gates are not on it:
 | `calibration artifact` | dataset identity: a stale artifact applies thresholds fitted on another class set |
 | `DEEPSEEK_API_KEY` | measurement feasibility: without it no live session exists to measure |
 | `plugin bundle` | shipped identity: the rows are written by `dist/plugin.js`, so a bundle older than `src/` measures the previous system, and its rows are in a shape `evaluate` refuses — discovered after the eval is spent |
+| `aor model` | the deepest instrument: `ocr`'s commit says which client asked, the served model says what answered, and P2/P4 read AOR's output |
+| `frozen pin` | the pin and the config must agree; otherwise an edit to the config silently moves the goalposts |
+| `secret not tracked` | the repository is public; a key in a tracked file is a leak no `.gitignore` can undo |
 
+The `plugin bundle` check is a **proxy**: it compares mtimes. A checkout or a copy moves a
+timestamp without changing the artefact, and source edited back to its old text still looks
+new — it fails red more often than green, which is the safe direction, so it is kept for
+this round. `run.json` records `bundle_check: "mtime"`, and the check prints both
+timestamps, so a false red is diagnosable in one line. The upgrade is a content hash
+injected at build time, tracked separately ("upgrade the bundle check to a source-tree
+hash").
+
+### The model is part of the instrument
+
+Pinning `ocr` by commit says which client asked the question. It does not say what
+answered: the model is configured in `~/.opencodereview/config.json` (`deepseek-chat`) and
+the service reports the model that actually served the request (`deepseek-flash`). A
+server-side swap under a fixed configured id would leave every AOR number attached to a
+ruler nobody recorded.
+
+So `instrument.aor_model = { provider, id, params: { url, configured } }` is written on
+every row:
+
+- `id` is the **served** model, read from `ocr llm test` (`Model:` is `resp.Model` when the
+  service sends one). This is the ruler.
+- `params.configured` is what the client asked for. Recorded beside the answer so an alias
+  is a visible fact rather than an assumption.
+- `params.url` is the endpoint.
+
+`evaluate` refuses to print a number when any of them differs from the frozen pin in
+`artifacts/preregistration.json`. If a future build compiles the model in, the honest value
+is still a statement — `bundled@<commit>` — because "fixed" has to be recorded too, or the
+field goes empty and nobody can tell a fixed model from an unrecorded one.
+
+### The one-shot lock
+
+A second run that starts after the first result was seen is no longer blind, and nothing
+about the artefact says so. The lock is mechanical, not a policy:
 
 ```bash
-npx tsx scripts/live-drill.ts --stage prepare --out runs/live/eval-ds-2.0.0-<stamp> \
+npx tsx scripts/live-drill.ts --stage prepare \
+  --allow-eval=eval-ds-2.0.0-<stamp>
+```
+
+- `--allow-eval` **carries the run name**; the bare flag is an error. The name is the token,
+  it decides the run directory, and it is written into `run.json`.
+- `prepare` scans `runs/live` for an `eval-*` run with the same `dataset_version`. If one
+  exists — completed or not — it refuses, unless the operator states why:
+  `--archive-and-restart="<reason>"`. The old run is moved to `runs/archive/`, the reason is
+  recorded in the new `run.json`, and the archive is what makes "we started over" auditable.
+- Restaging over the same name is refused too: a half-run is still a run.
+
+### Cost is estimated before staging, recorded during the run
+
+`prepare` runs `ocr scan` once on a generated scratch module (never a dataset sample) and
+reads `summary.total_tokens`. The estimate is `probe x 2` (AOR reviews a write twice: a
+preview pass and the scan) `x rows x 1.5` (correction headroom). If it exceeds
+`frozen.cost.ceiling_tokens` in the preregistration, the run is refused **before** anything
+is staged or archived: aborting halfway leaves a half dataset and spends the blind run
+anyway.
+
+`run` records each row's wall clock and tokens as it goes and totals them into
+`run.json.cost.actual`, but does not abort on cost: the money is already spent by then, and
+stopping would only lose the measurement.
+
+```bash
+npx tsx scripts/live-drill.ts --stage prepare --allow-eval=<name> \
   --allow-degraded=<gate>[,<gate>]
 ```
 
@@ -218,8 +281,8 @@ detectability number for it.
 ## Run
 
 ```bash
-# 1. mint the one named run directory (dataset version + UTC stamp)
-npx tsx scripts/live-drill.ts --stage prepare --new-run
+# 1. stage the one named run directory; the name is the one-shot token
+npx tsx scripts/live-drill.ts --stage prepare --allow-eval=eval-ds-2.0.0-<stamp>
 # 2..4. the same directory for the rest of the stages
 npx tsx scripts/live-drill.ts --stage run     --out runs/live/eval-ds-2.0.0-<stamp>
 npx tsx scripts/live-drill.ts --stage collect --out runs/live/eval-ds-2.0.0-<stamp>
@@ -228,28 +291,36 @@ npx tsx scripts/live-drill.ts --stage evaluate --out runs/live/eval-ds-2.0.0-<st
 
 Stages: `check` → `prepare` → `run` → `collect` → `evaluate` (`--stage <name>` runs one).
 `prepare` stages the eval positives the ruleset can gate (10 of 11 on `ds-2`) + **every
-defect-free low-risk row** (9 on `ds-2`: 8 edits + 1 create) + one dependency-hallucination
-probe per baseline (`B4`, `B4g`) in `<run>/scratch/<baseline>`, each its own git repo with
-the pinned rulesets copied in. `run` drives one headless DSH session per baseline (write
-pass, then a correction pass on the same session id), `collect` maps plugin `ReviewRow`s to
-the evaluator shape, and `evaluate` writes
+defect-free low-risk row** (8 on `ds-2`) + the single `create` behaviour sample + one
+dependency-hallucination probe per baseline (`B4`, `B4g`) in `<run>/scratch/<baseline>`,
+each its own git repo with the pinned rulesets copied in. `run` drives one headless DSH
+session per baseline (write pass, then a correction pass on the same session id), `collect`
+maps plugin `ReviewRow`s to the evaluator shape, and `evaluate` writes
 `artifacts/acceptance/{report.md,verdict.md,verdict.json}`.
+
+`prepare` refuses to start a second run for the same `dataset_version` unless it is told
+why (`--archive-and-restart="<reason>"`), and refuses a plan whose cost estimate exceeds
+the frozen ceiling. Both refusals happen before anything is staged or archived.
 
 ### The run directory is part of the measurement
 
 Every non-`check` stage refuses a directory whose leaf is not
 `eval-<dataset version>-<yyyyMMddTHHmmss>` (or `smoke-...`), and `collect`/`evaluate` refuse
 a directory whose `run.json` names another dataset. `run.json` records the dataset version,
-the config hash, the frozen pin, the plan shape and the waived gates. This is the same rule
-as instrument identity, applied to the dataset: a consumer that cannot check identity will
-eventually mix two measurements. The ds-1 staging that used to sit in `runs/live` beside the
-ds-2 run is exactly the entry point that rule closes.
+the config hash, the frozen pin (including the AOR model), the plan shape, the waived
+gates, the one-shot token and any archived restarts, `bundle_check: "mtime"` with both
+timestamps, the AOR probe, the cost estimate against its ceiling, and — after `run` — the
+actual tokens and wall clock. This is the same rule as instrument identity, applied to the
+dataset: a consumer that cannot check identity will eventually mix two measurements. The
+ds-1 staging that used to sit in `runs/live` beside the ds-2 run is exactly the entry point
+that rule closes.
 
-`plan.controls` stages nothing extra on `ds-2`; it remains for datasets whose negatives are
-`high` risk. Low-risk rows that carry a defect are **not** staged (`3` of them on `ds-2`,
-all fit-split positives): they would either inflate precision or put a vulnerable file into
-line 4's pairs. With no defect-free row at all the evaluator reports `precision: na` and
-fails line 1 instead of printing a vacuous `tp/tp = 1.0`.
+`plan.controls` stages the defect-free rows the low-risk pool did not take — on `ds-2` that
+is the single `create` sample, which is 38 lines and therefore `high` risk. Low-risk rows
+that carry a defect are **not** staged (`3` of them on `ds-2`, all fit-split positives):
+they would either inflate precision or put a vulnerable file into line 4's pairs. With no
+defect-free row at all the evaluator reports `precision: na` and fails line 1 instead of
+printing a vacuous `tp/tp = 1.0`.
 
 Every injected message carries its provenance: `via=<sources>[/agree]/sev=<source>` sits
 right after the anchor, so clipping cannot remove it.
@@ -268,15 +339,19 @@ right after the anchor, so clipping cannot remove it.
 
 - **`DEEPSEEK_API_KEY` is the only red gate.** The `ocr` pin is green again:
   `open-code-review v1.13.6 (04deca6)`, rebuilt from the pinned commit and protected by
-  `OCR_NO_UPDATE=1`. Everything else in the preflight passes, including `plugin bundle`
-  (`dist/plugin.js` rebuilt after the `instrument` change).
-- **A row now names the binary that answered.** `ReviewRow.instrument` carries
-  `{semgrep, ocr}` with `{name, version, commit, source}` next to the declared `toolchain`;
-  `evaluate` **refuses** (not warns) when a row's identity is missing, `declared` instead of
-  `observed`, mixed across rows, or different from `configs/b4.json`. This is the third
-  occurrence of "the artefact did not carry its own instrument" (`ts_all` vs `ts_dedup`,
-  `semgrep scan` vs `semgrep-core`, `ocr` drift), so it is now a schema field and a refusal
-  rather than a checklist item.
+  `OCR_NO_UPDATE=1`. It drifted back to `4236c87` once *after* being pinned — a detached
+  `scripts/update.js` from an earlier invocation completed minutes later, which is exactly
+  why the gate compares the binary and not the config. Everything else in the preflight
+  passes, including `plugin bundle` (`dist/plugin.js` rebuilt after the `instrument`
+  change), `aor model` (`deepseek` served `deepseek-flash`, tool-call round trip ok) and
+  `frozen pin`.
+- **A row names its instruments, down to the model.** `ReviewRow.instrument` carries
+  `{semgrep, ocr, aor_model}` next to the declared `toolchain`; `evaluate` **refuses** (not
+  warns) when a row's identity is missing, `declared` instead of `observed`, mixed across
+  rows, or different from the frozen pin. This is the fourth occurrence of "the artefact
+  did not carry its own instrument" (`ts_all` vs `ts_dedup`, `semgrep scan` vs
+  `semgrep-core`, `ocr` drift, and now the model behind AOR), so it is a schema field and a
+  refusal rather than a checklist item.
 - **Warn is a policy, not a probability.** `artifacts/calibration.json` carries
   `thresholds.status: "unfittable"` (`fit_negatives = 0`, 4 findings). Any path that
   claims a probability still propagates `unfittable` and refuses to invent a constant;
@@ -288,13 +363,20 @@ right after the anchor, so clipping cannot remove it.
   11 TypeScript (the drill stages one language), `POSITIVE_CAP_PER_CLASS = 4` over 5
   covered classes: 10 staged of 11 available, gate 20. The measured rate and its Wilson
   interval are printed as `descriptive, not gated`; `--allow-short` no longer exists.
-- **Line 4's pool exists now.** 9 defect-free low-risk rows (8 edits + 1 create);
+- **Line 4's pool exists now.** 8 defect-free low-risk rows (all edits); the create sample
+  is 38 lines, so it is `high` risk and stays out of the pair pool.
   `low_risk_pool` fails the dataset gate below 8.
 - **The create path is exercised once, not measured.** `ts-cwe022-9010` is a `create`
-  (`before = ""`, content = the vetted text of `ts-cwe022-9001`). It proves the create
-  branch is not dead code; `n = 1` and no precision claim is made for it. `event_kind` is
-  derived from `before === ""`, and the dataset gate fails if either kind disappears from
-  the pool.
+  (`before = ""`, 38 changed lines, content = the vetted text of `ts-cwe601-0001`). It
+  proves the create branch is not dead code; `n = 1` and no precision claim is made for it.
+  `event_kind` is derived from `before === ""`, and the dataset gate fails if either kind
+  disappears from the pool.
+- **A bigger create does not move its tier.** The static rule counts changed *files*
+  (`triage.tier0.filesMax = 3`), so one write is always tier 0 regardless of line count,
+  and AOR is skipped for it (`semgrep` and `registry` still run). The 30-line change makes
+  the sample a real write and keeps it out of the low-risk pool; reaching tier 1 on a
+  create needs a >3-file write, which is a different sample shape. `prepare` prints this
+  as a `NOTE`, so the report's create caveat is not read as "AOR covered it".
 - **JavaScript is `out_of_scope`.** 6 of the 35 rows are `.js`; the shipped config has no
   JavaScript subset and no `sMax['javascript']`, so they are never scanned. This is the
   second appearance of "declared != shipped" (the first was `ts_all` vs `ts_dedup`): the

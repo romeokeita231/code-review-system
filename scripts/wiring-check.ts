@@ -18,7 +18,8 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { evaluate, frozenInstrumentsOf, newRunDir, planDrill } from "./live-drill.js";
+import { evaluate, newRunDir, planDrill } from "./live-drill.js";
+import { loadFrozenPin } from "./frozen.js";
 
 const DECOY = "SYNTHETIC";
 
@@ -38,10 +39,16 @@ async function main(): Promise<void> {
 
   // The instrument block is read off the frozen pin, so the check exercises the
   // refusal path with real values; the rows themselves are synthetic.
-  const frozen = frozenInstrumentsOf(configPath);
+  const frozen = loadFrozenPin();
   const instrument = {
     semgrep: { name: "semgrep", version: frozen.semgrep.version, commit: null, source: "observed" as const },
     ocr: { name: "ocr", version: "synthetic", commit: frozen.ocr.commit, source: "observed" as const },
+    aor_model: {
+      provider: frozen.aor_model.provider,
+      id: frozen.aor_model.id,
+      params: { url: frozen.aor_model.url, configured: frozen.aor_model.configured },
+      source: "observed" as const,
+    },
   };
 
   const rows: Array<Record<string, unknown>> = [];
@@ -117,6 +124,14 @@ async function main(): Promise<void> {
     push({ sample: lowRisk.sampleId, baseline: "B4", latency_ms: 1000, tokens: 1000 });
     push({ sample: lowRisk.sampleId, baseline: "B4g", latency_ms: 1200, tokens: 1100 });
   }
+  // The defect-free rows outside the low-risk pool: on ds-2 that is the single
+  // create sample. Staged like a real row so the precision denominator renders
+  // both kinds; it stays out of line 4 because it is not `low` risk.
+  for (const control of plan.controls) {
+    push({ sample: control.sampleId, baseline: "B4", change_event: { sessionId: "wiring", ts, phase: "pre" } });
+    push({ sample: control.sampleId, baseline: "B4", latency_ms: 1000, tokens: 1000 });
+    push({ sample: control.sampleId, baseline: "B4g", latency_ms: 1200, tokens: 1100 });
+  }
 
   push({
     sample: plan.probe.sampleId,
@@ -147,7 +162,9 @@ async function main(): Promise<void> {
           low_risk: plan.lowRisk.length,
           controls: 0,
           probe: 1,
-          negatives_create: plan.lowRisk.filter((sample) => sample.eventKind === "create").length,
+          negatives_create: [...plan.positives, ...plan.lowRisk, ...plan.controls].filter(
+            (sample) => sample.eventKind === "create",
+          ).length,
         },
         degraded_gates: [],
       },

@@ -1,7 +1,7 @@
 {
   "version": "ds-2.0.0",
   "kind": "self",
-  "content_sha256_root": "88660232a43cb6d9c8ddc8598fd4a7ff79ec5221afdda886d9254477e9023e8a",
+  "content_sha256_root": "c911f9f2c960c1fe6d4f84ffc5d13147589ad2a0c2b50358d96517e6f40666c1",
   "declared": {
     "samples": 35,
     "positives": 26,
@@ -40,7 +40,7 @@
     "negatives_split": "eval",
     "defect_origin": "real",
     "defect_origin_basis": "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity; the single `create` row carries `origin.base_path`, the pinned file its text came from. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
-    "negative_encoding": "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective. One row is a `create` (`from` in rows.json): its `after` is the vetted text of another negative and `before` is empty, so the create path is exercised instead of being dead code. It is a smoke sample: n=1, no precision claim is made for it.",
+    "negative_encoding": "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free edit row is low risk and line 4 has a pool that is not defective. One row is a `create` (`from` in rows.json): its `after` is the vetted text of another negative and `before` is empty, so the create path is exercised instead of being dead code. It is 38 lines, so it is `high` risk and outside the low-risk pool; it is a behaviour sample, n=1, and no precision claim is made for it. Its write is still tier 0 (the static tier counts changed files, not lines), so semgrep and the registry review it while AOR does not.",
     "event_kinds": {
       "total": {
         "edit": 34,
@@ -55,7 +55,7 @@
     "contamination_rule": "high iff origin.kind=public_repo and (origin.advisory or source.pedagogical); else low. Category rule, no free parameter: star counts are evidence, not a gate.",
     "contamination_stars_as_of": "2026-11-12",
     "low_risk_negatives_required": 8,
-    "low_risk_negatives": 9,
+    "low_risk_negatives": 8,
     "supply_exhausted": [
       {
         "cwe": "078",
@@ -376,16 +376,16 @@
     },
     {
       "sample_id": "ts-cwe022-9010",
-      "group_id": "juice-shop:routes/logfileServerSafe.ts",
+      "group_id": "juice-shop:routes/redirectSafe.ts",
       "split": "eval",
       "cwe": null,
-      "risk_level": "low",
+      "risk_level": "high",
       "paired_safe": true,
       "language": "ts",
-      "path": "routes/logfileServerSafe.ts",
+      "path": "routes/redirectSafe.ts",
       "event_kind": "create",
-      "changed_lines": 26,
-      "content_sha256": "bff653e83d03e541192c51cccd25b12e4721c60c5a50c73ceb775ad9b74b02c2",
+      "changed_lines": 38,
+      "content_sha256": "417c1850df426a2469ee44ac8fc87b55c8103c88c8a37689a6ba87963e0002a7",
       "expected_detectable_by": []
     },
     {

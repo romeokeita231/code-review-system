@@ -1,7 +1,8 @@
 import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Instruments, ReviewRow, RunRecord } from "../src/contracts/index.js";
+import type { AorModel, Instruments, ReviewRow, RunRecord } from "../src/contracts/index.js";
+import { loadDataset } from "../src/l5/replay.js";
 import { coverageCounts, cweKey, declaredCoverage, loadRulesTable, semgrepLanguage } from "./coverage.js";
 import { arg } from "./shared.js";
 
@@ -51,12 +52,9 @@ export interface AcceptanceOptions {
   frozenInstruments?: FrozenInstruments;
 }
 
-/** The pin a run must be reproducible against: `configs/b4.json` as frozen. */
-export interface FrozenInstruments {
-  semgrep: { version: string };
-  /** `ocr` is pinned by build commit, not by release tag. */
-  ocr: { commit: string };
-}
+export type { FrozenInstruments } from "./frozen.js";
+import { loadFrozenPin } from "./frozen.js";
+import type { FrozenInstruments } from "./frozen.js";
 
 /** Wilson score interval for `k` successes in `n` trials; `null` when `n = 0`. */
 export function wilsonInterval(
@@ -138,7 +136,11 @@ export function assertInstrumentIdentity(
   const seen = new Map<string, Instruments>();
   for (const row of rows) {
     if (row.instrument === undefined) continue;
-    const key = `${row.instrument.semgrep.name}@${row.instrument.semgrep.version}|${row.instrument.ocr.name}@${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"})`;
+    const model = row.instrument.aor_model;
+    const key =
+      `${row.instrument.semgrep.name}@${row.instrument.semgrep.version}` +
+      `|${row.instrument.ocr.name}@${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"})` +
+      `|${model?.provider}/${model?.id ?? "none"}@${model?.params.url ?? "none"}`;
     seen.set(key, row.instrument);
   }
   if (seen.size > 1) problems.push(`rows were produced on ${seen.size} different instruments: ${[...seen.keys()].join(", ")}`);
@@ -156,6 +158,7 @@ export function assertInstrumentIdentity(
         `${key}: ocr commit ${instrument.ocr.commit ?? "none"} != frozen ${frozen.ocr.commit}`,
       );
     }
+    problems.push(...aorModelProblems(instrument.aor_model, frozen.aor_model, key));
   }
   if (problems.length > 0) {
     throw new Error(
@@ -163,6 +166,41 @@ export function assertInstrumentIdentity(
     );
   }
   return [...seen.values()][0]!;
+}
+
+/**
+ * The model is the deepest instrument: the `ocr` binary is pinned by commit,
+ * but the model it calls decides what AOR reports, is configurable, and can be
+ * swapped server-side under a fixed id.
+ *
+ * A row that cannot name the model that answered is not a measurement, so a
+ * missing block is a refusal, not a gap in a table. `id` is the served model;
+ * `configured` is what the client asked for, so an alias is recorded as an
+ * alias instead of being resolved by guesswork.
+ */
+function aorModelProblems(model: AorModel | undefined, frozen: FrozenInstruments["aor_model"], key: string): string[] {
+  if (model === undefined) return [`${key}: no aor model identity`];
+  const problems: string[] = [];
+  if (model.source !== "observed") {
+    problems.push(`${key}: aor model identity is declared, not observed`);
+  }
+  if (model.provider !== frozen.provider) {
+    problems.push(`${key}: aor provider ${model.provider} != frozen ${frozen.provider}`);
+  }
+  if (model.id !== frozen.id) {
+    problems.push(
+      `${key}: aor model ${model.id} != frozen ${frozen.id} - the service is answering with a different model than the one this run was frozen against`,
+    );
+  }
+  if (model.params.url !== frozen.url) {
+    problems.push(`${key}: aor endpoint ${model.params.url ?? "none"} != frozen ${frozen.url ?? "none"}`);
+  }
+  if (model.params.configured !== frozen.configured) {
+    problems.push(
+      `${key}: aor requested model ${model.params.configured ?? "none"} != frozen ${frozen.configured ?? "none"}`,
+    );
+  }
+  return problems;
 }
 
 export async function collectJsonl(root: string): Promise<string[]> {
@@ -194,46 +232,32 @@ export async function loadRuns(root: string): Promise<AcceptanceRowLike[]> {
 }
 
 /**
- * Defect spans for one sample file. The self set stores them as `defects[]`
- * (`line_start`/`line_end`, `file`); the imported sets store `labels[]`. Reading
- * only `labels` left every ds-2 row with `undefined` spans, so the evaluator
- * crashed on the last step of a run it had otherwise completed.
+ * Ground truth, read through the dataset's own schema.
+ *
+ * The earlier version hand-wrote the sample-file shape and guessed the field
+ * names, and guessed them wrong twice: the self set stores spans as `defects[]`
+ * and the class as `sample_cwe`, while the imported sets use `labels[]` and
+ * `cwe`. Both mistakes type-checked, because nothing on that boundary was
+ * derived from a schema. Reading through `loadDataset` means a renamed field is
+ * a compile error and a malformed row is a parse error, instead of a
+ * complete-looking report with an empty denominator.
  */
-export function labelSpansOf(file: Record<string, unknown>): LabelSpan[] {
-  const defects = file["defects"];
-  if (Array.isArray(defects)) {
-    return defects.map((defect) => {
-      const row = (typeof defect === "object" && defect !== null ? defect : {}) as Record<string, unknown>;
-      return {
-        path: String(row["file"] ?? ""),
-        startLine: Number(row["line_start"] ?? 0),
-        endLine: Number(row["line_end"] ?? 0),
-        cwe: row["cwe"] === null || row["cwe"] === undefined ? null : String(row["cwe"]),
-      };
-    });
-  }
-  const labels = file["labels"];
-  return Array.isArray(labels) ? (labels as LabelSpan[]) : [];
-}
-
 export async function loadTruth(datasetDir: string): Promise<Map<string, SampleTruth>> {
-  const manifest = JSON.parse(await readFile(join(datasetDir, "manifest.json"), "utf8")) as {
-    samples: Array<{ sample_id: string; split: string; risk_level: string; paired_safe: boolean; expected_detectable_by: string[] }>;
-  };
+  const { samples } = await loadDataset(datasetDir);
   const truth = new Map<string, SampleTruth>();
-  for (const entry of manifest.samples) {
-    const sample = JSON.parse(
-      await readFile(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
-    ) as Omit<SampleTruth, "sample_cwe"> & { cwe: string | null; sample_cwe?: string | null };
-    truth.set(entry.sample_id, {
-      ...sample,
-      language: String((sample as { language?: unknown }).language ?? ""),
-      // The self set names the class `sample_cwe`; the imported sets use `cwe`.
-      // Reading only `cwe` left every ds-2 row classless, so `covered()` was
-      // false for all of them and line 1 reported an empty denominator.
-      sample_cwe: sample.sample_cwe ?? sample.cwe ?? null,
-      labels: labelSpansOf(sample as unknown as Record<string, unknown>),
-      expected_detectable_by: entry.expected_detectable_by,
+  for (const sample of samples) {
+    truth.set(sample.sample_id, {
+      sample_id: sample.sample_id,
+      split: sample.split,
+      risk_level: sample.risk_level,
+      paired_safe: sample.paired_safe,
+      language: sample.language,
+      event_kind: sample.event_kind,
+      // `cwe` is the manifest's class for this row, already validated as
+      // `/^CWE-\d+$/` or null by `AnnotationSample`.
+      sample_cwe: sample.cwe,
+      labels: sample.labels,
+      expected_detectable_by: sample.expected_detectable_by,
     });
   }
   return truth;
@@ -367,6 +391,21 @@ export function evaluateAcceptance(
   const seen = new Set(rows.map((row) => row.sample));
   const availableN = gateable.length;
   const stagedN = gateable.filter((sample) => seen.has(sample.sample_id)).length;
+
+  // `insufficient_n` means "too few samples", and its precondition is that the
+  // truth and the rows describe the same population. Zero gateable samples next
+  // to a pile of rows is the opposite: the two sides disagree about which rows
+  // exist. That produced `n=0 available=0 excluded=10` once, a denominator that
+  // looked like a completed measurement. It is a wiring error, and it throws
+  // before any number is computed.
+  if (availableN === 0) {
+    throw new Error(
+      `no gateable eval positive: the truth and the rows do not describe the same population ` +
+        `(eval positives in the dataset: ${evalTruth.length}, rows seen: ${rows.length}, ` +
+        `never scanned: ${outOfScope.length}, outside the declared coverage: ${excluded.length}). ` +
+        `This is a wiring error, not a small sample: \`insufficient_n\` requires available >= 1.`,
+    );
+  }
 
   const overlapsTruth = (
     finding: { startLine: number; endLine: number },
@@ -618,6 +657,22 @@ export function evaluateAcceptance(
               ],
             ],
           ),
+          "",
+          table(
+            ["aor model", "served id", "requested", "endpoint", "source"],
+            [
+              [
+                instruments.aor_model.provider,
+                instruments.aor_model.id,
+                instruments.aor_model.params.configured ?? "-",
+                instruments.aor_model.params.url ?? "-",
+                instruments.aor_model.source,
+              ],
+            ],
+          ),
+          "",
+          "The model is the deepest instrument: `ocr`'s commit says which client asked, " +
+            "the served id says which model answered. Both are compared with the frozen pin.",
         ]),
     "",
     table(
@@ -694,7 +749,9 @@ export function evaluateAcceptance(
     instruments === null
       ? "量具身份：未核对（未提供冻结值）。"
       : `量具身份：semgrep ${instruments.semgrep.version}（observed）、` +
-        `ocr ${instruments.ocr.version}（${instruments.ocr.commit ?? "no commit"}，observed），与钉定值一致。`,
+        `ocr ${instruments.ocr.version}（${instruments.ocr.commit ?? "no commit"}，observed）、` +
+        `AOR 模型 ${instruments.aor_model.id}（requested ${instruments.aor_model.params.configured ?? "-"}，` +
+        `${instruments.aor_model.params.url ?? "-"}，observed），与钉定值一致。`,
     "",
     "结果表见 report.md；本文件只给结论，不把接口通过当质量结论。",
     "",
@@ -751,19 +808,15 @@ async function main(): Promise<void> {
   const gapsPath = resolve(arg("--gaps", "artifacts/block-gaps.json"));
   const outDir = resolve(arg("--out", "artifacts/acceptance"));
   const rulesPath = resolve(arg("--rules", "research/semgrep-bench/snapshot/rules_table.json"));
-  const configPath = resolve(arg("--config", "configs/b4.json"));
   const declared = declaredCoverage(loadRulesTable(rulesPath), arg("--language", "ts"));
   const gaps = existsSync(gapsPath) ? (JSON.parse(await readFile(gapsPath, "utf8")) as BlockGaps) : null;
-  // The pin, from the config the run claims to have used; the rows must agree.
-  const config = JSON.parse(await readFile(configPath, "utf8")) as {
-    sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
-  };
+  // The pin comes from the preregistration, not from the config: the config is
+  // the thing under test, and a report that reads its own goalposts can move
+  // them. The rows must agree with the frozen values or no number is printed.
+  const pin = loadFrozenPin();
   const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
-    frozenInstruments: {
-      semgrep: { version: config.sources?.semgrep?.version ?? "" },
-      ocr: { commit: config.sources?.aor?.versionCommit ?? "" },
-    },
+    frozenInstruments: pin,
   });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");

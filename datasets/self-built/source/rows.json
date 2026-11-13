@@ -852,24 +852,24 @@
     {
       "id": "ts-cwe022-9010",
       "repo": "juice-shop",
-      "path": "routes/logfileServerSafe.ts",
-      "from": "routes/logfileServer.ts",
+      "path": "routes/redirectSafe.ts",
+      "from": "routes/redirect.ts",
       "label": 0,
       "cwe": null,
       "defect": null,
       "patch": null,
-      "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb",
+      "blob_sha": "591f388daaaf30638ef860f9bad29a9111873243",
       "language": "ts",
-      "rationale": "文件名空值守卫（空名直接 400 返回）使 sink 不可达；内容沿用 ts-cwe022-9001 的已过审安全文本，作为新文件写入，只用于证明 create 分支不是死代码，n=1 不作精度主张",
+      "rationale": "redirect 目标先经 security.isRedirectAllowed 白名单校验，文件内已有 400 早退，sink 在但只能跳到白名单域；内容沿用 ts-cwe601-0001 的已过审安全文本，以新文件写入（45 行 > 30，因此不是 low risk，不计入 8 条 low-risk 池），只用于证明 create 分支不是死代码，n=1 不作精度主张",
       "evidence": null,
       "safe_patch": [
         {
-          "at": 12,
+          "at": 14,
           "del": 0,
           "ins": [
-            "    if (file.length === 0) {",
+            "    if (typeof toUrl !== 'string' || toUrl.length === 0) {",
             "      res.status(400)",
-            "      next(new Error('File name is required'))",
+            "      next(new Error('Missing redirect target'))",
             "      return",
             "    }",
             ""

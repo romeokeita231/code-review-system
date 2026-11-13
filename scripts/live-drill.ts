@@ -1,14 +1,15 @@
 import { execa } from "execa";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
-import { calibrationCategories } from "../src/contracts/index.js";
+import { calibrationCategories, DatasetManifest } from "../src/contracts/index.js";
 import { assertCalibrationMatches, loadCalibration, sha256, TOOL_ENV } from "../src/config/index.js";
-import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { evaluateAcceptance, labelSpansOf, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
+import { configuredModelOf, parseAorProbe } from "../src/l2/index.js";
+import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
+import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
 import {
   coverageCounts,
@@ -205,10 +206,11 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     eventKind: sample.event_kind,
   }));
 
-  // Defect-free rows that line 4 did not take. With eight low-risk negatives
-  // this is empty by construction: the low-risk pool *is* the precision
-  // denominator, and `evaluateAcceptance` counts it from the ground truth, not
-  // from this list.
+  // Defect-free rows that the low-risk pool did not take. A create sample that
+  // is deliberately larger than 30 lines is defect-free but no longer `low`
+  // risk, so it lands here: staged and exercised, outside line 4's pair pool
+  // (which `evaluateAcceptance` rebuilds from the ground truth, not from this
+  // list).
   const stagedControlIds = new Set(lowRisk.map((sample) => sample.sampleId));
   const controls = loaded.samples
     .filter((sample) => sample.labels.length === 0 && !chosen.has(sample.sample_id))
@@ -287,18 +289,15 @@ export interface LoadedDataset {
 }
 
 /** Defect spans: `defects[]` on the self set, `labels[]` on the imported ones. */
-function labelsOf(file: Record<string, unknown>): Array<{ path: string; startLine: number; endLine: number; cwe: string | null }> {
-  return labelSpansOf(file);
-}
-
 function loadDatasetSync(datasetDir: string, requestedLanguage?: string): LoadedDataset {
   // loadDataset is async; the plan is pure so callers can plan before any
-  // staging. Keep one synchronous read path for determinism.
-  const manifest = JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")) as {
-    version?: string;
-    samples: Array<Record<string, unknown> & { sample_id: string }>;
-  };
-  const version = typeof manifest.version === "string" ? manifest.version : "";
+  // staging. Keep one synchronous read path for determinism, but read the
+  // manifest through its schema: a hand-written shape let the plan decide on a
+  // field the rest of the system spelled differently.
+  const manifest = DatasetManifest.parse(
+    JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")),
+  );
+  const version = manifest.version;
   const rows = manifest.samples.map((entry) => {
     const file = JSON.parse(
       readFileSync(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
@@ -342,7 +341,17 @@ export interface StageOptions {
    * degraded a gate is not the same run as one that did not.
    */
   degradedGates?: string[];
+  /** The pin this run must be reproducible against, frozen before it started. */
+  frozen: FrozenInstruments;
+  /** What the probes saw; `null` fields mean "not probed", never "fine". */
+  evidence: RunEvidence;
+  /** The one-shot token: the run name, and any run it archived to get here. */
+  oneShot: OneShot;
 }
+
+/** Where the frozen values live. A pin that is only in someone's head is not a pin. */
+export { PREREGISTRATION, loadCostCeiling, loadFrozenPin } from "./frozen.js";
+import { loadCostCeiling, loadFrozenPin, PREREGISTRATION } from "./frozen.js";
 
 /** A run directory is self-identifying: eval-<dataset>-<timestamp>. */
 export const RUN_DIR_PATTERN = /^(?:eval|smoke)-[A-Za-z0-9._-]+-\d{8}T\d{6}$/;
@@ -370,25 +379,89 @@ export function newRunDir(root: string, datasetVersion: string, kind: "eval" | "
   return join(root, `${kind}-${version}-${stamp}`);
 }
 
+export interface RunEvidence {
+  /** How `plugin bundle` was judged, and what it saw. */
+  bundle: {
+    check: "mtime";
+    bundle: string;
+    bundle_mtime: string;
+    newest_source: string;
+    newest_source_mtime: string;
+  } | null;
+  /** `ocr llm test`: which model answered, and whether the tool loop works. */
+  aor_probe: {
+    ok: boolean;
+    provider: string;
+    served: string | null;
+    url: string | null;
+    configured: string | null;
+    elapsed_ms: number;
+  } | null;
+  /** A scratch `ocr scan`: the token cost of one file, measured. */
+  cost_probe: {
+    tokens: number;
+    elapsed_ms: number;
+    file_lines: number;
+    model: string | null;
+    ran_at: string;
+  } | null;
+  /** What that probe implies for this plan, against the declared ceiling. */
+  cost_estimate: {
+    tokens: number;
+    ceiling_tokens: number;
+    rows: number;
+    probe_tokens: number;
+    method: string;
+  } | null;
+}
+
+export interface OneShot {
+  run: string;
+  at: string;
+  /** Runs with the same dataset version that were archived to make room. */
+  restarts: Array<{ archived: string; reason: string }>;
+}
+
 export interface RunManifest {
   dataset_version: string;
   dataset_dir: string;
   config_hash: string;
-  /** The pin the numbers must be reproduced against. */
-  frozen_instruments: { semgrep: { version: string }; ocr: { commit: string } };
+  /** The pin the numbers must be reproduced against, frozen before the run. */
+  frozen_instruments: FrozenInstruments;
   created_at: string;
   plan: { positives: number; low_risk: number; controls: number; probe: number; negatives_create: number };
   degraded_gates: string[];
+  /** A proxy, and the manifest says so: the bundle is compared by mtime. */
+  bundle_check: "mtime" | null;
+  evidence: RunEvidence;
+  cost: {
+    estimate_tokens: number | null;
+    ceiling_tokens: number | null;
+    rows: number;
+    method: string;
+    actual: { tokens: number; rows: number; rows_without_tokens: number; wall_ms: number } | null;
+  };
+  one_shot: OneShot;
 }
 
-/** The pin, read from the config the run claims to use. */
-export function frozenInstrumentsOf(baseConfig: string): RunManifest["frozen_instruments"] {
-  const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
-    sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
-  };
+/**
+ * What a fresh bundle looks like. `mtime` is a proxy: a checkout or a `touch`
+ * moves it without changing the artefact, so it can be wrong in both
+ * directions (usually red, which fails safe). It is recorded as `mtime` in
+ * `run.json` so a later reader knows the judgement was a proxy; the upgrade is
+ * a content hash injected at build time, tracked separately.
+ */
+async function bundleEvidence(): Promise<RunEvidence["bundle"]> {
+  const bundle = resolve("dist/plugin.js");
+  if (!existsSync(bundle)) return null;
+  const newest = await newestSource("src");
+  if (newest === null) return null;
   return {
-    semgrep: { version: base.sources?.semgrep?.version ?? "" },
-    ocr: { commit: base.sources?.aor?.versionCommit ?? "" },
+    check: "mtime",
+    bundle,
+    bundle_mtime: new Date((await stat(bundle)).mtimeMs).toISOString(),
+    newest_source: newest.path,
+    newest_source_mtime: new Date(newest.at).toISOString(),
   };
 }
 
@@ -397,16 +470,35 @@ async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
     dataset_version: options.plan.datasetVersion,
     dataset_dir: resolve(options.datasetDir),
     config_hash: sha256(await readFile(options.baseConfig, "utf8")),
-    frozen_instruments: frozenInstrumentsOf(options.baseConfig),
+    frozen_instruments: options.frozen,
     created_at: new Date().toISOString(),
     plan: {
       positives: options.plan.positives.length,
       low_risk: options.plan.lowRisk.length,
       controls: options.plan.controls.length,
       probe: 1,
-      negatives_create: options.plan.lowRisk.filter((sample) => sample.eventKind === "create").length,
+      // Counted over the staged dataset rows, not over `lowRisk`: the create
+      // sample is too large to be low risk now (it needs to be a real write),
+      // and it is still staged as a behaviour sample. The dep probe is not a
+      // dataset row and is not counted here.
+      negatives_create: [...options.plan.positives, ...options.plan.lowRisk, ...options.plan.controls].filter(
+        (sample) => sample.eventKind === "create",
+      ).length,
     },
     degraded_gates: [...(options.degradedGates ?? [])],
+    bundle_check: options.evidence.bundle?.check ?? null,
+    evidence: options.evidence,
+    cost: {
+      estimate_tokens: options.evidence.cost_estimate?.tokens ?? null,
+      ceiling_tokens: options.evidence.cost_estimate?.ceiling_tokens ?? null,
+      rows: options.evidence.cost_estimate?.rows ?? 2 * allSamples(options.plan).length,
+      method:
+        options.evidence.cost_estimate?.method ??
+        "probe tokens x 2 (preview + scan) x staged rows x 1.5 (correction headroom); " +
+          "an upper bound on AOR spend, not a prediction of the driver's tokens",
+      actual: null,
+    },
+    one_shot: options.oneShot,
   };
   await writeFile(join(options.outDir, "run.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   return manifest;
@@ -584,6 +676,8 @@ export function dshBinPath(): string {
 export interface Preflight {
   ok: boolean;
   checks: Array<{ name: string; ok: boolean; detail: string }>;
+  /** What the probes saw, carried into `run.json` so the numbers have evidence. */
+  evidence: RunEvidence;
 }
 
 export interface PreflightOptions {
@@ -593,6 +687,10 @@ export interface PreflightOptions {
   datasetDir?: string;
   /** Commit the AOR numbers must come from; empty means the pin is not asserted. */
   aorCommit?: string;
+  /** The config whose declared pin is compared with the frozen one. */
+  baseConfig?: string;
+  /** The frozen pin; when given, config and probe are both compared with it. */
+  frozen?: FrozenInstruments;
 }
 
 /**
@@ -638,8 +736,58 @@ async function newestSource(dir: string): Promise<{ path: string; at: number } |
   return newest;
 }
 
+/** The pin as the config declares it. Only ever compared with the frozen pin. */
+function frozenFromConfig(baseConfig: string): { semgrep: { version: string }; ocr: { commit: string } } {
+  const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
+    sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
+  };
+  return {
+    semgrep: { version: base.sources?.semgrep?.version ?? "" },
+    ocr: { commit: base.sources?.aor?.versionCommit ?? "" },
+  };
+}
+
+function sameCommitText(a: string, b: string): boolean {
+  return a.length > 0 && b.length > 0 && (a.startsWith(b) || b.startsWith(a));
+}
+
+async function trackedFiles(): Promise<string[]> {
+  const listed = await execa("git", ["ls-files", "-z"], { reject: true });
+  return `${listed.stdout ?? ""}`.split("\0").filter((file) => file.length > 0);
+}
+
+async function trackedFileCount(): Promise<number> {
+  return (await trackedFiles()).length;
+}
+
+/**
+ * Files under version control whose bytes contain `needle`.
+ *
+ * `git grep` would put the secret on a command line, where every process on the
+ * machine can read it; this reads the working tree instead. Binary files are
+ * safe to search this way because the comparison is on raw bytes.
+ */
+async function trackedFilesContaining(needle: string): Promise<string[]> {
+  if (needle.length < 8) {
+    throw new Error("the key is shorter than 8 characters, which is not a usable credential");
+  }
+  const hits: string[] = [];
+  for (const file of await trackedFiles()) {
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(file);
+    } catch {
+      continue;
+    }
+    if (bytes.length > 8_000_000) continue;
+    if (bytes.includes(needle, 0, "utf8")) hits.push(file);
+  }
+  return hits;
+}
+
 export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
+  const evidence: RunEvidence = { bundle: null, aor_probe: null, cost_probe: null, cost_estimate: null };
   const env = { ...process.env, PATH: toolPath(), ...TOOL_ENV };
 
   const run = async (name: string, file: string, args: string[], cwd = process.cwd()) => {
@@ -648,7 +796,9 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     checks.push({
       name,
       ok: result.exitCode === 0,
-      detail: result.exitCode === 0 ? output.split("\n")[0] ?? "" : output.slice(-400),
+      // One line only: `semgrep scan --json` prints its whole envelope on one
+      // line, which otherwise buries the rest of the table.
+      detail: result.exitCode === 0 ? (output.split("\n")[0] ?? "").slice(0, 160) : output.slice(-400),
     });
     return result.exitCode === 0;
   };
@@ -725,22 +875,122 @@ export async function preflight(profile: string, options: PreflightOptions = {})
   // tree passes every other gate and then writes rows in the old shape, which the
   // evaluator refuses - after the one eval has been spent. This is the same
   // "declared != shipped" family as `ts_all` vs `ts_dedup`, so it is a gate.
+  //
+  // The comparison is mtime, which is a proxy: a checkout or a copy moves it
+  // without touching the artefact, and source edited back to its old text still
+  // looks new. It fails red more often than green, so it is kept for now, but
+  // the manifest records `bundle_check: "mtime"` and the check prints both
+  // timestamps, so a false red is diagnosable in one line.
   try {
-    const bundle = resolve("dist/plugin.js");
-    if (!existsSync(bundle)) throw new Error("dist/plugin.js is missing: run `npm run build`");
-    const bundleMtime = (await stat(bundle)).mtimeMs;
-    const newest = await newestSource("src");
-    if (newest === null) throw new Error("no sources under src/ to compare against");
-    if (newest.at > bundleMtime) {
-      throw new Error(`${newest.path} is newer than dist/plugin.js: run \`npm run build\``);
+    const bundle = await bundleEvidence();
+    if (bundle === null) {
+      throw new Error(
+        !existsSync(resolve("dist/plugin.js"))
+          ? "dist/plugin.js is missing: run `npm run build`"
+          : "no sources under src/ to compare against",
+      );
     }
-    checks.push({ name: "plugin bundle", ok: true, detail: `dist/plugin.js covers ${newest.path}` });
+    evidence.bundle = bundle;
+    if (Date.parse(bundle.newest_source_mtime) > Date.parse(bundle.bundle_mtime)) {
+      throw new Error(
+        `${bundle.newest_source} (${bundle.newest_source_mtime}) is newer than ` +
+          `${bundle.bundle} (${bundle.bundle_mtime}): run \`npm run build\``,
+      );
+    }
+    checks.push({
+      name: "plugin bundle",
+      ok: true,
+      detail:
+        `${bundle.bundle} mtime=${bundle.bundle_mtime} >= newest src ` +
+        `${bundle.newest_source} mtime=${bundle.newest_source_mtime} (proxy: mtime)`,
+    });
   } catch (error) {
     checks.push({
       name: "plugin bundle",
       ok: false,
       detail: (error as Error).message.slice(-400),
     });
+  }
+  // `ocr`'s commit says which client asked; this says which model answered.
+  // The probe is a real request, not a config read: an expired key or an empty
+  // quota passes every local check and then degrades every AOR row, which is
+  // the one thing P2/P4 cannot survive.
+  const probeStarted = Date.now();
+  const aorProbe = await execa("ocr", ["llm", "test"], { env, reject: false, timeout: 120_000 });
+  const aorText = `${aorProbe.stdout ?? ""}\n${aorProbe.stderr ?? ""}`.trim();
+  const parsedAor = parseAorProbe(aorText);
+  const aorElapsed = Date.now() - probeStarted;
+  const aorOk =
+    aorProbe.exitCode === 0 && parsedAor.served !== null && parsedAor.roundTrip;
+  evidence.aor_probe = {
+    ok: aorOk,
+    provider: parsedAor.provider,
+    served: parsedAor.served,
+    url: parsedAor.url,
+    configured: configuredModelOf(parsedAor.provider),
+    elapsed_ms: aorElapsed,
+  };
+  checks.push({
+    name: "aor model",
+    ok: aorOk,
+    detail: aorOk
+      ? `${parsedAor.provider} served ${parsedAor.served} ` +
+        `(requested ${evidence.aor_probe.configured ?? "unknown"}) at ${parsedAor.url ?? "?"} ` +
+        `in ${aorElapsed}ms, tool round trip ok`
+      : `probe failed in ${aorElapsed}ms: ${aorText.split("\n").slice(-3).join(" ").slice(-300)}`,
+  });
+  // The pin is a claim about *this* run; the config is the thing under test.
+  // Comparing them means an edit to the config cannot silently move the pin.
+  if (options.frozen !== undefined) {
+    const configPin = frozenFromConfig(
+      options.baseConfig ?? resolve(arg("--config", "configs/b4.json")),
+    );
+    const mismatches: string[] = [];
+    if (configPin.semgrep.version !== options.frozen.semgrep.version) {
+      mismatches.push(
+        `config semgrep ${configPin.semgrep.version} != frozen ${options.frozen.semgrep.version}`,
+      );
+    }
+    if (!sameCommitText(configPin.ocr.commit, options.frozen.ocr.commit)) {
+      mismatches.push(`config ocr ${configPin.ocr.commit} != frozen ${options.frozen.ocr.commit}`);
+    }
+    if (aorOk && parsedAor.served !== options.frozen.aor_model.id) {
+      mismatches.push(
+        `served model ${parsedAor.served} != frozen ${options.frozen.aor_model.id} ` +
+          `- the service is answering with a different ruler than the one this run is frozen against`,
+      );
+    }
+    checks.push({
+      name: "frozen pin",
+      ok: mismatches.length === 0,
+      detail:
+        mismatches.length === 0
+          ? `${PREREGISTRATION} agrees with the config and with the probes`
+          : mismatches.join("; "),
+    });
+  }
+  // The repository is public. A key that lands in a tracked file is a leak no
+  // `.gitignore` can undo, so the check reads the key from the environment and
+  // greps the *tracked* tree for its value. Paths are printed; the value is not.
+  const secret = process.env["DEEPSEEK_API_KEY"] ?? "";
+  if (secret.length > 0) {
+    try {
+      const leaks = await trackedFilesContaining(secret);
+      checks.push({
+        name: "secret not tracked",
+        ok: leaks.length === 0,
+        detail:
+          leaks.length === 0
+            ? `DEEPSEEK_API_KEY not found in ${await trackedFileCount()} tracked files`
+            : `DEEPSEEK_API_KEY appears in ${leaks.length} tracked file(s): ${leaks.slice(0, 5).join(", ")}`,
+      });
+    } catch (error) {
+      checks.push({
+        name: "secret not tracked",
+        ok: false,
+        detail: `could not scan tracked files: ${(error as Error).message.slice(-300)}`,
+      });
+    }
   }
   const profileCheck = await execa(process.execPath, [dshBinPath(), "plugin", "--profile", profile, "list"], {
     env,
@@ -766,7 +1016,7 @@ export async function preflight(profile: string, options: PreflightOptions = {})
         "semgrep cannot scan here; line1 has no mechanical-block evidence until this is fixed (see the crash above)",
     });
   }
-  return { ok: checks.every((check) => check.ok), checks };
+  return { ok: checks.every((check) => check.ok), checks, evidence };
 }
 
 export async function runTask(options: RunOptions, prompt: string): Promise<{ stdout: string; sessionId: string | null }> {
@@ -793,6 +1043,211 @@ export async function runDsh(options: RunOptions): Promise<{ stdout: string; ses
   const scratch = join(options.outDir, "scratch", options.baseline);
   const prompt = options.correction ? CORRECTION_PROMPT : writePrompt(planCount(scratch));
   return runTask(options, prompt);
+}
+
+/**
+ * A neutral forty-line module, generated here so the cost probe never touches a
+ * dataset sample. It is not a benchmark of review quality - it is a
+ * measurement of what one file costs, which is what the ceiling is about.
+ */
+const COST_PROBE_BODY = `export interface Row {
+  id: string;
+  kind: "alpha" | "beta";
+  weight: number;
+}
+
+export interface Totals {
+  alpha: number;
+  beta: number;
+  weight: number;
+}
+
+export function emptyTotals(): Totals {
+  return { alpha: 0, beta: 0, weight: 0 };
+}
+
+export function addRow(totals: Totals, row: Row): Totals {
+  const weight = Number.isFinite(row.weight) ? row.weight : 0;
+  return row.kind === "alpha"
+    ? { ...totals, alpha: totals.alpha + 1, weight: totals.weight + weight }
+    : { ...totals, beta: totals.beta + 1, weight: totals.weight + weight };
+}
+
+export function summarize(rows: readonly Row[]): Totals {
+  return rows.reduce(addRow, emptyTotals());
+}
+
+export function heaviest(rows: readonly Row[]): Row | null {
+  let best: Row | null = null;
+  for (const row of rows) {
+    if (best === null || row.weight > best.weight) best = row;
+  }
+  return best;
+}
+`;
+
+/**
+ * What one file costs, measured. Runs `ocr scan` on the generated module and
+ * reads `summary.total_tokens` out of the JSON envelope.
+ *
+ * It has to be a real request: a config read cannot tell a working key from an
+ * exhausted quota, and the ceiling exists precisely to catch a run that would
+ * spend its budget on failures.
+ */
+export async function probeAorCost(command = "ocr", budgetTokens = 60_000): Promise<NonNullable<RunEvidence["cost_probe"]>> {
+  const dir = join(tmpdir(), `crs-aor-cost-probe-${Date.now()}`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "probe.ts"), COST_PROBE_BODY, "utf8");
+  const started = Date.now();
+  const result = await execa(
+    command,
+    [
+      "scan",
+      "--path",
+      "probe.ts",
+      "--format",
+      "json",
+      "--no-summary",
+      "--timeout",
+      "2",
+      "--max-tokens-budget",
+      String(budgetTokens),
+    ],
+    { cwd: dir, env: { ...process.env, ...TOOL_ENV }, reject: false, timeout: 300_000 },
+  );
+  const elapsed = Date.now() - started;
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `cost probe failed in ${elapsed}ms: ${`${result.stderr ?? ""}`.trim().split("\n").slice(-3).join(" ").slice(-300)}`,
+    );
+  }
+  let parsed: { summary?: { total_tokens?: unknown }; llm?: { model?: unknown } };
+  try {
+    parsed = JSON.parse(`${result.stdout ?? ""}`) as typeof parsed;
+  } catch {
+    throw new Error("cost probe did not return a JSON envelope");
+  }
+  const tokens = parsed.summary?.total_tokens;
+  if (typeof tokens !== "number" || tokens <= 0) {
+    throw new Error(`cost probe reported no token usage: ${String(tokens)}`);
+  }
+  return {
+    tokens: Math.trunc(tokens),
+    elapsed_ms: elapsed,
+    file_lines: COST_PROBE_BODY.split("\n").length,
+    model: typeof parsed.llm?.model === "string" ? parsed.llm.model : null,
+    ran_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * `probe x 2` because a reviewed write runs AOR twice (a preview pass and the
+ * scan); `x 1.5` for the correction pass. It is an upper bound, not a forecast:
+ * a bound that is too low would stop a run that is fine, which is the cheaper
+ * mistake of the two.
+ */
+export function estimateCostTokens(probeTokens: number, rows: number): number {
+  return Math.ceil(probeTokens * 2 * Math.max(1, rows) * 1.5);
+}
+
+/** A ceiling declared after the run started is not a ceiling. */
+export function assertCostCeiling(estimate: number, ceiling: number): void {
+  if (estimate > ceiling) {
+    throw new Error(
+      `refusing to start: the AOR cost probe implies up to ${estimate} tokens for this plan, ` +
+        `above the declared ceiling of ${ceiling}. Raise the ceiling in ${PREREGISTRATION} ` +
+        `deliberately, or stage fewer rows - not after seeing the result.`,
+    );
+  }
+}
+
+/**
+ * Run directories that already used this dataset version.
+ *
+ * A run is identified by its `run.json`, which is written before any row
+ * exists; a directory left without one was staged but never collected, and is
+ * still named, so it still blocks by name.
+ */
+export async function existingEvalRuns(liveRoot: string, datasetVersion: string): Promise<string[]> {
+  if (!existsSync(liveRoot)) return [];
+  const found: string[] = [];
+  for (const entry of await readdir(liveRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (!RUN_DIR_PATTERN.test(entry.name)) continue;
+    if (!entry.name.startsWith("eval-")) continue;
+    const manifestPath = join(liveRoot, entry.name, "run.json");
+    if (!existsSync(manifestPath)) {
+      found.push(entry.name);
+      continue;
+    }
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { dataset_version?: unknown };
+    if (manifest.dataset_version === datasetVersion) found.push(entry.name);
+  }
+  return found;
+}
+
+/**
+ * The one-shot lock.
+ *
+ * The risk is not malice: it is "it crashed, fix it and run it again". A second
+ * run that starts after the first result was seen is no longer blind, and
+ * nothing about it looks different in the artefact. So a used dataset version
+ * blocks until the operator names the reason and archives the old run; the
+ * reason lands in the new `run.json`.
+ */
+export async function assertOneShot(
+  outDir: string,
+  datasetVersion: string,
+  reason: string | null,
+): Promise<OneShot["restarts"]> {
+  const leaf = outDir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  const liveRoot = dirname(outDir);
+  const used = await existingEvalRuns(liveRoot, datasetVersion);
+  const blockers = [...new Set([...used, ...(existsSync(outDir) ? [leaf] : [])])];
+  if (blockers.length === 0) return [];
+  if (reason === null) {
+    throw new Error(
+      `refusing to start: dataset ${datasetVersion} was already measured by ${blockers.join(", ")}. ` +
+        `A second run after the first result is no longer blind. If starting over is the decision, ` +
+        `say why: --archive-and-restart="<reason>" (the old run is moved to runs/archive and the ` +
+        `reason is written into the new run.json).`,
+    );
+  }
+  const archiveRoot = join(dirname(liveRoot), "archive");
+  await mkdir(archiveRoot, { recursive: true });
+  const restarts: OneShot["restarts"] = [];
+  for (const name of blockers) {
+    const from = join(liveRoot, name);
+    const to = join(archiveRoot, `${name}-${Date.now()}`);
+    if (existsSync(from)) await rename(from, to);
+    restarts.push({ archived: name, reason });
+  }
+  return restarts;
+}
+
+/** Per-row wall clock and tokens are already on the rows; this is the total. */
+export async function recordActualCost(outDir: string): Promise<void> {
+  const manifestPath = join(outDir, "run.json");
+  if (!existsSync(manifestPath)) return;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as RunManifest;
+  let tokens = 0;
+  let rows = 0;
+  let missing = 0;
+  let wall = 0;
+  for (const baseline of ["B4", "B4g"] as const) {
+    const jsonl = join(outDir, baseline, "review.jsonl");
+    if (!existsSync(jsonl)) continue;
+    for (const line of readFileSync(jsonl, "utf8").split("\n")) {
+      if (line.trim().length === 0) continue;
+      const row = JSON.parse(line) as ReviewRow;
+      rows += 1;
+      wall += row.latency_ms;
+      if (typeof row.tokens === "number") tokens += row.tokens;
+      else missing += 1;
+    }
+  }
+  manifest.cost.actual = { tokens, rows, rows_without_tokens: missing, wall_ms: Math.round(wall) };
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
 function planCount(scratch: string): number {
@@ -933,12 +1388,21 @@ export async function evaluate(
  * `plugin bundle` is the fourth: the rows are written by `dist/plugin.js`, so a
  * bundle older than `src/` measures the previous version of the system and its
  * rows are in a shape the evaluator refuses - discovered after the eval is spent.
+ *
+ * `aor model`, `frozen pin` and `secret not tracked` joined it later. The first
+ * two are the same class as `ocr pin` (identity, one level deeper and one level
+ * earlier); the third keeps a short-lived credential out of a public tree, which
+ * is not a judgement call to waive. A gate that protects the measurement must
+ * not have a side door - the failure it prevents is invisible in the artefact.
  */
 export const NON_DEGRADABLE_GATES = [
   "ocr pin",
   "calibration artifact",
   "DEEPSEEK_API_KEY",
   "plugin bundle",
+  "aor model",
+  "frozen pin",
+  "secret not tracked",
 ] as const;
 
 export function parseDegradedGates(argv: readonly string[], known: readonly string[]): string[] {
@@ -967,16 +1431,53 @@ export function parseDegradedGates(argv: readonly string[], known: readonly stri
   return unique;
 }
 
+/**
+ * A flag that must carry a value. `--allow-eval` and `--archive-and-restart`
+ * are decisions; a bare flag is not one, and silently treating it as "yes" is
+ * how a second run starts without anyone deciding to have one.
+ */
+export function flagValue(argv: readonly string[], name: string): string | null {
+  let found: string | null = null;
+  for (let index = 0; index < argv.length; index += 1) {
+    const entry = argv[index]!;
+    if (entry === name) {
+      const next = argv[index + 1];
+      if (next === undefined || next.startsWith("--") || next.trim().length === 0) {
+        throw new Error(`${name} needs a value`);
+      }
+      found = next;
+      continue;
+    }
+    if (entry.startsWith(`${name}=`)) {
+      const value = entry.slice(name.length + 1).trim();
+      if (value.length === 0) throw new Error(`${name}= carries no value`);
+      found = value;
+    }
+  }
+  return found;
+}
+
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const allowEval = flagValue(argv, "--allow-eval");
+  const restartReason = flagValue(argv, "--archive-and-restart");
   const datasetDir = resolve(arg("--dataset", "datasets/self-built"));
   const baseConfig = resolve(arg("--config", "configs/b4.json"));
   const profile = arg("--profile", "crs-live");
   const stage = arg("--stage", "all");
   const acceptanceOut = resolve(arg("--acceptance-out", "artifacts/acceptance"));
+  const liveRoot = resolve(arg("--live-root", "runs/live"));
   const plan = planDrill(datasetDir, { rulesTablePath: resolve(arg("--rules", RULES_TABLE)) });
   const ruleset = pinnedTsRuleset(baseConfig);
   const aorCommit = pinnedAorCommit(baseConfig);
   const coverage: RuleCoverage = { language: plan.coverage.language, perCwe: plan.coverage.declared };
+  const isEvalStage = stage === "prepare" || stage === "all";
+  if (isEvalStage && allowEval === null) {
+    throw new Error(
+      "refusing to stage an eval run without --allow-eval=<run name>: the name is the one-shot " +
+        "token (it is recorded in run.json), and a run that can start by accident is not one-shot",
+    );
+  }
 
   process.stdout.write(
     `dataset: ${plan.datasetVersion}\n` +
@@ -990,18 +1491,42 @@ async function main(): Promise<void> {
       plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
   );
 
+  // The one `create` row is deliberately larger than 30 lines, which keeps it
+  // out of the low-risk pool. It does not, on its own, get the write into tier
+  // 1: the static rule counts changed *files* (`filesMax`), and one write is one
+  // file, so the review is tier 0 and AOR is skipped for it. Semgrep and the
+  // registry still run, so the create branch is executed; the AOR leg is not.
+  const createRow = allSamples(plan).find((sample) => sample.eventKind === "create" && sample.kind !== "dep-probe");
+  if (createRow !== undefined) {
+    const tier0 = JSON.parse(readFileSync(baseConfig, "utf8")).triage.tier0.filesMax as number;
+    process.stdout.write(
+      `NOTE create sample ${createRow.sampleId} is one file: the static tier rule counts changed files ` +
+        `(<= ${tier0} -> tier 0), not lines, so AOR is skipped for that row while semgrep and the registry run. ` +
+        `Reaching tier 1 on a create needs a >${tier0}-file write, which is a different sample shape.\n`,
+    );
+  }
+
   // Every stage but `check` needs a named run directory: an unnamed one is how
-  // the ds-1 staging ended up sitting next to the ds-2 run.
+  // the ds-1 staging ended up sitting next to the ds-2 run. For an eval run the
+  // name is also the one-shot token, so it comes from `--allow-eval`.
   const explicit = arg("--out", "");
   const wantsRunDir = stage !== "check";
   let outDir = explicit.length > 0 ? resolve(explicit) : "";
-  if (wantsRunDir && process.argv.includes("--new-run")) {
-    outDir = newRunDir(resolve(arg("--live-root", "runs/live")), plan.datasetVersion, stage === "smoke" ? "smoke" : "eval");
+  if (wantsRunDir && allowEval !== null) {
+    assertRunDir(allowEval);
+    const byName = join(liveRoot, allowEval);
+    if (outDir.length > 0 && resolve(outDir) !== resolve(byName)) {
+      throw new Error(`--out ${outDir} and --allow-eval=${allowEval} name different runs`);
+    }
+    outDir = byName;
+  }
+  if (wantsRunDir && outDir.length === 0 && argv.includes("--new-run")) {
+    outDir = newRunDir(liveRoot, plan.datasetVersion, stage === "smoke" ? "smoke" : "eval");
   }
   if (wantsRunDir) {
     if (outDir.length === 0) {
       throw new Error(
-        `--stage ${stage} needs --out=<named run dir> or --new-run; ` +
+        `--stage ${stage} needs --out=<named run dir> or --allow-eval=<run name>; ` +
           `a name looks like eval-${plan.datasetVersion}-<yyyyMMddTHHmmss>`,
       );
     }
@@ -1010,7 +1535,14 @@ async function main(): Promise<void> {
   }
 
   if (stage === "check") {
-    const result = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
+    const result = await preflight(profile, {
+      plan,
+      ruleset,
+      datasetDir,
+      aorCommit,
+      baseConfig,
+      frozen: loadFrozenPin(),
+    });
     process.stdout.write(
       `${result.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
     );
@@ -1018,7 +1550,16 @@ async function main(): Promise<void> {
     return;
   }
   if (stage === "smoke") {
-    await stageDrill({ datasetDir, outDir, baseConfig, profile, plan });
+    await stageDrill({
+      datasetDir,
+      outDir,
+      baseConfig,
+      profile,
+      plan,
+      frozen: loadFrozenPin(),
+      evidence: { bundle: null, aor_probe: null, cost_probe: null, cost_estimate: null },
+      oneShot: { run: outDir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "", at: new Date().toISOString(), restarts: [] },
+    });
     const first = plan.positives[0]!;
     const run = await runTask(
       { outDir, profile, baseline: "B4", timeoutMs: 10 * 60_000 },
@@ -1032,16 +1573,18 @@ async function main(): Promise<void> {
         const row = JSON.parse(line) as ReviewRow;
         if (row.change_event.files?.[0] !== first.path) continue;
         process.stdout.write(
-          `${row.change_event.phase} mode=${row.mode} pre=${row.pre_decision} post=${row.post_decision} ` +
+          `${row.change_event.phase} mode=${row.mode} tier=${row.tier} pre=${row.pre_decision} post=${row.post_decision} ` +
             `status=${row.review_status} sources=${row.sources.map((s) => `${s.source}:${s.status}:${s.findings.length}`).join(",")} ` +
-            `instrument=${row.instrument.semgrep.version}/${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"})\n`,
+            `instrument=${row.instrument.semgrep.version}/${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"}) ` +
+            `model=${row.instrument.aor_model.id}\n`,
         );
       }
     }
     return;
   }
-  if (stage === "prepare" || stage === "all") {
-    const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
+  if (isEvalStage) {
+    const frozen = loadFrozenPin();
+    const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit, baseConfig, frozen });
     const known = ready.checks.map((check) => check.name);
     const allow = parseDegradedGates(process.argv, known);
     const waived = ready.checks.filter((check) => !check.ok && allow.includes(check.name));
@@ -1060,6 +1603,34 @@ async function main(): Promise<void> {
           `only a non-blocking gate may be waived, and only by name (--allow-degraded=<gate>)`,
       );
     }
+    // Cost before the one-shot lock: the ceiling check is the last thing that
+    // can still refuse without having touched anything, and archiving an old
+    // run for a run that then fails its own budget would destroy evidence.
+    const costProbe = await probeAorCost();
+    ready.evidence.cost_probe = costProbe;
+    const rows = 2 * allSamples(plan).length;
+    const ceiling = loadCostCeiling();
+    const estimate = estimateCostTokens(costProbe.tokens, rows);
+    assertCostCeiling(estimate, ceiling);
+    ready.evidence.cost_estimate = {
+      tokens: estimate,
+      ceiling_tokens: ceiling,
+      rows,
+      probe_tokens: costProbe.tokens,
+      method:
+        "probe tokens x 2 (preview + scan) x staged rows x 1.5 (correction headroom); " +
+        "an upper bound on AOR spend, not a prediction of the driver's tokens",
+    };
+    process.stdout.write(
+      `cost: probe ${costProbe.tokens} tokens/${costProbe.file_lines} lines in ${costProbe.elapsed_ms}ms ` +
+        `-> up to ${estimate} tokens for ${rows} rows (ceiling ${ceiling})\n`,
+    );
+    const restarts = await assertOneShot(outDir, plan.datasetVersion, restartReason);
+    if (restarts.length > 0) {
+      process.stdout.write(
+        `archived: ${restarts.map((entry) => `${entry.archived} (${entry.reason})`).join(", ")}\n`,
+      );
+    }
     await stageDrill({
       datasetDir,
       outDir,
@@ -1067,6 +1638,13 @@ async function main(): Promise<void> {
       profile,
       plan,
       degradedGates: waived.map((check) => check.name),
+      frozen,
+      evidence: ready.evidence,
+      oneShot: {
+        run: outDir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "",
+        at: new Date().toISOString(),
+        restarts,
+      },
     });
     process.stdout.write(`staged ${allSamples(plan).length} files per baseline in ${outDir}\n`);
   }
@@ -1091,6 +1669,9 @@ async function main(): Promise<void> {
         process.stdout.write(`${baseline} correction pass: ${fix.stdout.trim().slice(-200)}\n`);
       }
     }
+    // Recorded, never enforced here: aborting mid-run would leave a half
+    // dataset and spend the blind run anyway.
+    await recordActualCost(outDir);
   }
   if (stage === "collect" || stage === "all") {
     await collect(plan, outDir, datasetDir);

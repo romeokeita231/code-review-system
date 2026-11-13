@@ -19,8 +19,9 @@
  * lost once. `TOOL_ENV` turns it off for every process we spawn, so the binary
  * under measurement can only change when a human changes it.
  */
-import type { Instrument, Instruments, RunConfig } from "../contracts/index.js";
+import type { AorModel, Instrument, Instruments, RunConfig } from "../contracts/index.js";
 import { TOOL_ENV } from "../config/index.js";
+import { readFileSync } from "node:fs";
 
 /** Handed to every tool we spawn; `OCR_NO_UPDATE` is the self-update opt-out. */
 export const PROBE_ENV: Record<string, string> = { ...TOOL_ENV };
@@ -44,6 +45,12 @@ export function declaredInstruments(config: RunConfig): Instruments {
       name: "ocr",
       version: config.sources.aor.versionCommit,
       commit: config.sources.aor.versionCommit,
+      source: "declared",
+    },
+    aor_model: {
+      provider: "unrecorded",
+      id: "unrecorded",
+      params: { url: null, configured: null },
       source: "declared",
     },
   };
@@ -103,13 +110,72 @@ export function parseOcrVersion(text: string): { version: string; commit: string
 
 let pending: Promise<Instruments> | null = null;
 
-/** Ask the binaries that would do the measuring. Cached: one probe per process. */
+/**
+ * `ocr llm test` answers three questions at once: which endpoint, which model
+ * serving it, and whether the tool-call round trip works at all. The third is
+ * the one that matters - an AOR review is a tool-calling loop, and a model that
+ * cannot round-trip a tool call fails every review, not the probe.
+ *
+ * The printed `Model:` is the service's answer when it sends one
+ * (`resp.Model`), not the configured id, so this is the only place the served
+ * model is visible.
+ */
+export interface AorProbe {
+  provider: string;
+  url: string | null;
+  served: string | null;
+  roundTrip: boolean;
+}
+
+export function parseAorProbe(text: string): AorProbe {
+  const provider = text.match(/Source:\s*(?:provider:)?(.+)/)?.[1]?.trim() ?? "unknown";
+  const url = text.match(/^URL:\s*(\S+)/m)?.[1] ?? null;
+  const served = text.match(/^Model:\s*(\S+)/m)?.[1] ?? null;
+  const roundTrip = /tool-call round trip verified/i.test(text) || /Connection test successful/i.test(text);
+  return {
+    provider: provider.length > 0 ? provider : "unknown",
+    url,
+    served,
+    roundTrip,
+  };
+}
+
+/**
+ * What ocr's own config asks for. This is a *declared* read - the file the
+ * client would send - recorded next to the served id so an alias
+ * (`deepseek-chat` answered by `deepseek-flash`) is a visible fact rather than
+ * an assumption. It never substitutes for the observed id.
+ */
+export function configuredModelOf(provider: string): string | null {
+  try {
+    const home = process.env["USERPROFILE"] ?? process.env["HOME"] ?? "";
+    if (home.length === 0) return null;
+    const path = `${home}\\.opencodereview\\config.json`;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+      providers?: Record<string, { model?: unknown }>;
+    };
+    const model = parsed.providers?.[provider]?.model;
+    return typeof model === "string" && model.length > 0 ? model : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ask the binaries that would do the measuring. Cached: one probe per process.
+ *
+ * The AOR probe is a real request (`ocr llm test`), not a config read: the gate
+ * is "can it answer", not "is it configured". Its cost is a few thousand
+ * tokens once per process, which buys the served model id and a tool-call
+ * round trip that no local file can report.
+ */
 export function observeInstruments(config: RunConfig, probeFn = probe): Promise<Instruments> {
   if (pending !== null) return pending;
   pending = (async () => {
-    const [semgrep, ocr] = await Promise.all([
+    const [semgrep, ocr, aor] = await Promise.all([
       probeFn(config.sources.semgrep.command, ["--version"]),
       probeFn(config.sources.aor.command, ["--version"]),
+      probeFn(config.sources.aor.command, ["llm", "test"]),
     ]);
     const parsedSemgrep = semgrep.ok
       ? parseSemgrepVersion(semgrep.text)
@@ -121,7 +187,20 @@ export function observeInstruments(config: RunConfig, probeFn = probe): Promise<
       commit: value.commit,
       source: "observed",
     });
-    return { semgrep: observed("semgrep", parsedSemgrep), ocr: observed("ocr", parsedOcr) };
+    const aorProbe = parseAorProbe(aor.text);
+    // A probe that did not answer leaves the model `unavailable`, which the
+    // acceptance check refuses. That is the point: a row with no record of the
+    // model that wrote it is not a measurement.
+    const aorModel: AorModel = {
+      provider: aor.ok && aorProbe.provider.length > 0 ? aorProbe.provider : "unavailable",
+      id: aor.ok && aorProbe.served !== null ? aorProbe.served : "unavailable",
+      params: {
+        url: aorProbe.url,
+        configured: aor.ok ? configuredModelOf(aorProbe.provider) : null,
+      },
+      source: "observed",
+    };
+    return { semgrep: observed("semgrep", parsedSemgrep), ocr: observed("ocr", parsedOcr), aor_model: aorModel };
   })();
   return pending;
 }

@@ -97,6 +97,35 @@ eval 的探针，只能在冻结之后、作为唯一一次 eval 运行的一部
   `docs/toolchain.md`）。**「未钉定」不是运行可以携带的标签**：eval 只跑一次，在被替换的
   二进制上测得的数字永远无法在钉定二进制上复现。
 
+## 勘误六（2026-11-13）：量具的最深一层是 AOR 背后的模型，一次性必须是锁
+
+钉死 `ocr` 的 commit 只固定了**谁在提问**。决定 AOR 报什么的是**模型**，而模型既不在
+二进制里，也不受它约束：`~/.opencodereview/config.json` 请求 `deepseek-chat`，服务端
+实际以 `deepseek-flash` 作答。性质与 `ocr` 漂移完全相同——P2/P4 的数字会挂在一把没人
+记录的尺子上，而产物看起来完整。
+
+- 行记录 `instrument.aor_model = { provider, id, params: { url, configured } }`：`id` 是
+  **服务端作答的模型**（`ocr llm test` 打印的 `resp.Model`），`configured` 是客户端请求
+  的值。两者都记，「别名」才是事实而不是猜测。
+- 冻结值进 `artifacts/preregistration.json` 的 `frozen` 块，`prepare` 用它比对探针、
+  `evaluate` 用它拒绝行；`--stage check` 同时比对冻结值与 `configs/b4.json`，使配置改动
+  无法悄悄移动标尺。
+- 模型若被编译进二进制，要记成 `bundled@<commit>`：「固定」也必须作为陈述被记录，留空
+  与「未记录」无法区分。
+
+同一轮里还有两条同族裁定：
+
+- **一次性是锁，不是政策。** `--allow-eval` 必须带 run name（名字即 token，写进
+  `run.json`）；`prepare` 扫描 `runs/live`，同 `dataset_version` 已有 `eval-*` 目录即拒绝，
+  除非显式 `--archive-and-restart="<理由>"`（旧目录移入 `runs/archive`，理由写进新的
+  `run.json`）。真实风险不是恶意，而是「跑挂了修一下再跑一次」——第二次在看过第一次
+  结果之后运行，盲性当场作废，且产物上看不出任何区别。
+- **成本预估属于 `prepare`，不属于 `run`。** 探针实测 token × 行数超过事先声明的
+  ceiling 即拒绝启动；`run` 只逐行记录 wall clock 与 token，**不 abort**——中途停止既
+  留下半截数据集，又已经花掉盲性。
+- 公开仓库里不得出现 key：`check` 读环境变量里的值，在 **tracked** 文件中搜索该值，命中
+  即硬失败（强于任何 `.gitignore`）。密钥只能由人注入。
+
 ## Consequences
 
 - 阻断保证的范围是「认证规则 + 认证语言 + 文件 ≤100 KiB」，论文须按此边界写限制。

@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ReviewRow } from "../../src/contracts/index.js";
 import {
   allSamples,
+  assertCostCeiling,
+  assertOneShot,
   assertRunDir,
+  estimateCostTokens,
   evaluate,
-  frozenInstrumentsOf,
+  existingEvalRuns,
+  flagValue,
   newRunDir,
   NON_DEGRADABLE_GATES,
   parseDegradedGates,
@@ -19,6 +23,7 @@ import {
   toAcceptanceRows,
   writePrompt,
 } from "../../scripts/live-drill.js";
+import { loadFrozenPin } from "../../scripts/frozen.js";
 import { loadTruth } from "../../scripts/acceptance.js";
 
 const DATASET = "datasets/self-built";
@@ -59,6 +64,7 @@ async function synthetic(samples: SampleStub[], rules: unknown[]): Promise<{ dir
       before: "const a = 1;\n",
       after: "const a = 2;\n",
       changed_lines: 1,
+      event_kind: "edit",
       expected_detectable_by: stub.detectable ?? ["semgrep", "aor"],
       labels: stub.labels === false ? [] : [{ path: `src/${stub.id}.ts`, startLine: 1, endLine: 1, cwe: stub.cwe }],
     };
@@ -152,23 +158,35 @@ describe("live drill plan", () => {
     }
   });
 
-  it("stages every defect-free low-risk row for line4 and line1", () => {
-    // The negatives are small safe edits now, so a defect-free row is `low`
-    // risk: the same pool serves line 4's B4/B4g pairs and line 1's
-    // false-positive denominator. It is nine rows - eight edits and the create
-    // smoke sample - and staging fewer would drop a kind out of the denominator.
+  it("stages every defect-free low-risk row for line4, and the create sample outside that pool", () => {
+    // Eight small safe edits are `low` risk: the pool serves line 4's B4/B4g
+    // pairs and line 1's false-positive denominator. The create sample is now a
+    // 38-line new file, so it is `high` risk and leaves that pool - it is still
+    // staged (as a control) because a kind that is never written is a kind that
+    // is never exercised.
     const plan = planDrill(DATASET);
-    expect(plan.lowRisk.length).toBe(9);
-    expect(plan.lowRisk.filter((sample) => sample.eventKind === "create").length).toBe(1);
-    const defectFree = [...plan.lowRisk, ...plan.controls].filter((sample) => {
+    expect(plan.lowRisk.length).toBe(8);
+    expect(plan.lowRisk.filter((sample) => sample.eventKind === "create")).toHaveLength(0);
+    const staged = allSamples(plan);
+    const create = staged.filter((sample) => sample.eventKind === "create");
+    // The dep probe is a create too; one dataset create row must be among them.
+    expect(create.some((sample) => sample.sampleId === "ts-cwe022-9010")).toBe(true);
+    const createRow = JSON.parse(readSync(join(DATASET, "samples", "ts-cwe022-9010.json"), "utf8")) as {
+      before: string;
+      after: string;
+      changed_lines: number;
+    };
+    expect(createRow.before).toBe("");
+    // > 30 changed lines is what keeps it out of the low-risk pool.
+    expect(createRow.changed_lines).toBeGreaterThan(30);
+    for (const sample of plan.lowRisk) {
       const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
         defects: unknown[];
         risk_level: string;
       };
       expect(row.risk_level).toBe("low");
-      return row.defects.length === 0;
-    });
-    expect(defectFree.length).toBeGreaterThanOrEqual(8);
+      expect(row.defects).toHaveLength(0);
+    }
     expect(plan.warnings.some((warning) => warning.includes("no defect-free row"))).toBe(false);
   });
 
@@ -177,7 +195,7 @@ describe("live drill plan", () => {
       [
         { id: "ts-cwe079-0001", cwe: "CWE-079", detectable: ["aor"] },
         { id: "ts-cwe079-0002", cwe: "CWE-079", detectable: ["semgrep"] },
-        { id: "ts-cwe502-0001", cwe: "CWE-502", detectable: ["both"] },
+        { id: "ts-cwe502-0001", cwe: "CWE-502", detectable: ["semgrep", "aor"] },
         { id: "ts-cwe798-0003", cwe: "CWE-798", risk: "low", labels: false, pairedSafe: true },
       ],
       [{ id: "xss", languages: ["javascript", "typescript"], cwe: ["079"] }],
@@ -245,6 +263,12 @@ const row = (over: Partial<ReviewRow> = {}): ReviewRow => ({
   instrument: {
     semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "observed" },
     ocr: { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" },
+    aor_model: {
+      provider: "deepseek",
+      id: "deepseek-flash",
+      params: { url: "https://api.deepseek.com", configured: "deepseek-chat" },
+      source: "observed",
+    },
   },
   ...over,
 });
@@ -363,15 +387,46 @@ describe("run identity", () => {
       profile: "crs-live",
       plan,
       degradedGates: ["dsh profile"],
+      frozen: loadFrozenPin(),
+      evidence: {
+        bundle: {
+          check: "mtime",
+          bundle: "dist/plugin.js",
+          bundle_mtime: "2026-11-13T04:00:00.000Z",
+          newest_source: "src/l2/index.ts",
+          newest_source_mtime: "2026-11-13T03:00:00.000Z",
+        },
+        aor_probe: {
+          ok: true,
+          provider: "deepseek",
+          served: "deepseek-flash",
+          url: "https://api.deepseek.com",
+          configured: "deepseek-chat",
+          elapsed_ms: 2400,
+        },
+        cost_probe: { tokens: 3189, elapsed_ms: 1200, file_lines: 38, model: "deepseek-chat", ran_at: "2026-11-13T04:00:00Z" },
+        cost_estimate: {
+          tokens: 363546,
+          ceiling_tokens: 2000000,
+          rows: 38,
+          probe_tokens: 3189,
+          method: "probe x 2 x rows x 1.5",
+        },
+      },
+      oneShot: { run: outDir.split(/[\\/]/).pop()!, at: "2026-11-13T04:00:00Z", restarts: [] },
     });
 
     const manifest = readRunManifest(outDir, DATASET);
     expect(manifest.dataset_version).toBe("ds-2.0.0");
-    expect(manifest.frozen_instruments).toEqual({
-      semgrep: { version: "1.184.0" },
-      ocr: { commit: "04deca6" },
-    });
+    expect(manifest.frozen_instruments).toEqual(loadFrozenPin());
+    expect(manifest.frozen_instruments.aor_model.id).toBe("deepseek-flash");
     expect(manifest.degraded_gates).toEqual(["dsh profile"]);
+    // The manifest says the bundle judgement was a proxy, and what it saw.
+    expect(manifest.bundle_check).toBe("mtime");
+    expect(manifest.evidence.bundle?.newest_source).toBe("src/l2/index.ts");
+    expect(manifest.evidence.aor_probe?.served).toBe("deepseek-flash");
+    expect(manifest.cost.estimate_tokens).toBe(363546);
+    expect(manifest.cost.ceiling_tokens).toBe(2000000);
     expect(manifest.plan.negatives_create).toBe(1);
 
     for (const baseline of ["B4", "B4g"]) {
@@ -382,7 +437,7 @@ describe("run identity", () => {
     }
     // The staged text is the sample's `after`, so a create row really is a whole
     // file and an edit row is the whole edited file.
-    const create = plan.lowRisk.find((sample) => sample.eventKind === "create")!;
+    const create = allSamples(plan).find((sample) => sample.eventKind === "create")!;
     const staged = readSync(join(outDir, "scratch", "B4", create.staged), "utf8");
     const sample = JSON.parse(readSync(join(DATASET, "samples", `${create.sampleId}.json`), "utf8")) as {
       after: string;
@@ -390,6 +445,82 @@ describe("run identity", () => {
     };
     expect(sample.before).toBe("");
     expect(staged).toBe(sample.after);
+  });
+});
+
+describe("one-shot lock", () => {
+  const NAME = "eval-ds-2.0.0-20261113T120000";
+  const NEXT = "eval-ds-2.0.0-20261113T130000";
+
+  it("refuses a bare --allow-eval: the run name is the token", () => {
+    expect(() => flagValue(["--allow-eval"], "--allow-eval")).toThrow(/needs a value/);
+    expect(() => flagValue(["--allow-eval="], "--allow-eval")).toThrow(/carries no value/);
+    expect(flagValue([`--allow-eval=${NAME}`], "--allow-eval")).toBe(NAME);
+    expect(flagValue(["--allow-eval", NAME], "--allow-eval")).toBe(NAME);
+    expect(flagValue([], "--allow-eval")).toBeNull();
+  });
+
+  it("refuses a second run for a dataset version that was already measured", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-lock-"));
+    tempDirs.push(root);
+    const live = join(root, "live");
+    await mkdir(join(live, NAME), { recursive: true });
+    await writeFile(join(live, NAME, "run.json"), '{"dataset_version":"ds-2.0.0"}\n', "utf8");
+    expect(await existingEvalRuns(live, "ds-2.0.0")).toEqual([NAME]);
+    expect(await existingEvalRuns(live, "ds-1.0.0")).toEqual([]);
+    await expect(assertOneShot(join(live, NEXT), "ds-2.0.0", null)).rejects.toThrow(
+      /already measured/,
+    );
+  });
+
+  it("archives the used run and records the reason when the operator names one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-lock-"));
+    tempDirs.push(root);
+    const live = join(root, "live");
+    await mkdir(join(live, NAME), { recursive: true });
+    await writeFile(join(live, NAME, "run.json"), '{"dataset_version":"ds-2.0.0"}\n', "utf8");
+    const restarts = await assertOneShot(join(live, NEXT), "ds-2.0.0", "first attempt stalled");
+    expect(restarts).toEqual([{ archived: NAME, reason: "first attempt stalled" }]);
+    // Moved out of the live tree, so it no longer blocks, and kept as evidence.
+    expect(existsSync(join(live, NAME))).toBe(false);
+    expect(existsSync(join(root, "archive"))).toBe(true);
+  });
+
+  it("refuses to restage over the same name", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-lock-"));
+    tempDirs.push(root);
+    const live = join(root, "live");
+    await mkdir(join(live, NAME), { recursive: true });
+    await expect(assertOneShot(join(live, NAME), "ds-2.0.0", null)).rejects.toThrow(
+      /already measured/,
+    );
+  });
+});
+
+describe("cost ceiling", () => {
+  it("turns the probe into an upper bound and refuses above the declared ceiling", () => {
+    expect(estimateCostTokens(3189, 38)).toBe(Math.ceil(3189 * 2 * 38 * 1.5));
+    expect(() => assertCostCeiling(400_000, 200_000)).toThrow(/above the declared ceiling/);
+    // At the ceiling is allowed: the ceiling is a bound, not a target.
+    expect(() => assertCostCeiling(200_000, 200_000)).not.toThrow();
+  });
+});
+
+describe("frozen pin", () => {
+  it("reads the committed pin, including the model behind AOR", () => {
+    const pin = loadFrozenPin();
+    expect(pin.ocr.commit).toBe("04deca6");
+    expect(pin.aor_model.provider).toBe("deepseek");
+    expect(pin.aor_model.id).toBe("deepseek-flash");
+    expect(pin.aor_model.configured).toBe("deepseek-chat");
+  });
+
+  it("refuses a preregistration with no frozen instruments", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-pin-"));
+    tempDirs.push(root);
+    const path = join(root, "preregistration.json");
+    await writeFile(path, '{"dataset_version":"ds-2.0.0"}\n', "utf8");
+    expect(() => loadFrozenPin(path)).toThrow(/no frozen.instruments/);
   });
 });
 
@@ -406,7 +537,7 @@ describe("evaluate refuses a drifted measurement", () => {
           dataset_version: "ds-2.0.0",
           dataset_dir: DATASET,
           config_hash: "hash",
-          frozen_instruments: frozenInstrumentsOf("configs/b4.json"),
+          frozen_instruments: loadFrozenPin(),
           created_at: "2026-11-13T04:30:05Z",
           plan: { positives: 1, low_risk: 1, controls: 0, probe: 1, negatives_create: 1 },
           degraded_gates: [],
@@ -421,6 +552,12 @@ describe("evaluate refuses a drifted measurement", () => {
       ocr: drifted
         ? { name: "ocr", version: "v1.13.8", commit: "4236c87", source: "observed" as const }
         : { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" as const },
+      aor_model: {
+        provider: "deepseek",
+        id: "deepseek-flash",
+        params: { url: "https://api.deepseek.com", configured: "deepseek-chat" },
+        source: "observed" as const,
+      },
     };
     const rows = [
       toAcceptanceRows([row()], new Map([["src/a.ts", "ts-cwe079-0001"]]), "B4")[0]!,
@@ -434,7 +571,7 @@ describe("evaluate refuses a drifted measurement", () => {
     await expect(
       evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
         language: "typescript",
-        perCwe: {},
+        perCwe: { "079": 1 },
       }),
     ).rejects.toThrow(/refusing to report/);
   });
@@ -443,7 +580,7 @@ describe("evaluate refuses a drifted measurement", () => {
     const { root, outDir } = await collectedRun(false);
     const result = await evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
       language: "typescript",
-      perCwe: {},
+      perCwe: { "079": 1 },
     });
     expect(result.lines).toHaveLength(5);
     const report = readSync(join(root, "out", "report.md"), "utf8");

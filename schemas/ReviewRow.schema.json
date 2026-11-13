@@ -279,6 +279,65 @@
         "instrument": {
           "additionalProperties": false,
           "properties": {
+            "aor_model": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "params": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "configured": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "url",
+                    "configured"
+                  ],
+                  "type": "object"
+                },
+                "provider": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "observed",
+                    "declared"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "id",
+                "params",
+                "source"
+              ],
+              "type": "object"
+            },
             "ocr": {
               "additionalProperties": false,
               "properties": {
@@ -358,7 +417,8 @@
           },
           "required": [
             "semgrep",
-            "ocr"
+            "ocr",
+            "aor_model"
           ],
           "type": "object"
         },

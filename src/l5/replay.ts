@@ -56,7 +56,7 @@ export const LADDER: Baseline[] = ["B0", "B1", "B2", "B3", "B4g", "B4"];
  * replay layer scores against, so a row is never scored on a field it does not
  * carry.
  */
-function labelsOf(file: Record<string, unknown>): LabelSpan[] {
+export function labelsOf(file: Record<string, unknown>): LabelSpan[] {
   const defects = file["defects"];
   if (Array.isArray(defects)) {
     return defects.map((defect) => {
