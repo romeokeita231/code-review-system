@@ -1,4 +1,4 @@
-import { readFileSync as readSync } from "node:fs";
+import { existsSync, readFileSync as readSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,8 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ReviewRow } from "../../src/contracts/index.js";
 import {
   allSamples,
+  assertRunDir,
+  newRunDir,
+  NON_DEGRADABLE_GATES,
+  parseDegradedGates,
   POSITIVE_CAP_PER_CLASS,
   planDrill,
+  readRunManifest,
+  stageDrill,
   toAcceptanceRows,
   writePrompt,
 } from "../../scripts/live-drill.js";
@@ -69,7 +75,9 @@ describe("live drill plan", () => {
     // 20 the drill asks for, so the plan reports the shortfall in `warnings`.
     expect(plan.positives.length).toBeGreaterThan(0);
     expect(plan.positives.length).toBeLessThanOrEqual(20);
-    expect(plan.lowRisk.length).toBeLessThanOrEqual(8);
+    // The low-risk pool is line 1's false-positive denominator, so it is staged
+    // whole rather than capped: a cap would silently drop the create row.
+    expect(plan.lowRisk.length).toBeGreaterThanOrEqual(8);
     expect(plan.warnings.some((warning) => warning.includes("rows in another language"))).toBe(true);
     expect(plan.probe.kind).toBe("dep-probe");
     for (const sample of plan.positives) {
@@ -141,12 +149,14 @@ describe("live drill plan", () => {
     }
   });
 
-  it("stages eight defect-free low-risk rows for line4 and line1", () => {
+  it("stages every defect-free low-risk row for line4 and line1", () => {
     // The negatives are small safe edits now, so a defect-free row is `low`
-    // risk: the same eight rows serve line 4's B4/B4g pairs and line 1's
-    // false-positive denominator.
+    // risk: the same pool serves line 4's B4/B4g pairs and line 1's
+    // false-positive denominator. It is nine rows - eight edits and the create
+    // smoke sample - and staging fewer would drop a kind out of the denominator.
     const plan = planDrill(DATASET);
-    expect(plan.lowRisk.length).toBe(8);
+    expect(plan.lowRisk.length).toBe(9);
+    expect(plan.lowRisk.filter((sample) => sample.eventKind === "create").length).toBe(1);
     const defectFree = [...plan.lowRisk, ...plan.controls].filter((sample) => {
       const row = JSON.parse(readSync(join(DATASET, "samples", `${sample.sampleId}.json`), "utf8")) as {
         defects: unknown[];
@@ -229,6 +239,10 @@ const row = (over: Partial<ReviewRow> = {}): ReviewRow => ({
   latency_ms: 4,
   status: "ok",
   toolchain: { semgrep: "1.184.0", aor: "04deca6", crg: "python", node: "v22", platform: "win32" },
+  instrument: {
+    semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "observed" },
+    ocr: { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" },
+  },
   ...over,
 });
 
@@ -265,5 +279,113 @@ describe("acceptance row conversion", () => {
     const pre = row({ change_event: { ...row().change_event, phase: "pre" } });
     const converted = toAcceptanceRows([pre, row()], new Map([["src/a.ts", "s-1"]]), "B4");
     expect(converted.map((entry) => entry.change_event?.phase)).toEqual(["pre", "post"]);
+  });
+
+  it("carries the observed instrument through to the acceptance row", () => {
+    const [converted] = toAcceptanceRows([row()], new Map([["src/a.ts", "s-1"]]), "B4");
+    expect(converted?.instrument?.ocr.commit).toBe("04deca6");
+  });
+});
+
+describe("degraded gates", () => {
+  const known = ["semgrep version", "ocr pin", "dsh profile"];
+
+  it("refuses the bare flag: a waiver has to name its gate", () => {
+    expect(() => parseDegradedGates(["--allow-degraded"], known)).toThrow(/needs the gate names/);
+  });
+
+  it("refuses a gate that protects the measurement", () => {
+    for (const gate of NON_DEGRADABLE_GATES) {
+      expect(() => parseDegradedGates([`--allow-degraded=${gate}`], [...known, gate])).toThrow(
+        /never be degraded/,
+      );
+    }
+  });
+
+  it("refuses a gate name that does not exist", () => {
+    expect(() => parseDegradedGates(["--allow-degraded=semgrep scans"], known)).toThrow(/unknown gate/);
+  });
+
+  it("waives a named gate, once, and only that one", () => {
+    expect(
+      parseDegradedGates(["--allow-degraded=dsh profile", "--allow-degraded=dsh profile"], known),
+    ).toEqual(["dsh profile"]);
+  });
+});
+
+describe("run identity", () => {
+  it("refuses an unnamed run directory", () => {
+    // `runs/live` is exactly where the ds-1 staging and the ds-2 run would
+    // otherwise share a directory.
+    expect(() => assertRunDir("runs/live")).toThrow(/not a named run directory/);
+    expect(() => assertRunDir("runs/live/scratch")).toThrow(/not a named run directory/);
+  });
+
+  it("mints a stamped directory that carries the dataset version", () => {
+    const dir = newRunDir("runs/live", "ds-2.0.0", "eval", new Date("2026-11-13T04:30:05"));
+    expect(dir.replace(/\\/g, "/")).toMatch(/runs\/live\/eval-ds-2\.0\.0-\d{8}T\d{6}$/);
+    expect(() => assertRunDir(dir)).not.toThrow();
+  });
+
+  it("refuses a run staged on another dataset", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-run-"));
+    tempDirs.push(root);
+    const dir = join(root, "eval-ds-1.0.0-20261101T000000");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "run.json"),
+      `${JSON.stringify({ dataset_version: "ds-1.0.0", degraded_gates: [] }, null, 2)}\n`,
+      "utf8",
+    );
+    expect(() => readRunManifest(dir, DATASET)).toThrow(/refusing to mix measurements/);
+  });
+
+  it("refuses a directory that was never staged", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-run-"));
+    tempDirs.push(root);
+    const dir = join(root, "eval-ds-2.0.0-20261101T000000");
+    await mkdir(dir, { recursive: true });
+    expect(() => readRunManifest(dir, DATASET)).toThrow(/has no run.json/);
+  });
+
+  it("stages a run whose run.json names its dataset, pin and waived gates", { timeout: 120000 }, async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-stage-"));
+    tempDirs.push(root);
+    const outDir = newRunDir(root, "ds-2.0.0", "eval", new Date("2026-11-13T04:30:05"));
+    const plan = planDrill(DATASET, { limitPositives: 1 });
+    await stageDrill({
+      datasetDir: DATASET,
+      outDir,
+      baseConfig: "configs/b4.json",
+      profile: "crs-live",
+      plan,
+      degradedGates: ["dsh profile"],
+    });
+
+    const manifest = readRunManifest(outDir, DATASET);
+    expect(manifest.dataset_version).toBe("ds-2.0.0");
+    expect(manifest.frozen_instruments).toEqual({
+      semgrep: { version: "1.184.0" },
+      ocr: { commit: "04deca6" },
+    });
+    expect(manifest.degraded_gates).toEqual(["dsh profile"]);
+    expect(manifest.plan.negatives_create).toBe(1);
+
+    for (const baseline of ["B4", "B4g"]) {
+      expect(existsSync(join(outDir, "scratch", baseline, "plan.json"))).toBe(true);
+      expect(existsSync(join(outDir, baseline, "config.json"))).toBe(true);
+      const config = JSON.parse(readSync(join(outDir, baseline, "config.json"), "utf8")) as { mode: string };
+      expect(config.mode).toBe("live");
+    }
+    // The staged text is the sample's `after`, so a create row really is a whole
+    // file and an edit row is the whole edited file.
+    const create = plan.lowRisk.find((sample) => sample.eventKind === "create")!;
+    const staged = readSync(join(outDir, "scratch", "B4", create.staged), "utf8");
+    const sample = JSON.parse(readSync(join(DATASET, "samples", `${create.sampleId}.json`), "utf8")) as {
+      after: string;
+      before: string;
+    };
+    expect(sample.before).toBe("");
+    expect(staged).toBe(sample.after);
   });
 });

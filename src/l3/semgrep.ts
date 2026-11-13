@@ -10,7 +10,7 @@ import type {
   SourceStatus,
 } from "../contracts/index.js";
 
-import { sha256 } from "../config/index.js";
+import { TOOL_ENV, sha256 } from "../config/index.js";
 import { asNumber, asRecord, asString } from "./json.js";
 
 export interface CommandRequest {
@@ -43,6 +43,7 @@ export const execaRunner: CommandRunner = {
       windowsHide: true,
       reject: false,
       stdin: "ignore",
+      env: { ...process.env, ...TOOL_ENV },
     });
     return {
       stdout: typeof result.stdout === "string" ? result.stdout : "",

@@ -1,0 +1,44 @@
+{
+  "dataset_version": "ds-2.0.0",
+  "issue": 41,
+  "parent_spec": 26,
+  "revisions": [
+    {
+      "version": 1,
+      "at": "2026-11-13T11:49:57+08:00",
+      "note": "first registration, before any eval output existed",
+      "predictions": {
+        "P1": "semgrep eval hits are a subset of CWE-089, k <= 2 of 11",
+        "P2": "AOR sample recall >= 3x semgrep sample recall",
+        "P3": "semgrep cap AOR is a subset of semgrep hits, |intersection| <= 2",
+        "P4": "the AOR-only contingency cell has a lower TP rate than the both cell"
+      }
+    },
+    {
+      "version": 2,
+      "at": "2026-11-13T13:05:00+08:00",
+      "note": "clarification only: denominator restated on the staged set, and the degenerate branches of P2/P3 written down. No bound was relaxed and no direction was flipped.",
+      "changes": [
+        "P1 denominator: available=11 -> staged attempted n=10 (the per-class cap stages 10, so 11 was not a denominator the run could have) in",
+        "P2 now has two branches: a ratio when semgrep k >= 1, and an absolute AOR recall >= 0.55 when k = 0; the ratio claim is void in that case",
+        "P3 is marked degenerate when k = 0: the intersection is empty by construction, so the bound holds vacuously and must not be counted as a pass"
+      ],
+      "predictions": {
+        "P1": "semgrep hits are a subset of CWE-089 and k <= 2 on the staged attempted set (n = 10)",
+        "P2": {
+          "branch_semgrep_hit": "if semgrep k >= 1: AOR sample recall >= 3x semgrep sample recall",
+          "branch_semgrep_zero": "if semgrep k = 0: the ratio claim is void; AOR sample recall >= 0.55"
+        },
+        "P3": "semgrep cap AOR is a subset of semgrep hits, |intersection| <= 2; degenerate (vacuous) when semgrep k = 0",
+        "P4": "the AOR-only contingency cell has a lower TP rate than the both cell; table is {semgrep-only, AOR-only, both}"
+      }
+    }
+  ],
+  "observations": {
+    "gateable_eval_positives": 11,
+    "staged_eval_positives": 10,
+    "staged_language": "ts",
+    "cwe089_eval_samples": 1,
+    "warn_rule": "zero-parameter structured decision: severity >= warn, threshold_source = severity_policy"
+  }
+}

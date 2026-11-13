@@ -1,7 +1,7 @@
 import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { ReviewRow, RunRecord } from "../src/contracts/index.js";
+import type { Instruments, ReviewRow, RunRecord } from "../src/contracts/index.js";
 import { coverageCounts, cweKey, declaredCoverage, loadRulesTable, semgrepLanguage } from "./coverage.js";
 import { arg } from "./shared.js";
 
@@ -19,6 +19,8 @@ export interface SampleTruth {
   paired_safe: boolean;
   /** Needed to decide whether any shipped subset could scan this row. */
   language: string;
+  /** `create` or `edit`; derived from `before === ""`, never filled by hand. */
+  event_kind?: string;
   /** Ground-truth class; decides whether the pinned ruleset can see it at all. */
   sample_cwe: string | null;
   labels: LabelSpan[];
@@ -41,6 +43,19 @@ export interface AcceptanceOptions {
   minFindings?: number;
   /** Absent means "coverage unknown" - then every labelled eval sample counts. */
   coverage?: RuleCoverage;
+  /**
+   * What the five numbers are allowed to have been produced on. When given, a
+   * mismatch refuses the report instead of warning about it: the failure mode
+   * this guards is a complete-looking artefact built on a different binary.
+   */
+  frozenInstruments?: FrozenInstruments;
+}
+
+/** The pin a run must be reproducible against: `configs/b4.json` as frozen. */
+export interface FrozenInstruments {
+  semgrep: { version: string };
+  /** `ocr` is pinned by build commit, not by release tag. */
+  ocr: { commit: string };
 }
 
 /** Wilson score interval for `k` successes in `n` trials; `null` when `n = 0`. */
@@ -92,9 +107,66 @@ export interface AcceptanceRowLike {
    * timeout (attempted, failed) and must not share its denominator.
    */
   review_skip_reason?: string | null;
+  /**
+   * What answered `--version` when this row was produced. Required for any
+   * report that quotes a number; `assertInstrumentIdentity` refuses without it.
+   */
+  instrument?: Instruments;
 }
 
-export async function collectJsonl(root: string): Promise<string[]> {  const out: string[] = [];
+function sameCommit(a: string, b: string): boolean {
+  return a.startsWith(b) || b.startsWith(a);
+}
+
+/**
+ * Refuse to report on a run whose tools are not the frozen ones.
+ *
+ * This is an error, not a warning, because the failure it prevents is an
+ * artefact that looks finished: the drift from `04deca6` to `4236c87` produced
+ * valid rows and a complete report, and only the pin check noticed. The check
+ * has to sit in front of the numbers, not beside them.
+ */
+export function assertInstrumentIdentity(
+  rows: readonly AcceptanceRowLike[],
+  frozen: FrozenInstruments,
+): Instruments {
+  const problems: string[] = [];
+  if (rows.length === 0) problems.push("no rows to evaluate");
+  const missing = rows.filter((row) => row.instrument === undefined).length;
+  if (missing > 0) problems.push(`${missing} row(s) carry no instrument identity`);
+
+  const seen = new Map<string, Instruments>();
+  for (const row of rows) {
+    if (row.instrument === undefined) continue;
+    const key = `${row.instrument.semgrep.name}@${row.instrument.semgrep.version}|${row.instrument.ocr.name}@${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"})`;
+    seen.set(key, row.instrument);
+  }
+  if (seen.size > 1) problems.push(`rows were produced on ${seen.size} different instruments: ${[...seen.keys()].join(", ")}`);
+  for (const [key, instrument] of seen) {
+    if (instrument.semgrep.source !== "observed" || instrument.ocr.source !== "observed") {
+      problems.push(`${key}: instrument identity is declared from config, not observed`);
+    }
+    if (instrument.semgrep.version !== frozen.semgrep.version) {
+      problems.push(
+        `${key}: semgrep ${instrument.semgrep.version} != frozen ${frozen.semgrep.version}`,
+      );
+    }
+    if (instrument.ocr.commit === null || !sameCommit(instrument.ocr.commit, frozen.ocr.commit)) {
+      problems.push(
+        `${key}: ocr commit ${instrument.ocr.commit ?? "none"} != frozen ${frozen.ocr.commit}`,
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `refusing to report: the measurement was not produced on the frozen instruments\n  ${problems.join("\n  ")}`,
+    );
+  }
+  return [...seen.values()][0]!;
+}
+
+export async function collectJsonl(root: string): Promise<string[]> {
+  const out: string[] = [];
   const entries = await readdir(root, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(root, entry.name);
@@ -105,8 +177,14 @@ export async function collectJsonl(root: string): Promise<string[]> {  const out
 }
 
 export async function loadRuns(root: string): Promise<AcceptanceRowLike[]> {
+  // `collect` writes one file; if it is there, it is the whole population. A
+  // tree walk would also pick up the plugin's own rows (`B4/review.jsonl`, one
+  // row per phase, `pre_decision` instead of `disposition`), which is a
+  // different shape measuring a different thing.
+  const collected = join(root, "rows.jsonl");
+  const files = existsSync(collected) ? [collected] : await collectJsonl(root);
   const rows: AcceptanceRowLike[] = [];
-  for (const file of await collectJsonl(root)) {
+  for (const file of files) {
     for (const line of (await readFile(file, "utf8")).split("\n")) {
       if (line.trim().length === 0) continue;
       rows.push(JSON.parse(line) as AcceptanceRowLike);
@@ -174,6 +252,12 @@ export function evaluateAcceptance(
   const minSamples = options.minSamples ?? 20;
   const minFindings = options.minFindings ?? 20;
   const coverage = options.coverage;
+  // Before any number: was this run produced on the frozen tools? A refusal here
+  // is the point - a drifted binary produces a complete, plausible report.
+  const instruments =
+    options.frozenInstruments === undefined
+      ? null
+      : assertInstrumentIdentity(rows, options.frozenInstruments);
   const modes = new Set(rows.map((row) => row.mode));
   if (modes.size > 1) throw new Error(`live and replay rows must not be mixed: ${[...modes].join(",")}`);
   const mode = [...modes][0] ?? "unknown";
@@ -222,6 +306,16 @@ export function evaluateAcceptance(
     const sample = truth.get(row.sample);
     return sample !== undefined && sample.labels.length === 0;
   });
+  // `create` and `edit` are different writes; a pool that only ever edits cannot
+  // say anything about the create path, so the split is reported rather than
+  // averaged into one number.
+  const negativesByKind = new Map<string, number>();
+  for (const row of negatives) {
+    const kind = truth.get(row.sample)?.event_kind ?? "unknown";
+    negativesByKind.set(kind, (negativesByKind.get(kind) ?? 0) + 1);
+  }
+  const negativeEdits = negativesByKind.get("edit") ?? 0;
+  const negativeCreates = negativesByKind.get("create") ?? 0;
   const denied = (row: AcceptanceRowLike): boolean => row.disposition.preDecision === "deny";
   const truePositive = positives.filter(denied);
   const falsePositive = negatives.filter(denied);
@@ -297,6 +391,7 @@ export function evaluateAcceptance(
       `recall_gate=${recallStatus}${recallGated ? "" : " (descriptive, not gated)"} ` +
       `precision findings=${findingN} tp=${findingTp} precision=${precision === null ? "na" : precision.toFixed(3)} ` +
       `precision_gate=${precisionStatus} negatives=${negatives.length} ` +
+      `(edit=${negativeEdits} create=${negativeCreates}) ` +
       `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
       `out_of_scope=${outOfScope.length} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
@@ -318,6 +413,8 @@ export function evaluateAcceptance(
       precision_status: precisionStatus,
       false_positive: falsePositive.length,
       negatives: negatives.length,
+      negatives_edit: negativeEdits,
+      negatives_create: negativeCreates,
       missed,
       // Every row that exists, once: n + excluded + out_of_scope = eval positives.
       scannable: scannable.length,
@@ -392,8 +489,21 @@ export function evaluateAcceptance(
     },
   };
 
-  const lowRisk = [...truth.values()].filter((sample) => sample.risk_level === "low").slice(0, 8);
-  const pairs: Array<{ sample: string; latencyRatio: number; tokenRatio: number | null }> = [];
+  // Line 4 pairs B4 against B4g on eight defect-free low-risk samples. The
+  // population is "pairs that were actually measured under both baselines",
+  // not the first eight low-risk rows in manifest order: that order mixed in
+  // fit-split positives that the drill never stages, so the pairing could only
+  // ever find a handful and the line failed for a bookkeeping reason.
+  const pairedCandidates = [...truth.values()]
+    .filter((sample) => sample.risk_level === "low" && sample.labels.length === 0)
+    .filter(
+      (sample) =>
+        postRows.some((row) => row.sample === sample.sample_id && row.baseline === "B4") &&
+        postRows.some((row) => row.sample === sample.sample_id && row.baseline === "B4g"),
+    )
+    .sort((a, b) => (a.sample_id < b.sample_id ? -1 : a.sample_id > b.sample_id ? 1 : 0));
+  const lowRisk = pairedCandidates.slice(0, 8);
+  const pairs: Array<{ sample: string; eventKind: string; latencyRatio: number; tokenRatio: number | null }> = [];
   for (const sample of lowRisk) {
     const b4 = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4");
     const b4g = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4g");
@@ -403,6 +513,7 @@ export function evaluateAcceptance(
     const t4g = tokensOf(b4g);
     pairs.push({
       sample: sample.sample_id,
+      eventKind: sample.event_kind ?? "unknown",
       latencyRatio,
       tokenRatio: t4 !== null && t4g !== null && t4g !== 0 ? t4 / t4g : null,
     });
@@ -416,7 +527,8 @@ export function evaluateAcceptance(
     pass: pairs.length === 8 && medianTokens !== null && medianTokens <= 1,
     detail:
       `pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
-      `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"}`,
+      `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"} ` +
+      `available_pairs=${pairedCandidates.length}`,
     metrics: { pairs: pairs.length, median_token_ratio: medianTokens, median_latency_ratio: medianLatency },
   };
 
@@ -457,6 +569,30 @@ export function evaluateAcceptance(
   }
 
   const resultsTable = [
+    ...(instruments === null
+      ? ["instruments: not asserted (no frozen pin supplied)"]
+      : [
+          "instruments (observed in the reported process, equal to the pin):",
+          "",
+          table(
+            ["tool", "version", "commit", "source"],
+            [
+              [
+                instruments.semgrep.name,
+                instruments.semgrep.version,
+                instruments.semgrep.commit ?? "-",
+                instruments.semgrep.source,
+              ],
+              [
+                instruments.ocr.name,
+                instruments.ocr.version,
+                instruments.ocr.commit ?? "-",
+                instruments.ocr.source,
+              ],
+            ],
+          ),
+        ]),
+    "",
     table(
       ["line", "pass", "detail"],
       [line1, line2, line3, line4, line5].map((line) => [line.name, String(line.pass), line.detail]),
@@ -487,13 +623,24 @@ export function evaluateAcceptance(
         ],
       ],
     ),
+    "",
+    `line1 false-positive denominator: ${negatives.length} defect-free rows ` +
+      `(${negativeEdits} edit, ${negativeCreates} create)` +
+      (negativeCreates > 0
+        ? `; the create path is a smoke sample (n=${negativeCreates}) and no precision claim is made for it`
+        : ""),
     ...(availableN === stagedN
       ? []
       : ["", `shortfall: ${availableN} eval positives are gateable, ${stagedN} were staged`]),
     "",
     table(
-      ["sample", "B4/B4g token ratio", "B4/B4g latency ratio"],
-      pairs.map((pair) => [pair.sample, pair.tokenRatio?.toFixed(3) ?? "na", pair.latencyRatio.toFixed(3)]),
+      ["sample", "event", "B4/B4g token ratio", "B4/B4g latency ratio"],
+      pairs.map((pair) => [
+        pair.sample,
+        pair.eventKind,
+        pair.tokenRatio?.toFixed(3) ?? "na",
+        pair.latencyRatio.toFixed(3),
+      ]),
     ),
     ...(coverageRows.length > 0
       ? [
@@ -517,6 +664,11 @@ export function evaluateAcceptance(
     "",
     `五条线：${[line1, line2, line3, line4, line5].filter((line) => line.pass).length}/5 通过。`,
     "",
+    instruments === null
+      ? "量具身份：未核对（未提供冻结值）。"
+      : `量具身份：semgrep ${instruments.semgrep.version}（observed）、` +
+        `ocr ${instruments.ocr.version}（${instruments.ocr.commit ?? "no commit"}，observed），与钉定值一致。`,
+    "",
     "结果表见 report.md；本文件只给结论，不把接口通过当质量结论。",
     "",
     "line1 的分母按单位分开：召回以样本计（每个漏洞样本是否被抓到），" +
@@ -533,6 +685,13 @@ export function evaluateAcceptance(
     ...(availableN === stagedN
       ? []
       : ["", `available ${availableN} 条可门禁的 eval 正样本中有 ${availableN - stagedN} 条未入演练（staged ${stagedN}），短缺来自选样上限而非检测结果。`]),
+    ...(negativeCreates === 0
+      ? []
+      : [
+          "",
+          `精度分母含 ${negativeCreates} 条 create 样本：它们只证明新建文件路径不是死代码，` +
+            `n=${negativeCreates} 不支撑任何精度主张。`,
+        ]),
     ...(coverage === undefined
       ? []
       : [
@@ -554,15 +713,30 @@ export function evaluateAcceptance(
 }
 
 async function main(): Promise<void> {
-  const runsDir = resolve(arg("--runs", "runs"));
+  // No default: walking a tree for `*.jsonl` is how replay rows, plugin rows and
+  // a stale live staging all end up in one population. The evaluator is pointed
+  // at one collected file, and the drill's `evaluate` does exactly that.
+  const runsDir = arg("--runs", "");
+  if (runsDir.length === 0) {
+    throw new Error("--runs <dir with rows.jsonl> is required; this script does not scan a tree");
+  }
   const datasetDir = resolve(arg("--dataset", "datasets/self-built"));
   const gapsPath = resolve(arg("--gaps", "artifacts/block-gaps.json"));
   const outDir = resolve(arg("--out", "artifacts/acceptance"));
   const rulesPath = resolve(arg("--rules", "research/semgrep-bench/snapshot/rules_table.json"));
+  const configPath = resolve(arg("--config", "configs/b4.json"));
   const declared = declaredCoverage(loadRulesTable(rulesPath), arg("--language", "ts"));
   const gaps = existsSync(gapsPath) ? (JSON.parse(await readFile(gapsPath, "utf8")) as BlockGaps) : null;
-  const report = evaluateAcceptance(await loadRuns(runsDir), await loadTruth(datasetDir), gaps, {
+  // The pin, from the config the run claims to have used; the rows must agree.
+  const config = JSON.parse(await readFile(configPath, "utf8")) as {
+    sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
+  };
+  const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
+    frozenInstruments: {
+      semgrep: { version: config.sources?.semgrep?.version ?? "" },
+      ocr: { commit: config.sources?.aor?.versionCommit ?? "" },
+    },
   });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");

@@ -32,6 +32,13 @@
                   }
                 ]
               },
+              "event_kind": {
+                "enum": [
+                  "edit",
+                  "create"
+                ],
+                "type": "string"
+              },
               "expected_detectable_by": {
                 "items": {
                   "enum": [
@@ -88,6 +95,7 @@
               "paired_safe",
               "language",
               "path",
+              "event_kind",
               "changed_lines",
               "content_sha256",
               "expected_detectable_by"

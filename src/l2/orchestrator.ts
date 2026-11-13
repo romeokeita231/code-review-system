@@ -4,6 +4,7 @@ import type {
   ChangeEvent,
   Disposition,
   Finding,
+  Instruments,
   MergedFinding,
   ReviewRow,
   ReviewSkipReason,
@@ -20,6 +21,7 @@ import { configHash } from "../config/index.js";
 import { fuse, singleSourceProbability } from "../l4/index.js";
 import { TurnBudgetLedger, ledgerFor, planCall, systemClock, type Clock } from "./budget.js";
 import type { ConclusionCache } from "./cache.js";
+import { instrumentFor } from "./instruments.js";
 import { formatMessage, groupKey, mechanismOf } from "./templates.js";
 import { computeTier, staticTier, type TriageResult } from "./triage.js";
 
@@ -56,6 +58,8 @@ export interface ReviewContext {
   clock?: Clock;
   ledger?: TurnBudgetLedger;
   toolchain?: Toolchain;
+  /** Injected identity for tests; live runs observe the binaries themselves. */
+  instrument?: Instruments;
   sourceText?: Record<string, string>;
   cache?: ConclusionCache | null;
 }
@@ -230,6 +234,9 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   const ledger = ctx.ledger ?? ledgerFor(ctx.config, clock);
   const guard = ctx.guard ?? new DenyGuard();
   const toolchain = ctx.toolchain ?? defaultToolchain(ctx.config);
+  // Observed once per process (cached inside `instrumentFor`): the row must name
+  // the binary that answered, not the one the config asked for.
+  const instrument = ctx.instrument ?? (await instrumentFor(ctx.config));
   const startedAt = clock.now();
   const turn = { sessionId: change.sessionId, rootCallId: change.rootCallId };
   const results: SourceResult[] = [];
@@ -284,6 +291,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       latency_ms: elapsed,
       status: aggregateStatus(results, skipped),
       toolchain,
+      instrument,
     };
     return { disposition, row };
   };

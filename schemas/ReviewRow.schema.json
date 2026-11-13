@@ -276,6 +276,92 @@
           ],
           "type": "object"
         },
+        "instrument": {
+          "additionalProperties": false,
+          "properties": {
+            "ocr": {
+              "additionalProperties": false,
+              "properties": {
+                "commit": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "observed",
+                    "declared"
+                  ],
+                  "type": "string"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "version",
+                "commit",
+                "source"
+              ],
+              "type": "object"
+            },
+            "semgrep": {
+              "additionalProperties": false,
+              "properties": {
+                "commit": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "observed",
+                    "declared"
+                  ],
+                  "type": "string"
+                },
+                "version": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "version",
+                "commit",
+                "source"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "semgrep",
+            "ocr"
+          ],
+          "type": "object"
+        },
         "latency_ms": {
           "minimum": 0,
           "type": "number"
@@ -694,7 +780,8 @@
         "tokens",
         "latency_ms",
         "status",
-        "toolchain"
+        "toolchain",
+        "instrument"
       ],
       "type": "object"
     }

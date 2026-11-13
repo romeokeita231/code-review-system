@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
 import { calibrationCategories } from "../src/contracts/index.js";
-import { assertCalibrationMatches, loadCalibration, sha256 } from "../src/config/index.js";
+import { assertCalibrationMatches, loadCalibration, sha256, TOOL_ENV } from "../src/config/index.js";
 import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
 import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
@@ -28,6 +28,8 @@ export interface PlannedSample {
   /** Staged text the agent copies verbatim. */
   staged: string;
   kind: "positive" | "low-risk" | "control" | "dep-probe";
+  /** `edit` or `create`; derived from the dataset row, never chosen here. */
+  eventKind: "edit" | "create";
 }
 
 export interface CoveragePlan {
@@ -54,6 +56,8 @@ export interface DrillPlan {
   controls: PlannedSample[];
   probe: PlannedSample;
   coverage: CoveragePlan;
+  /** `ds-2.0.0` and friends: the run directory is keyed by this. */
+  datasetVersion: string;
   warnings: string[];
 }
 
@@ -67,6 +71,8 @@ export const DEP_PROBE: PlannedSample = {
   path: "live/dep-hallucination-01/package.json",
   staged: ".staging/dep-hallucination-01.txt",
   kind: "dep-probe",
+  // The probe writes a new package.json into a repo that has none.
+  eventKind: "create",
 };
 
 const DEP_PROBE_BODY = `{
@@ -107,7 +113,7 @@ const hashOf = (sampleId: string): string => createHash("sha256").update(sampleI
  * samples and one dependency-hallucination probe.
  *
  * Positive selection is deliberately *not* driven by `expected_detectable_by`:
- * the annotation spec (搂6) marks that field as a non-truth hint that must not
+ * the annotation spec (鎼?) marks that field as a non-truth hint that must not
  * enter any metric, and using it as the selector let the dataset define its own
  * denominator. The subset is instead decided before unblinding by a mechanical
  * fact - whether the frozen rules table declares a rule for the sample's class
@@ -120,7 +126,9 @@ const hashOf = (sampleId: string): string => createHash("sha256").update(sampleI
  */
 export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillPlan {
   const limitPositives = options.limitPositives ?? 20;
-  const lowRiskCount = options.lowRiskCount ?? 8;
+  // No cap by default: the low-risk pool *is* line 1's false-positive
+  // denominator, and a cap would silently drop a create row out of it.
+  const lowRiskCount = options.lowRiskCount ?? Number.POSITIVE_INFINITY;
   const controlCount = options.controlCount ?? 8;
   const tablePath = options.rulesTablePath ?? RULES_TABLE;
   const loaded = loadDatasetSync(datasetDir, options.language);
@@ -174,28 +182,27 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
     path: livePath(sample),
     staged: stagedOf(sample),
     kind: "positive" as const,
+    eventKind: sample.event_kind,
   }));
   const chosen = new Set(positives.map((sample) => sample.sampleId));
 
-  // Line 4 pairs B4 against B4g on eight low-risk samples, and line 1 needs a
-  // defect-free denominator; since the negatives are now small safe edits they
-  // are `low` risk as well, so one pool serves both lines. A defective low-risk
-  // sample would inflate precision silently, so defect-free rows are taken
-  // first and the leftover slots are reported.
+  // Line 4 pairs B4 against B4g on low-risk samples, and line 1 needs a
+  // defect-free denominator; since the negatives are small safe edits they are
+  // `low` risk as well, so one pool serves both lines. Only defect-free rows are
+  // staged: a defective low-risk row would either inflate precision or put a
+  // vulnerable file into line 4's pairs.
   const spare = loaded.samples
     .filter((sample) => sample.risk_level === "low" && !chosen.has(sample.sample_id))
     .sort((a, b) => hashOf(a.sample_id).localeCompare(hashOf(b.sample_id)));
   const defectFree = spare.filter((sample) => sample.labels.length === 0);
-  const lowRiskPicks = [...defectFree, ...spare.filter((sample) => sample.labels.length > 0)].slice(
-    0,
-    lowRiskCount,
-  );
+  const lowRiskPicks = defectFree.slice(0, lowRiskCount);
   const lowRisk = lowRiskPicks.map((sample) => ({
     sampleId: sample.sample_id,
     cwe: sample.cwe,
     path: livePath(sample),
     staged: stagedOf(sample),
     kind: "low-risk" as const,
+    eventKind: sample.event_kind,
   }));
 
   // Defect-free rows that line 4 did not take. With eight low-risk negatives
@@ -214,6 +221,7 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
       path: livePath(sample),
       staged: stagedOf(sample),
       kind: "control" as const,
+      eventKind: sample.event_kind,
     }));
   const defectFreeStaged =
     lowRiskPicks.filter((sample) => sample.labels.length === 0).length + controls.length;
@@ -238,13 +246,16 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
         `(no declared ${coverage.language} rule for ${classes})`,
     );
   }
-  if (lowRisk.length < lowRiskCount) {
+  if (Number.isFinite(lowRiskCount) && lowRisk.length < lowRiskCount) {
     warnings.push(
       `only ${lowRisk.length} low-risk samples available (${lowRiskCount} wanted for line4's B4/B4g pairs)`,
     );
   }
-  if (lowRiskPicks.some((sample) => sample.labels.length > 0)) {
-    warnings.push("some low-risk slots are defective samples: line4's pairs are not defect-free");
+  if (spare.length > defectFree.length) {
+    warnings.push(
+      `${spare.length - defectFree.length} low-risk rows carry a defect and stay out of the pool: ` +
+        `line 1 needs a defect-free denominator and line 4 needs defect-free pairs`,
+    );
   }
   if (defectFreeStaged === 0) {
     warnings.push("no defect-free row staged: line1 precision has no false-positive denominator");
@@ -261,12 +272,15 @@ export function planDrill(datasetDir: string, options: PlanOptions = {}): DrillP
       declared: coverageCounts(coverage),
       uncovered,
     },
+    datasetVersion: loaded.version,
     warnings,
   };
 }
 
 export interface LoadedDataset {
   language: string;
+  /** Dataset identity the run must be checked against; empty when unreadable. */
+  version: string;
   samples: DatasetSample[];
   /** Rows in another language, kept out of the drill and reported. */
   skipped: number;
@@ -294,8 +308,10 @@ function loadDatasetSync(datasetDir: string, requestedLanguage?: string): Loaded
   // loadDataset is async; the plan is pure so callers can plan before any
   // staging. Keep one synchronous read path for determinism.
   const manifest = JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")) as {
+    version?: string;
     samples: Array<Record<string, unknown> & { sample_id: string }>;
   };
+  const version = typeof manifest.version === "string" ? manifest.version : "";
   const rows = manifest.samples.map((entry) => {
     const file = JSON.parse(
       readFileSync(join(datasetDir, "samples", `${entry.sample_id}.json`), "utf8"),
@@ -321,7 +337,7 @@ function loadDatasetSync(datasetDir: string, requestedLanguage?: string): Loaded
     rows[0]?.language ??
     "ts";
   const samples = rows.filter((row) => row.language === language);
-  return { language, samples, skipped: rows.length - samples.length };
+  return { language, version, samples, skipped: rows.length - samples.length };
 }
 
 export function allSamples(plan: DrillPlan): PlannedSample[] {
@@ -334,10 +350,106 @@ export interface StageOptions {
   baseConfig: string;
   profile: string;
   plan: DrillPlan;
+  /**
+   * Gates the operator admitted were not green. Recorded, because a run that
+   * degraded a gate is not the same run as one that did not.
+   */
+  degradedGates?: string[];
+}
+
+/** A run directory is self-identifying: eval-<dataset>-<timestamp>. */
+export const RUN_DIR_PATTERN = /^(?:eval|smoke)-[A-Za-z0-9._-]+-\d{8}T\d{6}$/;
+
+/** Every stage that reads or writes a run refuses an unnamed directory. */
+export function assertRunDir(outDir: string): string {
+  const name = outDir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  if (!RUN_DIR_PATTERN.test(name)) {
+    throw new Error(
+      `${outDir} is not a named run directory: the leaf must look like ` +
+        `eval-${"<dataset version>"}-<yyyyMMddTHHmmss> (or smoke-...). ` +
+        `An unnamed directory is how ds-1 residue ended up beside the ds-2 run.`,
+    );
+  }
+  return name;
+}
+
+/** `runs/live/eval-ds-2.0.0-20261113T043000`. */
+export function newRunDir(root: string, datasetVersion: string, kind: "eval" | "smoke", now = new Date()): string {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const version = datasetVersion.length > 0 ? datasetVersion : "unknown";
+  return join(root, `${kind}-${version}-${stamp}`);
+}
+
+export interface RunManifest {
+  dataset_version: string;
+  dataset_dir: string;
+  config_hash: string;
+  /** The pin the numbers must be reproduced against. */
+  frozen_instruments: { semgrep: { version: string }; ocr: { commit: string } };
+  created_at: string;
+  plan: { positives: number; low_risk: number; controls: number; probe: number; negatives_create: number };
+  degraded_gates: string[];
+}
+
+/** The pin, read from the config the run claims to use. */
+export function frozenInstrumentsOf(baseConfig: string): RunManifest["frozen_instruments"] {
+  const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
+    sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
+  };
+  return {
+    semgrep: { version: base.sources?.semgrep?.version ?? "" },
+    ocr: { commit: base.sources?.aor?.versionCommit ?? "" },
+  };
+}
+
+async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
+  const manifest: RunManifest = {
+    dataset_version: options.plan.datasetVersion,
+    dataset_dir: resolve(options.datasetDir),
+    config_hash: sha256(await readFile(options.baseConfig, "utf8")),
+    frozen_instruments: frozenInstrumentsOf(options.baseConfig),
+    created_at: new Date().toISOString(),
+    plan: {
+      positives: options.plan.positives.length,
+      low_risk: options.plan.lowRisk.length,
+      controls: options.plan.controls.length,
+      probe: 1,
+      negatives_create: options.plan.lowRisk.filter((sample) => sample.eventKind === "create").length,
+    },
+    degraded_gates: [...(options.degradedGates ?? [])],
+  };
+  await writeFile(join(options.outDir, "run.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return manifest;
+}
+
+/**
+ * Refuse a directory that was staged on another dataset. Dataset identity is
+ * the same class of fact as instrument identity: a consumer that cannot check
+ * it will eventually mix two measurements.
+ */
+export function readRunManifest(outDir: string, datasetDir: string): RunManifest {
+  assertRunDir(outDir);
+  const path = join(outDir, "run.json");
+  if (!existsSync(path)) {
+    throw new Error(`${outDir} has no run.json: stage the run before collecting or evaluating it`);
+  }
+  const manifest = JSON.parse(readFileSync(path, "utf8")) as RunManifest;
+  const actual = JSON.parse(readFileSync(join(datasetDir, "manifest.json"), "utf8")) as { version?: string };
+  if (manifest.dataset_version !== actual.version) {
+    throw new Error(
+      `${outDir} was staged on dataset ${manifest.dataset_version}, ` +
+        `but ${datasetDir} is ${String(actual.version)}: refusing to mix measurements`,
+    );
+  }
+  return manifest;
 }
 
 /** Materialise the scratch repos, configs and profile overlays for one run. */
 export async function stageDrill(options: StageOptions): Promise<void> {
+  assertRunDir(options.outDir);
   const base = JSON.parse(await readFile(options.baseConfig, "utf8")) as Record<string, unknown>;
   const samples = allSamples(options.plan);
 
@@ -415,6 +527,7 @@ export async function stageDrill(options: StageOptions): Promise<void> {
       "utf8",
     );
   }
+  await writeRunManifest(options);
 }
 
 function stagedText(sample: PlannedSample, datasetDir: string): string {
@@ -527,7 +640,7 @@ export function pinnedAorCommit(baseConfig: string): string {
  */
 export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
-  const env = { ...process.env, PATH: toolPath() };
+  const env = { ...process.env, PATH: toolPath(), ...TOOL_ENV };
 
   const run = async (name: string, file: string, args: string[], cwd = process.cwd()) => {
     const result = await execa(file, args, { cwd, env, reject: false, timeout: 120_000 });
@@ -645,7 +758,7 @@ export async function runTask(options: RunOptions, prompt: string): Promise<{ st
     cwd: scratch,
     reject: false,
     timeout: options.timeoutMs ?? 45 * 60_000,
-    env: { ...process.env, PATH: toolPath() },
+    env: { ...process.env, PATH: toolPath(), ...TOOL_ENV },
     stdio: "pipe",
   });
   const stdout = `${result.stdout ?? ""}`;
@@ -721,12 +834,17 @@ export function toAcceptanceRows(
       latency_ms: row.latency_ms,
       change_event: { sessionId: row.change_event.sessionId, ts: row.change_event.ts, phase: row.change_event.phase },
       review_skip_reason: row.review_skip_reason,
+      // Carried through untouched: the acceptance report must be able to refuse
+      // a run whose binaries are not the frozen ones, and a consumer that
+      // re-derives this could silently "fix" the drift it is meant to catch.
+      instrument: row.instrument,
     } as AcceptanceRowLike);
   }
   return out;
 }
 
-export async function collect(plan: DrillPlan, outDir: string): Promise<void> {
+export async function collect(plan: DrillPlan, outDir: string, datasetDir: string): Promise<void> {
+  readRunManifest(outDir, datasetDir);
   const pathToSample = new Map<string, string>();
   for (const sample of allSamples(plan)) pathToSample.set(sample.path, sample.sampleId);
   const all: AcceptanceRowLike[] = [];
@@ -750,6 +868,9 @@ export async function evaluate(
   acceptanceOut: string,
   coverage: RuleCoverage,
 ): Promise<{ pass: number; lines: Array<{ name: string; pass: boolean; detail: string }> }> {
+  // The run directory names its dataset and its pin; both are checked before any
+  // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
+  const run = readRunManifest(outDir, datasetDir);
   // Only the collected acceptance rows. `B4/review.jsonl` is the plugin's own
   // shape (one row per phase, `pre_decision` not `disposition`); reading the
   // whole tree mixed the two shapes and crashed on the first plugin row.
@@ -763,7 +884,10 @@ export async function evaluate(
     rows.push(JSON.parse(line) as AcceptanceRowLike);
   }
   const gaps = existsSync(gapsPath) ? JSON.parse(await readFile(gapsPath, "utf8")) : null;
-  const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, { coverage });
+  const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, {
+    coverage,
+    frozenInstruments: run.frozen_instruments,
+  });
   await mkdir(acceptanceOut, { recursive: true });
   await writeFile(join(acceptanceOut, "report.md"), `# 楠屾敹缁撴灉琛紙${report.mode}锛塡n\n${report.resultsTable}\n`, "utf8");
   await writeFile(join(acceptanceOut, "verdict.md"), report.verdict, "utf8");
@@ -778,9 +902,43 @@ export async function evaluate(
   };
 }
 
+/**
+ * Gates that protect the one-shot measurement. They have no `--allow-degraded`
+ * bypass: a degraded instrument, dataset or API key produces numbers that look
+ * finished and cannot be reproduced. Other gates (a missing optional tool, a
+ * warning-only scan) may be waived one name at a time with
+ * `--allow-degraded=<gate>[,<gate>]`.
+ */
+export const NON_DEGRADABLE_GATES = ["ocr pin", "calibration artifact", "DEEPSEEK_API_KEY"] as const;
+
+export function parseDegradedGates(argv: readonly string[], known: readonly string[]): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const entry = argv[index]!;
+    if (entry === "--allow-degraded") {
+      throw new Error(
+        "`--allow-degraded` needs the gate names it waives: --allow-degraded=<gate>[,<gate>]",
+      );
+    }
+    if (!entry.startsWith("--allow-degraded=")) continue;
+    const value = entry.slice("--allow-degraded=".length);
+    if (value.trim().length === 0) throw new Error("`--allow-degraded=` carries no gate name");
+    values.push(...value.split(",").map((name) => name.trim()).filter((name) => name.length > 0));
+  }
+  const unique = [...new Set(values)];
+  for (const name of unique) {
+    if ((NON_DEGRADABLE_GATES as readonly string[]).includes(name)) {
+      throw new Error(`gate "${name}" protects the measurement and can never be degraded`);
+    }
+    if (!known.includes(name)) {
+      throw new Error(`unknown gate "${name}": pass one of ${known.join(", ")}`);
+    }
+  }
+  return unique;
+}
+
 async function main(): Promise<void> {
   const datasetDir = resolve(arg("--dataset", "datasets/self-built"));
-  const outDir = resolve(arg("--out", "runs/live"));
   const baseConfig = resolve(arg("--config", "configs/b4.json"));
   const profile = arg("--profile", "crs-live");
   const stage = arg("--stage", "all");
@@ -791,7 +949,9 @@ async function main(): Promise<void> {
   const coverage: RuleCoverage = { language: plan.coverage.language, perCwe: plan.coverage.declared };
 
   process.stdout.write(
-    `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk, ` +
+    `dataset: ${plan.datasetVersion}\n` +
+      `plan: ${plan.positives.length} positives, ${plan.lowRisk.length} low-risk ` +
+      `(${plan.lowRisk.filter((sample) => sample.eventKind === "create").length} create), ` +
       `${plan.controls.length} controls, 1 probe ` +
       `(rules ${ruleset}, ${plan.coverage.language})\n` +
       `coverage declared: ${Object.entries(plan.coverage.declared)
@@ -799,6 +959,25 @@ async function main(): Promise<void> {
         .join(" ")}\n` +
       plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
   );
+
+  // Every stage but `check` needs a named run directory: an unnamed one is how
+  // the ds-1 staging ended up sitting next to the ds-2 run.
+  const explicit = arg("--out", "");
+  const wantsRunDir = stage !== "check";
+  let outDir = explicit.length > 0 ? resolve(explicit) : "";
+  if (wantsRunDir && process.argv.includes("--new-run")) {
+    outDir = newRunDir(resolve(arg("--live-root", "runs/live")), plan.datasetVersion, stage === "smoke" ? "smoke" : "eval");
+  }
+  if (wantsRunDir) {
+    if (outDir.length === 0) {
+      throw new Error(
+        `--stage ${stage} needs --out=<named run dir> or --new-run; ` +
+          `a name looks like eval-${plan.datasetVersion}-<yyyyMMddTHHmmss>`,
+      );
+    }
+    assertRunDir(outDir);
+    process.stdout.write(`run dir: ${outDir}\n`);
+  }
 
   if (stage === "check") {
     const result = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
@@ -824,29 +1003,48 @@ async function main(): Promise<void> {
         if (row.change_event.files?.[0] !== first.path) continue;
         process.stdout.write(
           `${row.change_event.phase} mode=${row.mode} pre=${row.pre_decision} post=${row.post_decision} ` +
-            `status=${row.review_status} sources=${row.sources.map((s) => `${s.source}:${s.status}:${s.findings.length}`).join(",")}\n`,
+            `status=${row.review_status} sources=${row.sources.map((s) => `${s.source}:${s.status}:${s.findings.length}`).join(",")} ` +
+            `instrument=${row.instrument.semgrep.version}/${row.instrument.ocr.version}(${row.instrument.ocr.commit ?? "none"})\n`,
         );
       }
     }
     return;
   }
   if (stage === "prepare" || stage === "all") {
-    if (!process.argv.includes("--allow-degraded")) {
-      const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
-      if (!ready.ok) {
-        process.stdout.write(
-          `${ready.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
-        );
-        throw new Error("preflight failed; re-run with --allow-degraded for a wiring-only drill");
-      }
+    const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit });
+    const known = ready.checks.map((check) => check.name);
+    const allow = parseDegradedGates(process.argv, known);
+    const waived = ready.checks.filter((check) => !check.ok && allow.includes(check.name));
+    const blocking = ready.checks.filter((check) => !check.ok && !allow.includes(check.name));
+    if (waived.length > 0) {
+      process.stdout.write(
+        `DEGRADED (waived by name): ${waived.map((check) => check.name).join(", ")}\n`,
+      );
     }
-    await stageDrill({ datasetDir, outDir, baseConfig, profile, plan });
+    if (blocking.length > 0) {
+      process.stdout.write(
+        `${ready.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
+      );
+      throw new Error(
+        `preflight failed: ${blocking.map((check) => check.name).join(", ")}; ` +
+          `only a non-blocking gate may be waived, and only by name (--allow-degraded=<gate>)`,
+      );
+    }
+    await stageDrill({
+      datasetDir,
+      outDir,
+      baseConfig,
+      profile,
+      plan,
+      degradedGates: waived.map((check) => check.name),
+    });
     process.stdout.write(`staged ${allSamples(plan).length} files per baseline in ${outDir}\n`);
   }
   if (stage === "run" || stage === "all") {
     if (!process.env["DEEPSEEK_API_KEY"]) {
       throw new Error("DEEPSEEK_API_KEY is required to run live agent sessions");
     }
+    readRunManifest(outDir, datasetDir);
     for (const baseline of ["B4", "B4g"] as const) {
       process.stdout.write(`running ${baseline}...\n`);
       const write = await runDsh({ outDir, profile, baseline, timeoutMs: 45 * 60_000 });
@@ -865,7 +1063,7 @@ async function main(): Promise<void> {
     }
   }
   if (stage === "collect" || stage === "all") {
-    await collect(plan, outDir);
+    await collect(plan, outDir, datasetDir);
   }
   if (stage === "evaluate" || stage === "all") {
     const result = await evaluate(

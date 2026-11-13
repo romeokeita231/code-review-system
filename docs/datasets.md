@@ -6,7 +6,7 @@ actually passed a gate.
 
 | Set | Path | Role | Status |
 | --- | --- | --- | --- |
-| self-built (`ds-2`) | `datasets/self-built` | fit + eval, per-CWE P/R | 34 rows (26 pos / 8 neg), 29 groups; gate + conformance PASS |
+| self-built (`ds-2`) | `datasets/self-built` | fit + eval, per-CWE P/R | 35 rows (26 pos / 9 neg), 30 groups; gate + conformance PASS |
 | AACR-Bench TS | `datasets/aacr` | eval only: Precision / noise rate | imported 2026-11-12, conformance PASS |
 | SecurityEval | — | fit only (class priors) | not imported |
 | CWE-Bench-Java | — | external sanity only | not imported |
@@ -71,7 +71,7 @@ npm run dataset:verify    # the gate: offline, no network, no detector
 
 `--check` is the reproducibility claim: it re-reads every upstream blob at its pinned
 commit, asserts the pinned `blob_sha`, rebuilds `before` from `after` plus the recorded
-hunks, and compares all 34 files with the committed tree. `datasets/self-built/**` is
+hunks, and compares all 35 files with the committed tree. `datasets/self-built/**` is
 marked `-text` in `.gitattributes`, because on a machine with `core.autocrlf=true` a
 checkout would otherwise rewrite the tree to CRLF and turn the byte comparison red — a
 reproducibility claim that does not survive another machine is not one.
@@ -104,7 +104,7 @@ code. This is not evidence that generalises to production code.
 **`contamination_risk` (revised §10, no free parameter).** `high` iff
 `origin.kind = public_repo` and either `origin.advisory` is set or the source is
 `pedagogical`; else `low`. All three parents are deliberately vulnerable teaching apps
-whose vulnerable files are the reason they exist, so all 34 rows are `high`. Star counts
+whose vulnerable files are the reason they exist, so all 35 rows are `high`. Star counts
 (14,433 / 549 / 781 as of 2026-11-12) stay in the manifest as **evidence**
 (`declared.contamination_stars_as_of`) but are not a gate: a star threshold is a free
 parameter that no data can falsify, and 14k vs 549 is a difference in probability, not in
@@ -114,13 +114,24 @@ six rows from `low` to `high`.
 Consequence: with every row `high`, recall **must be reported per detection source**
 (semgrep has no memory channel, AOR does), never as one merged number.
 
-**Negatives, held out on purpose.** 8 rows, all from juice-shop, all in eval
+**Negatives, held out on purpose.** 9 rows, all from juice-shop, all in eval
 (`declared.negatives_split: "eval"`): the threshold must never be fitted against the rows
-that measure precision. Each is a **small safe edit** — `before` is the pinned blob,
+that measure precision. Eight are **small safe edits** — `before` is the pinned blob,
 `after` adds one empty-value guard, extracted constant or null-coalesced binding — so
 `before ≠ after` (D1), `changed_lines ≤ 30`, `defect_origin = null`, and the row is
-`risk_level: low`. The gate refuses fewer than eight such rows (`low_risk_pool`), because
-line 4 pairs B4 against B4g on them: if the pool were defective the pairs would measure a
+`risk_level: low`. The ninth (`ts-cwe022-9010`) is the **create** smoke sample: `before` is
+empty and `after` is the vetted text of `ts-cwe022-9001`, so the create branch is exercised
+instead of being dead code. It is a smoke sample — `n = 1`, and no precision claim is made
+for it — because the alternative was a whole-file creation, which is always `high` risk and
+could never fill line 4's pool.
+
+`event_kind ∈ {edit, create}` is **derived from `before === ""`**, never filled in: the
+builder writes it, the gate re-derives it and fails a row whose declared kind disagrees with
+its bytes, and it fails the pool outright if either kind is missing. `report.md` prints the
+denominator as `8 edit + 1 create` so the two populations cannot be averaged silently.
+
+The gate refuses fewer than eight defect-free low-risk rows (`low_risk_pool`), because line
+4 pairs B4 against B4g on them: if the pool were defective the pairs would measure a
 different population than line 1's precision denominator. A file that already hosts a
 positive cannot host a negative — the positive's `before` is that file plus a control, so
 the pair is a near-duplicate and the split would leak the label. The builder throws on it
@@ -160,11 +171,11 @@ measurement — which must never be quoted interchangeably.
    on the sources' own declared severity (`threshold_source: "severity_policy"`). The two
    faces must not be quoted interchangeably.
 2. **Language coverage is part of the claim.** The shipped config scans Python and
-   TypeScript; `ds-2` is 27 TypeScript + 6 JavaScript rows. The 6 JavaScript rows are
-   `out_of_scope` (never attempted), not misses — see `docs/live-drill.md`. Line 1's
-   recall gate needs 20 samples; the eval split has 14 positives (11 TypeScript) and the
-   per-class cap stages 10, so the face is reported as `insufficient_n` with its measured
-   rate, never silently as a pass or a miss.
+   TypeScript; `ds-2` is 29 TypeScript + 6 JavaScript rows (positives 20 / 6). The 6
+   JavaScript rows are `out_of_scope` (never attempted), not misses — see
+   `docs/live-drill.md`. Line 1's recall gate needs 20 samples; the eval split has 14
+   positives (11 TypeScript) and the per-class cap stages 10, so the face is reported as
+   `insufficient_n` with its measured rate, never silently as a pass or a miss.
 
 ## P2 supply check (measured 2026-11-12)
 

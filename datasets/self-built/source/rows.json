@@ -848,6 +848,34 @@
           ]
         }
       ]
+    },
+    {
+      "id": "ts-cwe022-9010",
+      "repo": "juice-shop",
+      "path": "routes/logfileServerSafe.ts",
+      "from": "routes/logfileServer.ts",
+      "label": 0,
+      "cwe": null,
+      "defect": null,
+      "patch": null,
+      "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb",
+      "language": "ts",
+      "rationale": "文件名空值守卫（空名直接 400 返回）使 sink 不可达；内容沿用 ts-cwe022-9001 的已过审安全文本，作为新文件写入，只用于证明 create 分支不是死代码，n=1 不作精度主张",
+      "evidence": null,
+      "safe_patch": [
+        {
+          "at": 12,
+          "del": 0,
+          "ins": [
+            "    if (file.length === 0) {",
+            "      res.status(400)",
+            "      next(new Error('File name is required'))",
+            "      return",
+            "    }",
+            ""
+          ]
+        }
+      ]
     }
   ]
 }

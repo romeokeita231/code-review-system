@@ -9,6 +9,17 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * Environment every measuring tool is spawned with.
+ *
+ * `ocr` (open-code-review) launches a detached updater on each run that can
+ * `npm i -g` a newer release, which is how the pinned `04deca6` build was
+ * replaced by `4236c87` between two sessions without anyone noticing. A
+ * measurement may only change tool when a human changes it, so the updater is
+ * off for every process this system starts.
+ */
+export const TOOL_ENV: Readonly<Record<string, string>> = Object.freeze({ OCR_NO_UPDATE: "1" });
+
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;

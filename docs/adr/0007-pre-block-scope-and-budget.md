@@ -63,6 +63,40 @@ ds-1 一起过时」，而是**它本身就是一次未登记的 eval 观察**�
 eval 的探针，只能在冻结之后、作为唯一一次 eval 运行的一部分执行。** 覆盖矩阵只碰 fit
 （`npm run record:fit --matrix`），故不受此限。
 
+## 勘误四（2026-11-13）：测量物必须自带量具身份，消费者必须拒发
+
+同一缺陷的第三次出现：`ts_all` 探针 vs `ts_dedup` 装载、`semgrep scan` vs
+`semgrep-core` 判据、`ocr` 从钉定的 `04deca6` 自更新漂到 `4236c87`。三次都是
+**产物看起来完整**：行有效、报告齐全，只是量具不是声称的那一把。
+
+根因是结构性的：行里记的是 `toolchain`，它抄自配置（「本应使用什么」），没有记
+「实际回答 `--version` 的是谁」。所以：
+
+- `ReviewRow.instrument = {semgrep, ocr}`，各带 `{name, version, commit, source}`，
+  `source ∈ {observed, declared}`：live 运行探测二进制（每进程一次，缓存），replay 只能
+  声明，且声明过的行**结构上不能**充当 live 测量。
+- `evaluate` 在产出任何数字之前调用 `assertInstrumentIdentity`：缺失、`declared`、
+  跨行不一致、或与 `configs/b4.json` 的钉定值不同，一律 **抛错拒发**，不是警告。
+  理由很直接：漂移事故的产物看起来完全正常，警告会被当成噪音。
+- 量具身份进 `report.md` 顶部的表，报告本身可追溯。
+
+同一原则适用于数据集身份：`collect`/`evaluate` 拒绝 `run.json` 里 `dataset_version`
+不一致的目录（ds-1 残留就曾与 ds-2 的运行目录并列），运行目录一律命名为
+`eval-<dataset>-<stamp>`。
+
+## 勘误五（2026-11-13）：`ocr` 的自更新必须关掉，钉定按 commit 而非版本号
+
+`ocr` 每次调用都会 spawn `scripts/update.js`，发现新版本就 `npm i -g`。这就是钉定失效的
+「允许漂移发生」那一环：门禁判断正确、拦住了事故，但没有东西阻止漂移。
+
+- `TOOL_ENV = { OCR_NO_UPDATE: "1" }`（`src/config`）注入本系统 spawn 的每个进程；用户级
+  环境变量同时置位，覆盖人工 `ocr` 调用。
+- 钉定值是 **build commit**：`v1.13.7` 打在 `b1dcffb`、`v1.13.8` 打在 `4236c87`，按版本号
+  匹配会接受错误的二进制；`ocr --version` 输出的 `(04deca6)` 才是配置携带的值。
+- `04deca6` 不是 release tag，只能按该 commit 重建（recipe 与 sha256 见
+  `docs/toolchain.md`）。**「未钉定」不是运行可以携带的标签**：eval 只跑一次，在被替换的
+  二进制上测得的数字永远无法在钉定二进制上复现。
+
 ## Consequences
 
 - 阻断保证的范围是「认证规则 + 认证语言 + 文件 ≤100 KiB」，论文须按此边界写限制。

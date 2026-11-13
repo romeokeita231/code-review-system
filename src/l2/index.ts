@@ -7,6 +7,14 @@ export {
 } from "./orchestrator.js";
 export { ConclusionCache } from "./cache.js";
 export {
+  declaredInstruments,
+  instrumentFor,
+  observeInstruments,
+  parseOcrVersion,
+  parseSemgrepVersion,
+  resetInstrumentCache,
+} from "./instruments.js";
+export {
   TurnBudgetLedger,
   ledgerFor,
   planCall,

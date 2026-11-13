@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { evaluateAcceptance, type AcceptanceRowLike, type BlockGaps, type SampleTruth } from "../../scripts/acceptance.js";
+import {
+  assertInstrumentIdentity,
+  evaluateAcceptance,
+  type AcceptanceRowLike,
+  type BlockGaps,
+  type SampleTruth,
+} from "../../scripts/acceptance.js";
 
 function truthOf(
   sample: string,
@@ -41,6 +47,7 @@ function row(over: Partial<AcceptanceRowLike> & { sample: string; baseline: stri
       phase: over.change_event?.phase,
     },
     review_skip_reason: over.review_skip_reason ?? null,
+    instrument: over.instrument,
   };
 }
 
@@ -482,5 +489,96 @@ describe("acceptance", () => {
       recall: 1,
     });
     expect(report.resultsTable).toContain("never attempted");
+  });
+});
+
+const FROZEN = { semgrep: { version: "1.184.0" }, ocr: { commit: "04deca6" } };
+
+const instrument = (over: Partial<AcceptanceRowLike["instrument"]> = {}): AcceptanceRowLike["instrument"] => ({
+  semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "observed" },
+  ocr: { name: "ocr", version: "v1.13.6", commit: "04deca6", source: "observed" },
+  ...over,
+});
+
+describe("instrument identity", () => {
+  const oneRow = (over: Partial<AcceptanceRowLike> = {}): AcceptanceRowLike =>
+    row({ sample: "a", baseline: "B4", ts: 1, instrument: instrument(), ...over });
+
+  it("refuses a row that carries no instrument identity", () => {
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: undefined })], FROZEN)).toThrow(
+      /carry no instrument identity/,
+    );
+  });
+
+  it("refuses an identity that was declared from config rather than observed", () => {
+    const declared = instrument({
+      semgrep: { name: "semgrep", version: "1.184.0", commit: null, source: "declared" },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: declared })], FROZEN)).toThrow(
+      /declared from config, not observed/,
+    );
+  });
+
+  it("refuses a drifted ocr commit", () => {
+    const drifted = instrument({
+      ocr: { name: "ocr", version: "v1.13.8", commit: "4236c87", source: "observed" },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: drifted })], FROZEN)).toThrow(
+      /ocr commit 4236c87 != frozen 04deca6/,
+    );
+  });
+
+  it("refuses a drifted semgrep version", () => {
+    const drifted = instrument({
+      semgrep: { name: "semgrep", version: "1.100.0", commit: null, source: "observed" },
+    });
+    expect(() => assertInstrumentIdentity([oneRow({ instrument: drifted })], FROZEN)).toThrow(
+      /semgrep 1\.100\.0 != frozen 1\.184\.0/,
+    );
+  });
+
+  it("refuses rows produced on two different instruments", () => {
+    const other = oneRow({
+      sample: "b",
+      instrument: instrument({ ocr: { name: "ocr", version: "v1.13.8", commit: "4236c87", source: "observed" } }),
+    });
+    expect(() => assertInstrumentIdentity([oneRow(), other], FROZEN)).toThrow(/different instruments/);
+  });
+
+  it("refuses to evaluate at all when the pin does not match", () => {
+    const truth = new Map([["a", truthOf("a", "high", ["semgrep"])]]);
+    expect(() =>
+      evaluateAcceptance([oneRow()], truth, gaps, {
+        frozenInstruments: { semgrep: { version: "1.184.0" }, ocr: { commit: "deadbee" } },
+      }),
+    ).toThrow(/refusing to report/);
+  });
+
+  it("prints the observed identity when it matches the pin", () => {
+    const truth = new Map([["a", truthOf("a", "high", ["semgrep"])]]);
+    const report = evaluateAcceptance([oneRow()], truth, gaps, { frozenInstruments: FROZEN });
+    expect(report.resultsTable).toContain("instruments (observed");
+    expect(report.resultsTable).toContain("04deca6");
+    expect(report.verdict).toContain("与钉定值一致");
+  });
+});
+
+describe("event kinds in the false-positive denominator", () => {
+  it("splits the denominator by event kind and refuses a claim for a single create", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["neg-edit", { ...truthOf("neg-edit", "low", []), event_kind: "edit" }],
+      ["neg-create", { ...truthOf("neg-create", "low", []), event_kind: "create" }],
+    ]);
+    const report = evaluateAcceptance(
+      [
+        row({ sample: "neg-edit", baseline: "B4", ts: 1 }),
+        row({ sample: "neg-create", baseline: "B4", ts: 2 }),
+      ],
+      truth,
+      gaps,
+    );
+    expect(report.lines[0]!.metrics).toMatchObject({ negatives: 2, negatives_edit: 1, negatives_create: 1 });
+    expect(report.resultsTable).toContain("1 edit, 1 create");
+    expect(report.verdict).toContain("不支撑任何精度主张");
   });
 });

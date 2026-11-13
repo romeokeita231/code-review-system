@@ -10,6 +10,7 @@
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport path from 'node:path'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nexport function serveLogFiles () {\n  return ({ params }: Request, res: Response, next: NextFunction) => {\n    const file = params.file\n\n    if (!file.includes('/')) {\n      res.sendFile(path.resolve('logs/', file))\n    } else {\n      res.status(403)\n      next(new Error('File names cannot contain forward slashes!'))\n    }\n  }\n}\n",
   "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport path from 'node:path'\nimport { type Request, type Response, type NextFunction } from 'express'\n\nexport function serveLogFiles () {\n  return ({ params }: Request, res: Response, next: NextFunction) => {\n    const file = params.file\n\n    if (file.length === 0) {\n      res.status(400)\n      next(new Error('File name is required'))\n      return\n    }\n\n    if (!file.includes('/')) {\n      res.sendFile(path.resolve('logs/', file))\n    } else {\n      res.status(403)\n      next(new Error('File names cannot contain forward slashes!'))\n    }\n  }\n}\n",
   "changed_lines": 6,
+  "event_kind": "edit",
   "label": 0,
   "defects": [],
   "sample_cwe": null,
@@ -23,7 +24,8 @@
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/logfileServer.ts",
     "advisory": null,
-    "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb"
+    "blob_sha": "7ef6160d74c41c79823182489db67de0fb24aadb",
+    "base_path": null
   },
   "annotator": "self",
   "split": "eval"

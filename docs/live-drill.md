@@ -21,16 +21,56 @@ Run the gate first — it exists so a run fails for the right reason:
 npx tsx scripts/live-drill.ts --stage check
 ```
 
-One failure in that gate is expected:
+### The `ocr` pin, and why it is a commit and not a version
 
-- `ocr pin` — the config claims `04deca6`, the installed binary reports another
-  commit. Re-pin (`npm i -g @alibaba-group/open-code-review@<pin>`) before quoting any
-  AOR number, including the T1/T2 budget experiments.
+`ocr` ships a self-updater: each invocation spawns `scripts/update.js`, which runs
+`npm i -g @alibaba-group/open-code-review@latest` when a newer release exists. That is how
+the binary moved from the pinned `04deca6` to `4236c87` between two sessions while the
+config kept claiming the pin. The gate caught it; the updater was the hole.
+
+Two changes, both structural:
+
+- `TOOL_ENV = { OCR_NO_UPDATE: "1" }` is passed to every process this system spawns
+  (`src/config/index.ts`, used by `src/l3/semgrep.ts`, the instrument probe and the drill),
+  and the user-level variable is set as well. A measurement may only change tool when a
+  human changes it.
+- The pin is the **build commit**. `v1.13.7` was tagged at `b1dcffb`, so matching a release
+  number would accept the wrong binary; `ocr --version` prints
+  `open-code-review v1.13.6 (04deca6)`, and that parenthesised token is what the config
+  carries.
+
+`04deca6` is not a release tag, so it is rebuilt rather than downloaded (`make build`
+semantics at that commit; recipe and sha256 in `docs/toolchain.md`). A drifted binary makes
+every AOR number unquotable — including the T1/T2 budget measurements of #22 — until it is
+re-pinned, and "unpinned" is not a label a run may carry: the eval happens once, so a
+number taken on a replaced binary can never be reproduced on the pinned one.
 
 The old `dataset detectability` check is **gone**, not relaxed: it scanned planned
 *eval* positives with the pinned ruleset, which is a detector output on eval before the
 freeze. It also measured ds-1. Its replacement is the fit-run coverage matrix
 (`npm run record:fit`), which only ever touches fit rows.
+
+### Gates: three have no bypass
+
+`--allow-degraded` used to be one switch for the whole preflight, which meant "waive
+anything" — the same shape as the deleted `--allow-short`. It is now a per-gate whitelist,
+and three gates are not on it:
+
+| gate | why it can never be waived |
+| --- | --- |
+| `ocr pin` | instrument identity: a drifted binary makes every number unreproducible |
+| `calibration artifact` | dataset identity: a stale artifact applies thresholds fitted on another class set |
+| `DEEPSEEK_API_KEY` | measurement feasibility: without it no live session exists to measure |
+
+
+```bash
+npx tsx scripts/live-drill.ts --stage prepare --out runs/live/eval-ds-2.0.0-<stamp> \
+  --allow-degraded=<gate>[,<gate>]
+```
+
+The bare flag is an error, an unknown name is an error, and waiving one of the three above
+is an error. Waived gates are printed as `DEGRADED (waived by name)` and recorded in the
+run's `run.json`.
 
 ## How the 20 positives are chosen
 
@@ -72,15 +112,23 @@ positives, the per-class cap stages 10, so the shortfall is visible and is **not
 detector result. A rate reported under `insufficient_n` is marked `descriptive, not
 gated` — "cannot be gated" and "was not measured" are different claims.
 
-Preregistered before any eval output (issue #41 comment, 2026-11-13):
+## Preregistered predictions (v1 2026-11-13T11:49:57+08:00, revised 2026-11-13T13:05:00+08:00)
 
-- **P1** semgrep's eval hits ⊆ CWE-089, `k <= 2/11`.
-- **P2** AOR sample recall > semgrep sample recall, gap `>= 3x`. If it fails, the
-  two-source architecture did not earn its token cost there — a finding, not a null.
-- **P3** `semgrep ∩ AOR ⊆ semgrep hits`, `|intersection| <= 2`, so fused precision is
-  descriptive only.
-- **P4** `AOR-only` cell's TP rate is below the `both` cell. If not, the fusion lower
-  bound earns nothing.
+Machine-readable copy with both revisions: `artifacts/preregistration.json`. The revisions
+below are **clarifications of the denominator and of degenerate branches**, made before any
+eval output existed; no threshold and no direction of a claim was relaxed.
+
+| id | v2 (current) | what v1 said and why it changed |
+| --- | --- | --- |
+| P1 | semgrep's hits ⊆ CWE-089, `k <= 2` on the **staged attempted set (`n = 10`)** | v1 wrote `k <= 2/11`. 11 is `available` (gateable eval positives), 10 is `staged`: the cap stages 10, so 11 was a denominator the run could not have. Restating it on the staged set keeps the bound where the measurement is. |
+| P2 | if semgrep `k >= 1`: AOR sample recall `>= 3x` semgrep recall. **If `k = 0`: the ratio claim is void and P2 degenerates to an absolute lower bound, AOR recall `>= 0.55`** | a ratio with a zero denominator is not a prediction. CWE-089 has only one eval sample, so `k = 0` is a live possibility, and it now has a stated consequence instead of silently "passing". |
+| P3 | `semgrep ∩ AOR ⊆ semgrep hits`, `|intersection| <= 2` — **degraded when `k = 0`** | with `k = 0` the intersection is empty by construction, so the bound holds for free. That is a vacuous pass, and it must be *labelled* as one rather than counted. |
+| P4 | the `AOR-only` cell's TP rate is below the `both` cell's | unchanged: the contingency table `{semgrep-only, AOR-only, both}` is read off `findings_merged[].sources`, no threshold involved. |
+
+The contingency table replaces the old "warn needs a probability" framing: warn now fires on
+a zero-parameter structured decision (`severity >= warn`, `threshold_source:
+"severity_policy"`), so lines 3–5 are measurable without a fitted warn point. Any path that
+still claims a probability keeps propagating `unfittable`.
 
 ## Two denominators, one gate: `out_of_scope` vs `timeout`
 
@@ -97,10 +145,11 @@ returns `degraded / language_unsupported`. That is a different fact from a failu
 The fit matrix (`npm run record:fit`) and the evaluator (`scripts/acceptance.ts`) both
 print two denominators — all rows and attempted rows — and gate on the attempted one.
 `line1` also carries `n + excluded + out_of_scope = eval positives`, so the three
-exclusions cannot hide each other. `language_coverage` prints alongside
-(`ds-2`: 0 python / 27 typescript / 6 javascript), and the paper's capability claim is
-limited to Python + TypeScript. Adding a JavaScript subset later means re-measuring the
-recall: those are new rule bodies, not an inherited number.
+exclusions cannot hide each other. `language_coverage` prints alongside — authoritative
+counts on `ds-2`: **all rows 29 typescript / 6 javascript, positives 20 / 6, eval positives
+11 / 3** — and the paper's capability claim is limited to Python + TypeScript. Adding a
+JavaScript subset later means re-measuring the recall: those are new rule bodies, not an
+inherited number.
 
 ## Line 1's block facet is Python-only (design conclusion, 2026-11-13)
 
@@ -154,27 +203,38 @@ detectability number for it.
 ## Run
 
 ```bash
-npx tsx scripts/live-drill.ts --stage all
+# 1. mint the one named run directory (dataset version + UTC stamp)
+npx tsx scripts/live-drill.ts --stage prepare --new-run
+# 2..4. the same directory for the rest of the stages
+npx tsx scripts/live-drill.ts --stage run     --out runs/live/eval-ds-2.0.0-<stamp>
+npx tsx scripts/live-drill.ts --stage collect --out runs/live/eval-ds-2.0.0-<stamp>
+npx tsx scripts/live-drill.ts --stage evaluate --out runs/live/eval-ds-2.0.0-<stamp>
 ```
 
 Stages: `check` → `prepare` → `run` → `collect` → `evaluate` (`--stage <name>` runs one).
-`prepare` stages the eval positives the ruleset can gate (10 of 11 on `ds-2`) + 8
-defect-free low-risk rows + one dependency-hallucination probe per baseline (`B4`,
-`B4g`) in `runs/live/scratch/<baseline>`, each its own git repo with the pinned rulesets
-copied in. `run` drives one headless DSH session per baseline (write pass, then a
-correction pass on the same session id), `collect` maps plugin `ReviewRow`s to the
-evaluator shape, and `evaluate` writes
+`prepare` stages the eval positives the ruleset can gate (10 of 11 on `ds-2`) + **every
+defect-free low-risk row** (9 on `ds-2`: 8 edits + 1 create) + one dependency-hallucination
+probe per baseline (`B4`, `B4g`) in `<run>/scratch/<baseline>`, each its own git repo with
+the pinned rulesets copied in. `run` drives one headless DSH session per baseline (write
+pass, then a correction pass on the same session id), `collect` maps plugin `ReviewRow`s to
+the evaluator shape, and `evaluate` writes
 `artifacts/acceptance/{report.md,verdict.md,verdict.json}`.
 
-`--allow-degraded` skips the gate for a wiring-only run; it cannot produce a passing
-verdict.
+### The run directory is part of the measurement
 
-The 8 low-risk slots are exactly the defect-free (`defects: []`) `risk_level=low` rows:
-since the negatives are now small safe edits, one pool serves line 4's B4/B4g pairs and
-line 1's false-positive denominator. `plan.controls` therefore stages nothing extra on
-`ds-2`; it remains for datasets whose negatives are `high` risk. With no defect-free row
-at all the evaluator reports `precision: na` and fails line 1 instead of printing a
-vacuous `tp/tp = 1.0`.
+Every non-`check` stage refuses a directory whose leaf is not
+`eval-<dataset version>-<yyyyMMddTHHmmss>` (or `smoke-...`), and `collect`/`evaluate` refuse
+a directory whose `run.json` names another dataset. `run.json` records the dataset version,
+the config hash, the frozen pin, the plan shape and the waived gates. This is the same rule
+as instrument identity, applied to the dataset: a consumer that cannot check identity will
+eventually mix two measurements. The ds-1 staging that used to sit in `runs/live` beside the
+ds-2 run is exactly the entry point that rule closes.
+
+`plan.controls` stages nothing extra on `ds-2`; it remains for datasets whose negatives are
+`high` risk. Low-risk rows that carry a defect are **not** staged (`3` of them on `ds-2`,
+all fit-split positives): they would either inflate precision or put a vulnerable file into
+line 4's pairs. With no defect-free row at all the evaluator reports `precision: na` and
+fails line 1 instead of printing a vacuous `tp/tp = 1.0`.
 
 Every injected message carries its provenance: `via=<sources>[/agree]/sev=<source>` sits
 right after the anchor, so clipping cannot remove it.
@@ -191,8 +251,16 @@ right after the anchor, so clipping cannot remove it.
 
 ## Known blockers (2026-11-13, after the ds-2 re-encode)
 
-- **`ocr` self-updates** past the pinned `04deca6` (observed v1.13.8 / `4236c87`); the
-  `ocr pin` gate fails until it is re-pinned. No AOR number may be quoted meanwhile.
+- **`DEEPSEEK_API_KEY` is the only red gate.** The `ocr` pin is green again:
+  `open-code-review v1.13.6 (04deca6)`, rebuilt from the pinned commit and protected by
+  `OCR_NO_UPDATE=1`. Nothing else in the preflight fails.
+- **A row now names the binary that answered.** `ReviewRow.instrument` carries
+  `{semgrep, ocr}` with `{name, version, commit, source}` next to the declared `toolchain`;
+  `evaluate` **refuses** (not warns) when a row's identity is missing, `declared` instead of
+  `observed`, mixed across rows, or different from `configs/b4.json`. This is the third
+  occurrence of "the artefact did not carry its own instrument" (`ts_all` vs `ts_dedup`,
+  `semgrep scan` vs `semgrep-core`, `ocr` drift), so it is now a schema field and a refusal
+  rather than a checklist item.
 - **Warn is a policy, not a probability.** `artifacts/calibration.json` carries
   `thresholds.status: "unfittable"` (`fit_negatives = 0`, 4 findings). Any path that
   claims a probability still propagates `unfittable` and refuses to invent a constant;
@@ -204,9 +272,14 @@ right after the anchor, so clipping cannot remove it.
   11 TypeScript (the drill stages one language), `POSITIVE_CAP_PER_CLASS = 4` over 5
   covered classes: 10 staged of 11 available, gate 20. The measured rate and its Wilson
   interval are printed as `descriptive, not gated`; `--allow-short` no longer exists.
-- **Line 4's pool exists now.** 8 defect-free low-risk rows (the re-encoded negatives);
+- **Line 4's pool exists now.** 9 defect-free low-risk rows (8 edits + 1 create);
   `low_risk_pool` fails the dataset gate below 8.
-- **JavaScript is `out_of_scope`.** 6 of the 34 rows are `.js`; the shipped config has no
+- **The create path is exercised once, not measured.** `ts-cwe022-9010` is a `create`
+  (`before = ""`, content = the vetted text of `ts-cwe022-9001`). It proves the create
+  branch is not dead code; `n = 1` and no precision claim is made for it. `event_kind` is
+  derived from `before === ""`, and the dataset gate fails if either kind disappears from
+  the pool.
+- **JavaScript is `out_of_scope`.** 6 of the 35 rows are `.js`; the shipped config has no
   JavaScript subset and no `sMax['javascript']`, so they are never scanned. This is the
   second appearance of "declared != shipped" (the first was `ts_all` vs `ts_dedup`): the
   rules table says what exists, the config says what runs, and nothing forces agreement.

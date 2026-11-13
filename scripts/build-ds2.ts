@@ -45,6 +45,12 @@ interface Row {
   patch: Patch[] | null;
   /** Negative rows only: one safe edit applied to the blob to build `after`. */
   safe_patch?: Patch[] | null;
+  /**
+   * Create rows only: the pinned file whose vetted text becomes the new file's
+   * content. `path` is then a file that does not exist at the source commit, so
+   * `before` is empty and the row exercises the create branch.
+   */
+  from?: string | null;
   blob_sha: string;
   language: string;
   rationale: string;
@@ -217,14 +223,14 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
     if (head !== source.commit) {
       throw new Error(`${row.id}: ${row.repo} is at ${head}, expected the pinned ${source.commit}`);
     }
-    const key = `${row.repo}\u0000${row.path}`;
+    const key = `${row.repo}\u0000${row.from ?? row.path}`;
     if (blobs.has(key)) continue;
-    const text = execFileSync("git", ["-C", clone, "show", `${source.commit}:${row.path}`], {
+    const text = execFileSync("git", ["-C", clone, "show", `${source.commit}:${row.from ?? row.path}`], {
       encoding: "utf8",
       maxBuffer: 128 * 1024 * 1024,
     });
     if (text.includes("\r")) throw new Error(`${row.id}: upstream blob uses CRLF`);
-    const blobSha = git(clone, ["rev-parse", `${source.commit}:${row.path}`]).trim();
+    const blobSha = git(clone, ["rev-parse", `${source.commit}:${row.from ?? row.path}`]).trim();
     if (blobSha !== row.blob_sha) throw new Error(`${row.id}: blob sha ${blobSha} != pinned ${row.blob_sha}`);
     blobs.set(key, text);
   }
@@ -248,24 +254,33 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
   const rootLines: string[] = [];
   const perClass = new Map<string, number>();
   const splitById = new Map<string, string>();
+  const eventKinds = { edit: 0, create: 0 };
+  const negativeKinds = { edit: 0, create: 0 };
   let lowRiskNegatives = 0;
 
   for (const row of [...rows].sort((a, b) => a.id.localeCompare(b.id))) {
     const key = `${row.repo}\u0000${row.path}`;
-    const blob = blobs.get(key)!;
+    const blob = blobs.get(`${row.repo}\u0000${row.from ?? row.path}`)!;
     const blobLines = blob.split("\n");
     // A positive's `after` is the pinned blob byte for byte and `before` is that
     // blob plus the re-added control. A negative's `before` is the blob and
     // `after` is the blob plus one safe edit (`safe_patch`): a whole-file
-    // creation is always `high` risk, so it could never fill line 4's pool.
+    // creation is always `high` risk, so it could never fill line 4's pool. The
+    // one `from` row is the exception that exercises the create branch: its
+    // `after` is the same vetted text, but `path` does not exist at the source
+    // commit, so `before` is empty.
     if (row.label === 0 && (row.safe_patch ?? []).length === 0) {
       throw new Error(`${row.id}: a negative row needs a safe_patch, or before === after`);
     }
     const after = row.label === 1 ? blob : rebuildAfter(blobLines, row.safe_patch ?? []);
-    const before = row.label === 1 ? rebuildAfter(blobLines, row.patch ?? []) : blob;
+    const before = row.label === 1 ? rebuildAfter(blobLines, row.patch ?? []) : row.from ? "" : blob;
     const beforeLines = before.split("\n");
     const afterLines = after.split("\n");
     const changed = before === "" ? lineCount(after) : diffCount(beforeLines, afterLines);
+    // Derived, never declared: the create branch is exactly "no before side".
+    const eventKind = before === "" ? ("create" as const) : ("edit" as const);
+    eventKinds[eventKind] += 1;
+    if (row.label === 0) negativeKinds[eventKind] += 1;
     const sampleCwe = row.label === 1 ? `CWE-${row.cwe}` : null;
     const split = splitOf.get(key)!;
     splitById.set(row.id, split);
@@ -301,6 +316,7 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       before,
       after,
       changed_lines: changed,
+      event_kind: eventKind,
       label: row.label,
       defects,
       sample_cwe: sampleCwe,
@@ -312,9 +328,10 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       defect_origin: row.label === 1 ? "real" : null,
       origin: {
         kind: "public_repo",
-        ref: `${row.repo}@${provenance.sources[row.repo]!.commit}:${row.path}`,
+        ref: `${row.repo}@${provenance.sources[row.repo]!.commit}:${row.from ?? row.path}`,
         advisory: null,
         blob_sha: row.blob_sha,
+        base_path: row.from ?? null,
       },
       annotator: "self",
       split,
@@ -330,6 +347,7 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       paired_safe: row.label === 0,
       language: row.language,
       path: row.path,
+      event_kind: eventKind,
       changed_lines: changed,
       content_sha256: content,
       expected_detectable_by: row.label === 1 ? ["semgrep"] : [],
@@ -373,9 +391,14 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
       negatives_split: "eval",
       defect_origin: "real",
       defect_origin_basis:
-        "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+        "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity; the single `create` row carries `origin.base_path`, the pinned file its text came from. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
       negative_encoding:
-        "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective.",
+        "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective. One row is a `create` (`from` in rows.json): its `after` is the vetted text of another negative and `before` is empty, so the create path is exercised instead of being dead code. It is a smoke sample: n=1, no precision claim is made for it.",
+      event_kinds: {
+        total: eventKinds,
+        negatives: negativeKinds,
+        basis: "derived: event_kind = create iff before === \"\"; not a declared field",
+      },
       contamination_rule:
         "high iff origin.kind=public_repo and (origin.advisory or source.pedagogical); else low. Category rule, no free parameter: star counts are evidence, not a gate.",
       contamination_stars_as_of: provenance.stars_as_of,

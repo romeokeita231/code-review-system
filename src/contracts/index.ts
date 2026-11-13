@@ -283,6 +283,35 @@ export const Toolchain = z.object({
 });
 export type Toolchain = z.infer<typeof Toolchain>;
 
+/**
+ * Identity of one measuring instrument, as the *measuring artefact* reports it.
+ *
+ * `toolchain` above is read from the config: it says what the run was supposed
+ * to use. `Instrument` says what answered `--version` in the process that did
+ * the measuring, which is the only thing a reader can reproduce against. The
+ * two are recorded side by side so a drift shows up as a difference between
+ * them instead of as a plausible row.
+ *
+ * `source` keeps the difference explicit: `observed` means a binary answered,
+ * `declared` means the row never ran a live tool (replay) and only repeats the
+ * config. Acceptance evaluation refuses anything that is not `observed`, so a
+ * replay row cannot stand in for a live measurement.
+ */
+export const Instrument = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+  commit: z.string().min(1).nullable(),
+  source: z.enum(["observed", "declared"]),
+});
+export type Instrument = z.infer<typeof Instrument>;
+
+/** The two instruments a live acceptance run must identify. */
+export const Instruments = z.object({
+  semgrep: Instrument,
+  ocr: Instrument,
+});
+export type Instruments = z.infer<typeof Instruments>;
+
 export const ReviewRow = z.object({
   run_id: z.string().min(1),
   config_hash: z.string().min(1),
@@ -308,6 +337,8 @@ export const ReviewRow = z.object({
   latency_ms: z.number().nonnegative(),
   status: z.enum(["ok", "partial", "timeout", "failed", "unknown", "skipped"]),
   toolchain: Toolchain,
+  /** What actually answered `--version`; see `Instrument`. */
+  instrument: Instruments,
 });
 export type ReviewRow = z.infer<typeof ReviewRow>;
 
@@ -360,6 +391,12 @@ export const AnnotationSample = z.object({
   paired_safe: z.boolean(),
   language: z.string().min(1),
   path: z.string().min(1),
+  /**
+   * Whether the write creates the file or edits one that already exists.
+   * Derived from `before === ""`; never filled in by hand. A dataset that only
+   * ever edits cannot exercise the create path, so the split is reported.
+   */
+  event_kind: z.enum(["edit", "create"]),
   changed_lines: z.number().int().nonnegative(),
   content_sha256: z.string().min(1),
   expected_detectable_by: z.array(SourceName),

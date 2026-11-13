@@ -141,6 +141,8 @@ const Shared = {
       ref: z.string().min(1),
       advisory: z.string().nullable(),
       blob_sha: z.string().regex(/^[0-9a-f]{40}$/).nullable().optional(),
+      /** Set on a `create` row: the pinned file its text was taken from. */
+      base_path: z.string().min(1).nullable().optional(),
     })
     .strict(),
   annotator: z.enum(["self", "advisor"]).nullable(),
@@ -153,6 +155,8 @@ export const SelfSample = z
     schema_version: z.literal(2),
     sample_set: z.literal("self"),
     changed_lines: z.number().int().nonnegative(),
+    /** Derived from `before === ""`; a declared value that disagrees is a bug. */
+    event_kind: z.enum(["edit", "create"]),
     rationale: z.string(),
     /** Planted by design, or observed in production code. */
     defect_origin: z.enum(["real", "injected"]).nullable(),
@@ -243,6 +247,7 @@ const RULE_ORDER = [
   "sample_id",
   "noop",
   "changed_lines",
+  "event_kind",
   "risk_level",
   "defects",
   "defect_origin",
@@ -394,6 +399,23 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
     if (sampleSet === "self" && typeof row["changed_lines"] === "number" && row["changed_lines"] !== changedLines) {
       add("changed_lines", id, `${String(row["changed_lines"])} != derived ${changedLines}`);
     }
+    // `event_kind` is derived, so the only thing to check is that the declared
+    // value is the derivation. A dataset that declares `create` on an edit row
+    // would let a report claim create coverage it never measured.
+    if (sampleSet === "self") {
+      const derivedKind = before === "" ? "create" : "edit";
+      if (row["event_kind"] !== derivedKind) {
+        add("event_kind", id, `${String(row["event_kind"])} != derived ${derivedKind}`);
+      }
+      const basePath = asRecord(row["origin"])["base_path"];
+      if (derivedKind === "create") {
+        if (typeof basePath !== "string" || basePath.length === 0) {
+          add("event_kind", id, "create row does not name the pinned file it was taken from");
+        }
+      } else if (basePath !== null && basePath !== undefined) {
+        add("event_kind", id, "edit row carries origin.base_path");
+      }
+    }
 
     if ((label === 1) !== populated) {
       add("defects", id, `label ${String(label)} disagrees with defects (${defects.length})`);
@@ -428,7 +450,8 @@ export async function verifyConformance(dir: string): Promise<ConformanceResult>
       if (source === undefined) {
         add("origin", id, `repo ${repo} is not declared in manifest.sources`);
       } else {
-        const expectedRef = `${repo}@${source.commit}:${str(row["file_path"]) ?? ""}`;
+        const basePath = str(origin["base_path"]) ?? str(row["file_path"]) ?? "";
+        const expectedRef = `${repo}@${source.commit}:${basePath}`;
         if (originRef !== expectedRef) add("origin", id, `origin.ref ${originRef} != ${expectedRef}`);
         const blobSha = str(origin["blob_sha"]);
         if (blobSha === null) add("origin", id, "self row is missing origin.blob_sha");
@@ -641,6 +664,8 @@ function checkDeclared(
   let positives = 0;
   let negatives = 0;
   let lowRiskNegatives = 0;
+  const eventKinds = { edit: 0, create: 0 };
+  const negativeKinds = { edit: 0, create: 0 };
   const groups = new Set<string>();
   const splitCount = { fit: 0, eval: 0 };
   const splitPositives = { fit: 0, eval: 0 };
@@ -651,12 +676,17 @@ function checkDeclared(
     const split = str(row["split"]);
     groups.add(`${str(row["repo"])}\u0000${str(row["file_path"])}`);
     if (split === "fit" || split === "eval") splitCount[split] += 1;
+    // Derived here as well, so `declared.event_kinds` is a check on the tree
+    // rather than a copy of it.
+    const rowKind = str(row["before"]) === "" ? "create" : "edit";
+    eventKinds[rowKind] += 1;
     if (label === 1) {
       positives += 1;
       if (cwe !== null) perClass.set(cwe, (perClass.get(cwe) ?? 0) + 1);
       if (split === "fit" || split === "eval") splitPositives[split] += 1;
     } else {
       negatives += 1;
+      negativeKinds[rowKind] += 1;
       // Derive the pool from the diff, not from the declared field: a row that
       // declares `low` while its diff covers the whole file is exactly the
       // silent inflation this assertion exists to stop.
@@ -687,6 +717,19 @@ function checkDeclared(
   expect("min_per_class", declared["min_per_class"], MIN_PER_CLASS);
   expect("low_risk_negatives", declared["low_risk_negatives"], lowRiskNegatives);
   expect("low_risk_negatives_required", declared["low_risk_negatives_required"], MIN_LOW_RISK_NEGATIVES);
+  const declaredKinds = asRecord(declared["event_kinds"]);
+  expect("event_kinds.total", declaredKinds["total"], eventKinds);
+  expect("event_kinds.negatives", declaredKinds["negatives"], negativeKinds);
+
+  // Ruling: the pool may not be a single event type. A defect-free denominator
+  // made only of edits says nothing about a create, and a create-only pool
+  // cannot pair B4/B4g on an existing file.
+  if (negativeKinds.edit === 0) {
+    add("event_kind", null, "no `edit` negative staged: the precision denominator only covers creates");
+  }
+  if (negativeKinds.create === 0) {
+    add("event_kind", null, "no `create` negative staged: the create branch is untested by construction");
+  }
 
   // Line 4 pairs B4/B4g on eight low-risk samples; if the pool is not
   // defect-free the pairs measure a different population than line 1's

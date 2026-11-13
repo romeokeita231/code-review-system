@@ -10,6 +10,7 @@
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core'\nimport { DomSanitizer } from '@angular/platform-browser'\nimport { jwtDecode } from 'jwt-decode'\nimport { TranslateModule } from '@ngx-translate/core'\nimport { MatCardModule } from '@angular/material/card'\n\n@Component({\n  changeDetection: ChangeDetectionStrategy.Eager,\n  selector: 'app-last-login-ip',\n  templateUrl: './last-login-ip.component.html',\n  styleUrls: ['./last-login-ip.component.scss'],\n  imports: [MatCardModule, TranslateModule]\n})\n\nexport class LastLoginIpComponent implements OnInit {\n  private readonly sanitizer = inject(DomSanitizer)\n\n  lastLoginIp: any = '?'\n\n  ngOnInit (): void {\n    try {\n      this.parseAuthToken()\n    } catch (err) {\n      console.log(err)\n    }\n  }\n\n  parseAuthToken () {\n    let payload = {} as any\n    const token = localStorage.getItem('token')\n    if (token) {\n      payload = jwtDecode(token)\n      if (payload.data.lastLoginIp) {\n\n        this.lastLoginIp = this.sanitizer.bypassSecurityTrustHtml(`<small>${String(payload.data.lastLoginIp).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</small>`)\n      }\n    }\n  }\n}\n",
   "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { Component, inject, OnInit, ChangeDetectionStrategy } from '@angular/core'\nimport { DomSanitizer } from '@angular/platform-browser'\nimport { jwtDecode } from 'jwt-decode'\nimport { TranslateModule } from '@ngx-translate/core'\nimport { MatCardModule } from '@angular/material/card'\n\n@Component({\n  changeDetection: ChangeDetectionStrategy.Eager,\n  selector: 'app-last-login-ip',\n  templateUrl: './last-login-ip.component.html',\n  styleUrls: ['./last-login-ip.component.scss'],\n  imports: [MatCardModule, TranslateModule]\n})\n\nexport class LastLoginIpComponent implements OnInit {\n  private readonly sanitizer = inject(DomSanitizer)\n\n  lastLoginIp: any = '?'\n\n  ngOnInit (): void {\n    try {\n      this.parseAuthToken()\n    } catch (err) {\n      console.log(err)\n    }\n  }\n\n  parseAuthToken () {\n    let payload = {} as any\n    const token = localStorage.getItem('token')\n    if (token) {\n      payload = jwtDecode(token)\n      if (payload.data.lastLoginIp) {\n\n        this.lastLoginIp = this.sanitizer.bypassSecurityTrustHtml(`<small>${payload.data.lastLoginIp}</small>`)\n      }\n    }\n  }\n}\n",
   "changed_lines": 2,
+  "event_kind": "edit",
   "label": 1,
   "defects": [
     {
@@ -33,7 +34,8 @@
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:frontend/src/app/last-login-ip/last-login-ip.component.ts",
     "advisory": null,
-    "blob_sha": "4376de1087ba0a1fd099d8cf30e86341c03b3c85"
+    "blob_sha": "4376de1087ba0a1fd099d8cf30e86341c03b3c85",
+    "base_path": null
   },
   "annotator": "self",
   "split": "eval"

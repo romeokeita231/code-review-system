@@ -1,12 +1,12 @@
 {
   "version": "ds-2.0.0",
   "kind": "self",
-  "content_sha256_root": "0b1ec9edafd0246a7289b48d1782bf496d27a9cd3d26b0ba472b6daa066a88ad",
+  "content_sha256_root": "88660232a43cb6d9c8ddc8598fd4a7ff79ec5221afdda886d9254477e9023e8a",
   "declared": {
-    "samples": 34,
+    "samples": 35,
     "positives": 26,
-    "negatives": 8,
-    "groups": 29,
+    "negatives": 9,
+    "groups": 30,
     "min_per_class": 3,
     "per_class": {
       "CWE-022": 5,
@@ -23,8 +23,8 @@
     },
     "split": {
       "fit": 12,
-      "eval": 22,
-      "total": 34
+      "eval": 23,
+      "total": 35
     },
     "split_positives": {
       "fit": 12,
@@ -39,12 +39,23 @@
     "split_criterion": "groups keyed by repo:path, ordered by sha256(group_key), greedy fill to 0.6 eval; a group never crosses the split; negatives are held out in eval so the threshold cannot be tuned against them",
     "negatives_split": "eval",
     "defect_origin": "real",
-    "defect_origin_basis": "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
-    "negative_encoding": "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective.",
+    "defect_origin_basis": "a positive's vulnerable bytes on `after` are the upstream author's: `after` is byte-identical to the pinned blob (`origin.blob_sha`), so the detected defect is a real one. The project-authored side is `before` (upstream plus one re-added control); it only builds the minimal change event and `changed_lines`, and no detector ever sees it. A negative has `before` = the pinned blob and `after` = that blob plus one recorded safe edit, so `origin.blob_sha` names the base blob rather than claiming byte identity; the single `create` row carries `origin.base_path`, the pinned file its text came from. Caveat: all three sources are deliberately vulnerable teaching applications, so this is real-defect recall under a non-representative parent population, not evidence about production code.",
+    "negative_encoding": "before = pinned upstream blob; after = the same blob plus one safe edit (`safe_patch` in rows.json: empty-value guard, extracted constant, or null-coalesced binding). The diff stays under 30 lines, so a defect-free row is low risk and line 4 has a pool that is not defective. One row is a `create` (`from` in rows.json): its `after` is the vetted text of another negative and `before` is empty, so the create path is exercised instead of being dead code. It is a smoke sample: n=1, no precision claim is made for it.",
+    "event_kinds": {
+      "total": {
+        "edit": 34,
+        "create": 1
+      },
+      "negatives": {
+        "edit": 8,
+        "create": 1
+      },
+      "basis": "derived: event_kind = create iff before === \"\"; not a declared field"
+    },
     "contamination_rule": "high iff origin.kind=public_repo and (origin.advisory or source.pedagogical); else low. Category rule, no free parameter: star counts are evidence, not a gate.",
     "contamination_stars_as_of": "2026-11-12",
     "low_risk_negatives_required": 8,
-    "low_risk_negatives": 8,
+    "low_risk_negatives": 9,
     "supply_exhausted": [
       {
         "cwe": "078",
@@ -140,6 +151,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "routes/index.js",
+      "event_kind": "edit",
       "changed_lines": 4,
       "content_sha256": "aac4ca69ee5179547f770af078f75df94aa93d1e72705dfe20d50902429f65dc",
       "expected_detectable_by": [
@@ -155,6 +167,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "core/appHandler.js",
+      "event_kind": "edit",
       "changed_lines": 4,
       "content_sha256": "800656a2d1d742ebdf6714668211b0f55c1b1b9d2a17cd6d70745dd418e870c1",
       "expected_detectable_by": [
@@ -170,6 +183,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "core/appHandler.js",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "48e7a20870e52aa95cb8a49e0ddb19c2371364691f3db27fea00dafe4f1649a8",
       "expected_detectable_by": [
@@ -185,6 +199,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "app.js",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "158f47a5791d044e0aaaca94f085179dc3056bfc299e92896f8342da462a5493",
       "expected_detectable_by": [
@@ -200,6 +215,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "app.js",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "e3acd5421a397eb20cf2f32f517d5c8744f863a49f9aca27c9d0e4d43758dbae",
       "expected_detectable_by": [
@@ -215,6 +231,7 @@
       "paired_safe": false,
       "language": "js",
       "path": "mongoose-db.js",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "f3f302e0951011c3f30d211311a71c667d3b01fe39e349acd56a1c041fd0352a",
       "expected_detectable_by": [
@@ -230,6 +247,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/dataErasure.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "8409266bc1e8903135331ff7d4f0fa050d1d2d16138daf8a0c6af1764962e3bd",
       "expected_detectable_by": [
@@ -245,6 +263,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/fileServer.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "68cf96fb15c80b7da8fff61df0ce951870af8622e90040fe55c1bbcced403472",
       "expected_detectable_by": [
@@ -260,6 +279,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/vulnCodeSnippet.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "dd1785429aaf7d8812da6f82eea4126e6c54c251125105174105d8699c40bde0",
       "expected_detectable_by": [
@@ -275,6 +295,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/vulnCodeFixes.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "d3e412881c6c1da24329c1d69a935f8502944908b8da65fce72c3ad7e4ab9fea",
       "expected_detectable_by": [
@@ -290,6 +311,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/fileUpload.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "e294e613acf35ecad1ee34e58d7c9f80b66f02ecad342f7a57852c60ee5bf7fe",
       "expected_detectable_by": [
@@ -305,6 +327,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/logfileServer.ts",
+      "event_kind": "edit",
       "changed_lines": 6,
       "content_sha256": "a10a988b5e8c522e070e30a49d000e99345a46d6914547d8a593d7c90b3c0d34",
       "expected_detectable_by": []
@@ -318,6 +341,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/quarantineServer.ts",
+      "event_kind": "edit",
       "changed_lines": 6,
       "content_sha256": "33bdb53db826c9282b0206500eb17bcc26a47a94809d2171f13cf663d3d261fc",
       "expected_detectable_by": []
@@ -331,6 +355,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/keyServer.ts",
+      "event_kind": "edit",
       "changed_lines": 6,
       "content_sha256": "9f00ccef157a63f75c55ab3a2cf5af4405fe19cbb186af74c3fb3592d88acd54",
       "expected_detectable_by": []
@@ -344,8 +369,23 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/videoHandler.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "18b6e135f580c573c1dd5a30d02197844596efcd7d11f27ea48df528bbba347e",
+      "expected_detectable_by": []
+    },
+    {
+      "sample_id": "ts-cwe022-9010",
+      "group_id": "juice-shop:routes/logfileServerSafe.ts",
+      "split": "eval",
+      "cwe": null,
+      "risk_level": "low",
+      "paired_safe": true,
+      "language": "ts",
+      "path": "routes/logfileServerSafe.ts",
+      "event_kind": "create",
+      "changed_lines": 26,
+      "content_sha256": "bff653e83d03e541192c51cccd25b12e4721c60c5a50c73ceb775ad9b74b02c2",
       "expected_detectable_by": []
     },
     {
@@ -357,6 +397,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/search-result/search-result.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "f2daaeb0f6c51a8fc8654f290e24a3ae02a4751ab03591612c423bd2ed042dfa",
       "expected_detectable_by": [
@@ -372,6 +413,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/search-result/search-result.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "4423be585604493cbc41194bbc80075303770459fe5dc3940e3c951770dc3027",
       "expected_detectable_by": [
@@ -387,6 +429,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/data-export/data-export.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "5f37da67b29d8989f3f229c9dd0b22174c6eb48cce1882d423791ea56c7cef60",
       "expected_detectable_by": [
@@ -402,6 +445,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/track-result/track-result.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "4bc3d69c2e72c393e2807df7ad652f850b90fdc33bcf20b0adad84fc48871f92",
       "expected_detectable_by": [
@@ -417,6 +461,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/administration/administration.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "887a5c4b246c3040247a08d4eb3add354eabe084b061ba48ec2764f857d9bab3",
       "expected_detectable_by": [
@@ -432,6 +477,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/administration/administration.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "73ad1aecfa0dc106867e6ee990d49bf6a2ce01412691e825b7caa28a979f5ac3",
       "expected_detectable_by": [
@@ -447,6 +493,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "frontend/src/app/last-login-ip/last-login-ip.component.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "c6384cb82671deb1442645e2569d0187e73601a6d718dc8ab0e66b6cf2d81829",
       "expected_detectable_by": [
@@ -462,6 +509,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "frontend/src/app/score-board/score-board.component.ts",
+      "event_kind": "edit",
       "changed_lines": 4,
       "content_sha256": "62ed53d784ffa6ce366729b9d8a0c70e83e4032435a4e5f9b2ed23f18d780c2c",
       "expected_detectable_by": []
@@ -475,6 +523,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/search.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "c297343b12f4a2a5b0ba3e0b45d300526d8d8cbcafd8e75df126bf83d8c687e7",
       "expected_detectable_by": [
@@ -490,6 +539,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/login.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "42d4b6e4b1d7df2e42e165b08b3dd411c74e602d05f1390b50c46121d765327d",
       "expected_detectable_by": [
@@ -505,6 +555,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/userProfile.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "992e15f852251deb1568bb038023fd01df236625be44938eaff71cf2983f9ead",
       "expected_detectable_by": [
@@ -520,6 +571,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/b2bOrder.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "e532e39cd09e01ffb12361a76cd56a15d8154f90b0034e31a67be74985834d3d",
       "expected_detectable_by": [
@@ -535,6 +587,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/fileUpload.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "557c91fd03901621c339f00673bccff49f343793511cfa095987464a22d26e2e",
       "expected_detectable_by": [
@@ -550,6 +603,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "lib/xml.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "0cae9cd0ca9156f33e8bca146ebdc78e4a5e43175dc29c9c5018ef686f5458be",
       "expected_detectable_by": [
@@ -565,6 +619,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/captcha.ts",
+      "event_kind": "edit",
       "changed_lines": 4,
       "content_sha256": "c8fa81d90b80ac2d97b28f639428db0e4b10cd259d9a83cc97178f2f58a26c43",
       "expected_detectable_by": []
@@ -578,6 +633,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "routes/redirect.ts",
+      "event_kind": "edit",
       "changed_lines": 6,
       "content_sha256": "bfbe61f72fdf57d401574d49e8cfd2f9b35945ba061acf36d68aae39a8985921",
       "expected_detectable_by": []
@@ -591,6 +647,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "lib/insecurity.ts",
+      "event_kind": "edit",
       "changed_lines": 2,
       "content_sha256": "6b037da9a60c7dd72fd8e893a106cee904bc61fc7ddfb20f55e2ba982d7ffd8e",
       "expected_detectable_by": [
@@ -606,6 +663,7 @@
       "paired_safe": false,
       "language": "ts",
       "path": "routes/profileImageUrlUpload.ts",
+      "event_kind": "edit",
       "changed_lines": 4,
       "content_sha256": "43d6d53d40dd57509e22cd71704cac2bb599cd37a82292edbb57563df63e043d",
       "expected_detectable_by": [
@@ -621,6 +679,7 @@
       "paired_safe": true,
       "language": "ts",
       "path": "lib/startup/validatePreconditions.ts",
+      "event_kind": "edit",
       "changed_lines": 5,
       "content_sha256": "3a2569005a4e11d6c8f7a7c910140beec42d7cb0a1308139534082f51009d62d",
       "expected_detectable_by": []

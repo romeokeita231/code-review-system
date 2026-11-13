@@ -57,9 +57,9 @@ describe("verifyDataset", () => {
     const manifest = await readJson<{ declared: { samples: number; positives: number; negatives: number } }>(
       join(DATASET, "manifest.json"),
     );
-    expect(manifest.declared.samples).toBe(34);
+    expect(manifest.declared.samples).toBe(35);
     expect(manifest.declared.positives).toBe(26);
-    expect(manifest.declared.negatives).toBe(8);
+    expect(manifest.declared.negatives).toBe(9);
   });
 
   it("carries at least eight defect-free low-risk rows", async () => {
@@ -73,10 +73,20 @@ describe("verifyDataset", () => {
   it("fails the gate when the defect-free low-risk pool drops below eight", { timeout: 30000 }, async () => {
     const dir = await copyDataset();
     // A whole-file negative is `high` risk again: the diff covers the file, so
-    // line 4's eight pairs would silently measure a defective population.
-    const target = await findRow(dir, (row) => row["label"] === 0 && String(row["after"]).length > 5000);
-    target.row["before"] = "";
-    await writeJson(target.path, target.row);
+    // line 4's pairs would silently measure a defect-free population that is
+    // no longer staged. Two rows have to go, because the pool is one over the
+    // floor: eight edits plus the create smoke sample.
+    let converted = 0;
+    for (const name of await sampleIds(dir)) {
+      if (converted >= 2) break;
+      const path = join(dir, "samples", name);
+      const row = await readJson<Row>(path);
+      if (row["label"] !== 0 || String(row["after"]).length < 5000) continue;
+      row["before"] = "";
+      await writeJson(path, row);
+      converted += 1;
+    }
+    expect(converted).toBe(2);
 
     const result = await verifyDataset(dir);
     expect(result.errors.some((error) => error.includes("defect-free low-risk"))).toBe(true);
@@ -217,11 +227,44 @@ describe("verifyDataset", () => {
     const dir = await copyDataset();
     const manifestPath = join(dir, "manifest.json");
     const manifest = await readJson<{ declared: Record<string, unknown> }>(manifestPath);
-    manifest.declared["samples"] = 35;
+    manifest.declared["samples"] = 36;
     await writeJson(manifestPath, manifest);
 
     const result = await verifyDataset(dir);
     expect(result.errors.some((error) => error.includes("declared.samples"))).toBe(true);
+  });
+
+  it("rejects an event_kind that disagrees with the bytes", { timeout: 30000 }, async () => {
+    const dir = await copyDataset();
+    const target = await findRow(dir, (row) => row["label"] === 0);
+    target.row["event_kind"] = target.row["before"] === "" ? "edit" : "create";
+    await writeJson(target.path, target.row);
+
+    const result = await verifyDataset(dir);
+    expect(result.errors.some((error) => error.includes("derived"))).toBe(true);
+  });
+
+  it("rejects a stale declared event-kind count", { timeout: 30000 }, async () => {
+    const dir = await copyDataset();
+    const manifestPath = join(dir, "manifest.json");
+    const manifest = await readJson<{ declared: { event_kinds: { total: Record<string, number> } } }>(manifestPath);
+    manifest.declared.event_kinds.total["edit"] = 1;
+    await writeJson(manifestPath, manifest);
+
+    const result = await verifyDataset(dir);
+    expect(result.errors.some((error) => error.includes("declared.event_kinds.total"))).toBe(true);
+  });
+
+  it("fails when no negative exercises the create path", { timeout: 30000 }, async () => {
+    const dir = await copyDataset();
+    // Make the create row an edit: the pool is then single-typed, and a report
+    // about it would silently say nothing about file creation.
+    const target = await findRow(dir, (row) => row["event_kind"] === "create");
+    target.row["before"] = `${String(target.row["after"])}\n`;
+    await writeJson(target.path, target.row);
+
+    const result = await verifyDataset(dir);
+    expect(result.errors.some((error) => error.includes("create branch is untested"))).toBe(true);
   });
 
   it("refuses an insufficient_n class without a supply record", { timeout: 30000 }, async () => {
@@ -253,7 +296,7 @@ describe("verifyConformance", () => {
     const result = await verifyConformance(DATASET);
     expect(result.violations).toEqual([]);
     expect(result.ok).toBe(true);
-    expect(result.samples).toBe(34);
+    expect(result.samples).toBe(35);
   });
 
   it("reports a no-op write as a violation", { timeout: 30000 }, async () => {

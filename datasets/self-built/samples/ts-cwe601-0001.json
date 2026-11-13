@@ -10,6 +10,7 @@
   "before": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { type Request, type Response, type NextFunction } from 'express'\n\nimport * as challengeUtils from '../lib/challengeUtils'\nimport { challenges } from '../data/datacache'\nimport * as security from '../lib/insecurity'\n\nexport function performRedirect () {\n  return ({ query }: Request, res: Response, next: NextFunction) => {\n    const toUrl: string = query.to as string\n    if (security.isRedirectAllowed(toUrl)) {\n      challengeUtils.solveIf(challenges.redirectCryptoCurrencyChallenge, () => { return toUrl === 'https://explorer.dash.org/address/Xr556RzuwX6hg5EGpkybbv5RanJoZN17kW' || toUrl === 'https://blockchain.info/address/1AbKfgvw9psQ41NbLi8kufDQTezwG8DRZm' || toUrl === 'https://etherscan.io/address/0x0f933ab9fcaaa782d0279c300d73750e1311eae6' })\n      challengeUtils.solveIf(challenges.redirectChallenge, () => { return isUnintendedRedirect(toUrl) })\n      res.redirect(toUrl)\n    } else {\n      res.status(406)\n      next(new Error('Unrecognized target URL for redirect: ' + toUrl))\n    }\n  }\n}\n\nfunction isUnintendedRedirect (toUrl: string) {\n  let unintended = true\n  for (const allowedUrl of security.redirectAllowlist) {\n    unintended = unintended && !toUrl.startsWith(allowedUrl)\n  }\n  return unintended\n}\n",
   "after": "/*\n * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.\n * SPDX-License-Identifier: MIT\n */\n\nimport { type Request, type Response, type NextFunction } from 'express'\n\nimport * as challengeUtils from '../lib/challengeUtils'\nimport { challenges } from '../data/datacache'\nimport * as security from '../lib/insecurity'\n\nexport function performRedirect () {\n  return ({ query }: Request, res: Response, next: NextFunction) => {\n    const toUrl: string = query.to as string\n    if (typeof toUrl !== 'string' || toUrl.length === 0) {\n      res.status(400)\n      next(new Error('Missing redirect target'))\n      return\n    }\n\n    if (security.isRedirectAllowed(toUrl)) {\n      challengeUtils.solveIf(challenges.redirectCryptoCurrencyChallenge, () => { return toUrl === 'https://explorer.dash.org/address/Xr556RzuwX6hg5EGpkybbv5RanJoZN17kW' || toUrl === 'https://blockchain.info/address/1AbKfgvw9psQ41NbLi8kufDQTezwG8DRZm' || toUrl === 'https://etherscan.io/address/0x0f933ab9fcaaa782d0279c300d73750e1311eae6' })\n      challengeUtils.solveIf(challenges.redirectChallenge, () => { return isUnintendedRedirect(toUrl) })\n      res.redirect(toUrl)\n    } else {\n      res.status(406)\n      next(new Error('Unrecognized target URL for redirect: ' + toUrl))\n    }\n  }\n}\n\nfunction isUnintendedRedirect (toUrl: string) {\n  let unintended = true\n  for (const allowedUrl of security.redirectAllowlist) {\n    unintended = unintended && !toUrl.startsWith(allowedUrl)\n  }\n  return unintended\n}\n",
   "changed_lines": 6,
+  "event_kind": "edit",
   "label": 0,
   "defects": [],
   "sample_cwe": null,
@@ -23,7 +24,8 @@
     "kind": "public_repo",
     "ref": "juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:routes/redirect.ts",
     "advisory": null,
-    "blob_sha": "591f388daaaf30638ef860f9bad29a9111873243"
+    "blob_sha": "591f388daaaf30638ef860f9bad29a9111873243",
+    "base_path": null
   },
   "annotator": "self",
   "split": "eval"
