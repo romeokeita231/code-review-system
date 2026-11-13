@@ -19,6 +19,7 @@ import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
 import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
+import type { StagedContext } from "./upstream-context.js";
 import {
   coverageCounts,
   cweKey,
@@ -362,6 +363,13 @@ export interface StageOptions {
    * as "not probed" and never as "projected and fine".
    */
   index?: boolean;
+  /**
+   * Where the upstream measurement lives. Defaults to
+   * `artifacts/staged-context.json`; a staged run without it is refused, because
+   * the importers this project writes are part of the measurement and a report
+   * that omits them claims a blast radius the repository does not have.
+   */
+  stagedContext?: string;
 }
 
 /** Where the frozen values live. A pin that is only in someone's head is not a pin. */
@@ -436,6 +444,24 @@ export interface RunEvidence {
     rows: StrataRow[];
     index_build_ms: Record<string, number>;
     asserted: string;
+    /**
+     * The staged tree is a subset this project wrote: three one-line importers
+     * per positive, so the file has a blast radius. The upstream measurement
+     * says what the same query answers on the pinned repository, where nobody
+     * wrote anything.
+     */
+    authored_context: {
+      positives: number;
+      importers_each: number;
+      measured_positives: number;
+      upstream_tier0: number;
+      upstream_tier_ge1: number;
+      negatives_upstream_tier0: number;
+      negatives_upstream_tier_ge1: number;
+      not_applicable: number;
+      source: string;
+      range_sentence: string;
+    } | null;
   } | null;
   /** How long the run should take, from the caps and the measured AOR probe. */
   wall_clock_estimate: {
@@ -727,14 +753,28 @@ export function importerText(target: string): string {
 /** One row of the projection: what the triage layer would decide, before the run. */
 export interface StrataRow {
   sample_id: string;
+  /**
+   * Which config produced this decision. The two baselines are not the same
+   * ladder: B4 asks the graph, B4g has no ladder at all, so a row's tier only
+   * means something next to the baseline that decided it.
+   */
+  baseline: "B4" | "B4g";
   stratum: "A" | "B";
   path: string;
   tier: Tier;
   tier_source: "triage" | "static" | "none";
-  impacted_files: number;
-  impacted_nodes: number;
+  /** `null` = the baseline never queries the graph, so nothing was measured. */
+  impacted_files: number | null;
+  impacted_nodes: number | null;
   skip_reason: string | null;
-  ms: number;
+  ms: number | null;
+  /** Did this project write importers for the row to give it a blast radius? */
+  authored_context?: boolean;
+  authored_importers?: number;
+  /** The same query on the pinned checkout: what the file is without our help. */
+  upstream_impacted_files?: number | null;
+  upstream_importers?: number | null;
+  upstream_would_be_tier?: Tier | null;
 }
 
 /**
@@ -763,16 +803,43 @@ export async function buildIndex(root: string): Promise<number> {
  * happens to have three importers of its own would silently become tier 1 too -
  * at which point line 4 ("no false positive on the low-risk pool") would stop
  * measuring tier 0 while the report still printed `pairs=8`.
+ *
+ * The decision mirrors `decideTier` in the orchestrator rather than re-deriving
+ * the ladder from scratch, because the two baselines do not share a ladder:
+ * with `triage.enabled = false` (B4g) the orchestrator returns tier 2 with
+ * source `none` and never queries the graph at all, so a B4g row has no
+ * blast-radius measurement to report and no ladder to fall back to.
  */
 export async function projectStrata(
   root: string,
   config: RunConfig,
   samples: PlannedSample[],
   datasetDir: string,
+  baseline: "B4" | "B4g",
 ): Promise<StrataRow[]> {
+  const rows: StrataRow[] = [];
+  const stratumOf = (sample: PlannedSample): "A" | "B" => (sample.kind === "positive" ? "B" : "A");
+  if (!config.triage.enabled) {
+    for (const sample of samples) {
+      if (sample.kind === "dep-probe") continue;
+      // `decideTier`: no triage provider, no ladder, every row tier 2.
+      rows.push({
+        sample_id: sample.sampleId,
+        baseline,
+        stratum: stratumOf(sample),
+        path: sample.path,
+        tier: 2,
+        tier_source: "none",
+        impacted_files: null,
+        impacted_nodes: null,
+        skip_reason: null,
+        ms: null,
+      });
+    }
+    return rows;
+  }
   const triage = createCrgTriage(config, { root });
   const boundaries = { tier0: config.triage.tier0, tier1: config.triage.tier1 };
-  const rows: StrataRow[] = [];
   for (const sample of samples) {
     if (sample.kind === "dep-probe") continue;
     const after = stagedText(sample, datasetDir);
@@ -804,7 +871,8 @@ export async function projectStrata(
     );
     rows.push({
       sample_id: sample.sampleId,
-      stratum: sample.kind === "positive" ? "B" : "A",
+      baseline,
+      stratum: stratumOf(sample),
       path: sample.path,
       tier: decision.tier,
       tier_source: decision.source,
@@ -825,21 +893,34 @@ export async function projectStrata(
  * run at all, which happens only above it. A row that lands in the wrong stratum
  * makes one of those lines vacuous while still printing a number, so the run
  * refuses to start instead of averaging it away afterwards.
+ *
+ * Each baseline is checked against what its own config can produce, not against
+ * a shared expectation: B4 must put A at 0 and B above it, while B4g has no
+ * ladder and must put *every* row at tier 2 by `none`. A B4g that agrees with
+ * B4 is the failure this assertion exists for - it means both baselines were
+ * staged from one config, and the pairing would compare a run with itself.
  */
 export function assertStrata(rows: StrataRow[]): void {
-  const negatives = rows.filter((row) => row.stratum === "A");
-  const positives = rows.filter((row) => row.stratum === "B");
   const problems: string[] = [];
-  for (const row of negatives) {
-    if (row.tier !== 0) {
-      problems.push(`negative ${row.sample_id} is tier ${row.tier} (want 0): ${row.impacted_files} files`);
+  for (const row of rows) {
+    if (row.baseline === "B4g") {
+      if (row.tier !== 2 || row.tier_source !== "none") {
+        problems.push(
+          `B4g ${row.sample_id} is tier ${row.tier} source ${row.tier_source} (want 2 via none): ` +
+            `triage is off in that baseline, so the ladder must not be deciding anything`,
+        );
+      }
+      continue;
     }
-  }
-  for (const row of positives) {
-    if (row.tier < 1 || row.tier_source !== "triage") {
+    if (row.stratum === "A" && row.tier !== 0) {
+      problems.push(
+        `negative ${row.sample_id} is tier ${row.tier} (want 0): ${row.impacted_files ?? "?"} files`,
+      );
+    }
+    if (row.stratum === "B" && (row.tier < 1 || row.tier_source !== "triage")) {
       problems.push(
         `positive ${row.sample_id} is tier ${row.tier} source ${row.tier_source} (want >= 1 by triage): ` +
-          `${row.impacted_files} files, skip ${row.skip_reason ?? "none"}`,
+          `${row.impacted_files ?? "?"} files, skip ${row.skip_reason ?? "none"}`,
       );
     }
   }
@@ -857,7 +938,10 @@ export function formatStrata(rows: StrataRow[], buildMs: Record<string, number>)
   const lines = rows.map(
     (row) =>
       `  ${row.stratum} ${row.sample_id} tier=${row.tier} via ${row.tier_source} ` +
-      `files=${row.impacted_files} nodes=${row.impacted_nodes} ${row.ms}ms`,
+      `files=${row.impacted_files ?? "n/a"} nodes=${row.impacted_nodes ?? "n/a"} ` +
+      `${row.ms ?? "n/a"}ms ` +
+      `authored=${row.authored_importers ?? 0} ` +
+      `upstream=${row.upstream_importers ?? "n/a"} importers / tier ${row.upstream_would_be_tier ?? "n/a"}`,
   );
   const counts = rows.reduce<Record<string, number>>((acc, row) => {
     const key = `${row.stratum}:tier${row.tier}`;
@@ -872,6 +956,68 @@ export function formatStrata(rows: StrataRow[], buildMs: Record<string, number>)
     `${lines.join("\n")}\n` +
     `index build: ${index}`
   );
+}
+
+/** Where the upstream measurement is frozen; produced by `scripts/upstream-context.ts`. */
+export const DEFAULT_STAGED_CONTEXT = "artifacts/staged-context.json";
+
+/**
+ * The authored-context record, read from the artefact rather than re-measured.
+ *
+ * Re-measuring it at staging time would need the pinned checkouts (20 MB of
+ * extracted tarball for juice-shop alone), which are not part of the repository
+ * - so the numbers are measured once, committed with their method and the blob
+ * hash that identifies each file, and joined onto the projection here. A record
+ * for another dataset version is refused for the same reason a run directory
+ * from another dataset is: two measurements would end up in one table.
+ */
+export function loadStagedContext(
+  path = DEFAULT_STAGED_CONTEXT,
+  datasetVersion?: string,
+): StagedContext | null {
+  if (!existsSync(path)) return null;
+  const raw = JSON.parse(readFileSync(path, "utf8")) as StagedContext;
+  if (datasetVersion !== undefined && raw.dataset_version !== datasetVersion) {
+    throw new Error(
+      `${path} describes ${String(raw.dataset_version)}, not ${datasetVersion}: ` +
+        `refusing to attach another dataset's authored-context measurement`,
+    );
+  }
+  if (!Array.isArray(raw.rows)) throw new Error(`${path} has no rows[]`);
+  return raw;
+}
+
+/**
+ * Join the upstream measurement onto the projection.
+ *
+ * A row with no counterpart would be printed as `upstream=n/a` and read as "no
+ * difference", so a missing entry is an error rather than a blank.
+ */
+export function attachUpstreamContext(rows: StrataRow[], context: StagedContext): StrataRow[] {
+  const byId = new Map(context.rows.map((row) => [row.sample_id, row]));
+  const missing: string[] = [];
+  const enriched = rows.map((row) => {
+    const entry = byId.get(row.sample_id);
+    if (entry === undefined) {
+      missing.push(row.sample_id);
+      return row;
+    }
+    return {
+      ...row,
+      authored_context: entry.authored_context,
+      authored_importers: entry.authored_importers,
+      upstream_impacted_files: entry.upstream_impacted_files,
+      upstream_importers: entry.upstream_importers,
+      upstream_would_be_tier: entry.would_be_tier,
+    };
+  });
+  if (missing.length > 0) {
+    throw new Error(
+      `${DEFAULT_STAGED_CONTEXT} has no upstream row for ${missing.join(", ")}: every staged row ` +
+        `needs its unmodified counterpart, or the report cannot say which blast radius is ours`,
+    );
+  }
+  return enriched;
 }
 
 /**
@@ -900,6 +1046,15 @@ export async function stageDrill(options: StageOptions): Promise<void> {
   const samples = allSamples(options.plan);
   const strataRows: StrataRow[] = [];
   const indexBuildMs: Record<string, number> = {};
+  const contextPath = options.stagedContext ?? DEFAULT_STAGED_CONTEXT;
+  const context = loadStagedContext(contextPath, options.plan.datasetVersion);
+  if (context === null && options.index !== false) {
+    throw new Error(
+      `missing ${contextPath}: every positive row is staged with ${IMPORTERS_PER_POSITIVE} importers this ` +
+        `project wrote, so the run has to carry what the same query says about the pinned file with ` +
+        `nobody's help. Run \`npx tsx scripts/upstream-context.ts\` first.`,
+    );
+  }
 
   for (const baseline of ["B4", "B4g"] as const) {
     const basePath = baselineConfigPath(options.baseConfig, baseline);
@@ -977,8 +1132,11 @@ export async function stageDrill(options: StageOptions): Promise<void> {
     assertBudgetRelations(config);
 
     if (options.index !== false) {
-      const buildMs = await buildIndex(scratch);
-      const rows = await projectStrata(scratch, config, samples, options.datasetDir);
+      // B4g has no ladder, so its index is not queried by anything; building it
+      // would only pay for a measurement nothing reads.
+      const buildMs = config.triage.enabled ? await buildIndex(scratch) : 0;
+      const projected = await projectStrata(scratch, config, samples, options.datasetDir, baseline);
+      const rows = context === null ? projected : attachUpstreamContext(projected, context);
       assertStrata(rows);
       process.stdout.write(`${baseline}: ${formatStrata(rows, { [baseline]: buildMs })}\n`);
       strataRows.push(...rows);
@@ -1005,13 +1163,31 @@ export async function stageDrill(options: StageOptions): Promise<void> {
   options.evidence.strata_projection = {
     rows: strataRows,
     index_build_ms: indexBuildMs,
-    asserted: "A: tier 0; B: tier >= 1 by triage (index_not_ready would fail the run)",
+    asserted:
+      "B4: A tier 0, B tier >= 1 by triage (index_not_ready would fail the run); " +
+      "B4g: every row tier 2 via none - no ladder, no query",
+    authored_context:
+      context === null
+        ? null
+        : {
+            positives: context.summary.positives,
+            importers_each: IMPORTERS_PER_POSITIVE,
+            measured_positives: context.summary.measured_positives,
+            upstream_tier0: context.summary.positives_upstream_tier0,
+            upstream_tier_ge1: context.summary.positives_upstream_tier_ge1,
+            negatives_upstream_tier0: context.summary.negatives_upstream_tier0,
+            negatives_upstream_tier_ge1: context.summary.negatives_upstream_tier_ge1,
+            not_applicable: context.summary.not_applicable,
+            source: resolve(contextPath),
+            range_sentence: context.range_sentence,
+          },
   };
   const estimate = options.evidence.wall_clock_estimate;
   if (estimate) {
     estimate.index_build_ms = Object.values(indexBuildMs).reduce((sum, ms) => sum + ms, 0);
     estimate.total_ms += estimate.index_build_ms;
   }
+  if (context !== null) process.stdout.write(`authored context: ${context.range_sentence}\n`);
   await writeRunManifest(options);
 }
 
@@ -1820,6 +1996,16 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
   await writeFile(join(outDir, "rows.jsonl"), all.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
 }
 
+/**
+ * How many positive rows may land at tier 0 before the run is called void.
+ *
+ * One row is a flake: the graph was busy, the query lost 200 ms, the row fell
+ * back to the static ladder. Two is still a flake. Three of ten is a pattern -
+ * the projection described a tree the run did not get - and a run whose premise
+ * did not hold cannot be rescued by shrinking denominators.
+ */
+export const MAX_DEMOTED_POSITIVES = 2;
+
 export async function evaluate(
   outDir: string,
   datasetDir: string,
@@ -1887,23 +2073,104 @@ export async function evaluate(
         `index, so nothing says which rows were above the tier boundary and nothing can check it.`,
     );
   }
-  const stratumOf = new Map(projection.rows.map((row) => [row.sample_id, row.stratum]));
-  const posted = rows.filter((row) => row.change_event?.phase === "post" && stratumOf.has(row.sample));
-  const wrong = posted.filter((row) =>
-    stratumOf.get(row.sample) === "B" ? (row.tier ?? 0) < 1 : row.tier !== 0,
+  // The projection promised something different per baseline: B4 puts A at 0 and
+  // B above it, B4g has no ladder and puts every row at tier 2. A row that lands
+  // somewhere else means the tier fell back to something the projection did not
+  // describe, and the contingency table would report it as a miss. That is a
+  // measurement failure wearing a detection failure's clothes.
+  const strataOf = new Map(projection.rows.map((row) => [`${row.baseline}:${row.sample_id}`, row]));
+  const keyOf = (row: AcceptanceRowLike): string => `${row.baseline}:${row.sample}`;
+  const posted = rows.filter((row) => row.change_event?.phase === "post" && strataOf.has(keyOf(row)));
+  // A B4g row is tier 2 by construction; anything else means the baseline that
+  // ran was not the baseline that was staged.
+  const offLadder = posted.filter(
+    (row) => row.baseline === "B4g" && (row.tier !== 2 || row.tier_source !== "none"),
   );
-  if (wrong.length > 0) {
+  if (offLadder.length > 0) {
     throw new Error(
-      `refusing to evaluate: ${wrong.length} row(s) left their stratum at run time ` +
-        `(${wrong
+      `refusing to evaluate: ${offLadder.length} B4g row(s) were not tier 2 via none ` +
+        `(${offLadder
           .map((row) => `${row.sample} tier ${row.tier ?? "?"} via ${row.tier_source ?? "?"}`)
           .join(", ")}). ` +
-        `A positive below tier 1 never reached AOR; a negative above tier 0 removes line 4's ` +
-        `denominator. Re-stage with a crgQueryMs that the graph actually meets.`,
+        `B4g has \`triage.enabled = false\`, so its tier is uniform 2 and nothing queries the graph; ` +
+        `another value means the B4g baseline ran a different config.`,
     );
   }
-  const withAor = new Set(posted.filter((row) => (row.tier ?? 0) >= 1).map((row) => row.sample));
-  const unreviewed = projection.rows.filter((row) => row.stratum === "B" && !withAor.has(row.sample_id));
+  // A negative above tier 0 is not survivable: line 4's denominator is the pool
+  // that stayed below the boundary, and there is no second copy of it.
+  const invaded = posted.filter((row) => {
+    const projected = strataOf.get(keyOf(row));
+    return projected?.baseline === "B4" && projected.stratum === "A" && row.tier !== 0;
+  });
+  if (invaded.length > 0) {
+    throw new Error(
+      `refusing to evaluate: ${invaded.length} negative row(s) rose above tier 0 at run time ` +
+        `(${invaded.map((row) => `${row.sample} tier ${row.tier ?? "?"} via ${row.tier_source ?? "?"}`).join(", ")}). ` +
+        `Line 4 needs a pool that stayed below the boundary; there is no second copy of it.`,
+    );
+  }
+  // A positive below tier 1 never reached AOR. That is a measurement failure, not
+  // a miss to average away - but the cost of calling it one is the whole run, and
+  // one flake should not buy that. So the denominators are split by source:
+  // semgrep ran, so the row stays in the block numbers; AOR did not, so the row
+  // leaves the correction and anchor numbers and is listed by name. Past two of
+  // ten it is no longer a flake: the projection itself was wrong, and the run is
+  // void.
+  const demoted = posted.filter((row) => {
+    const projected = strataOf.get(keyOf(row));
+    return projected?.baseline === "B4" && projected.stratum === "B" && (row.tier ?? 0) < 1;
+  });
+  const projectedPositives = projection.rows.filter(
+    (row) => row.baseline === "B4" && row.stratum === "B",
+  ).length;
+  const demotedSamples = new Set(demoted.map((row) => row.sample));
+  if (demoted.length > MAX_DEMOTED_POSITIVES) {    throw new Error(
+      `run invalid: ${demoted.length} of ${projectedPositives} positive ` +
+        `rows landed at tier 0 despite the projection (${demoted.map((row) => row.sample).join(", ")}). ` +
+        `Above ${MAX_DEMOTED_POSITIVES} this is not a flake but a broken projection, and a run whose ` +
+        `premise did not hold cannot be reported with a footnote.`,
+    );
+  }
+  if (demoted.length > 0) {
+    // Both phases of the sample, not only the post row: the block decision and
+    // the AOR decision are two different denominators, and the flag has to be on
+    // the row each of them reads.
+    for (const row of rows) {
+      if (demotedSamples.has(row.sample) && row.baseline === "B4") row.aor_participated = false;
+    }
+    await writeFile(
+      join(outDir, "tier0_despite_projection.json"),
+      `${JSON.stringify(
+        demoted.map((row) => ({
+          sample: row.sample,
+          baseline: row.baseline,
+          tier: row.tier ?? null,
+          tier_source: row.tier_source ?? null,
+        })),
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    process.stdout.write(
+      `WARN ${demoted.length} positive row(s) landed at tier 0 despite the projection: ` +
+        `${demoted.map((row) => `${row.sample} via ${row.tier_source ?? "?"}`).join(", ")} - ` +
+        `AOR never ran for them, so they leave the correction and anchor denominators and stay in the ` +
+        `block numbers. Listed in tier0_despite_projection.json; above ${MAX_DEMOTED_POSITIVES} the run is void\n`,
+    );
+  }
+  const withAor = new Set(
+    posted.filter((row) => row.baseline === "B4" && (row.tier ?? 0) >= 1).map((row) => row.sample),
+  );
+  const unreviewed = projection.rows.filter(
+    (row) =>
+      row.baseline === "B4" &&
+      row.stratum === "B" &&
+      !withAor.has(row.sample_id) &&
+      // A demoted row did get written; it is reported above as an AOR exclusion,
+      // and calling it "no post-phase row" would be a second, wrong diagnosis.
+      !demotedSamples.has(row.sample_id),
+  );
   if (unreviewed.length > 0) {
     process.stdout.write(
       `WARN ${unreviewed.length} positive row(s) have no post-phase row at tier >= 1: ` +
@@ -2061,8 +2328,11 @@ async function main(): Promise<void> {
       `NOTE one change event is one file, so the tier comes from the staged repository: each ` +
         `positive carries ${IMPORTERS_PER_POSITIVE} clean importers (blast radius ` +
         `${IMPORTERS_PER_POSITIVE + 1} > triage.tier0.filesMax=${tier0} -> tier 1) and each negative ` +
-        `stays a single file (tier 0). Staging projects every row's tier and refuses to start ` +
-        `otherwise.\n`,
+        `stays a single file (tier 0). Those importers are written by this project, not found in the ` +
+        `source repository; the same query on the pinned checkout is frozen in ` +
+        `${DEFAULT_STAGED_CONTEXT} and joined onto every row, so the report can say which blast radius ` +
+        `is ours. B4g has no ladder at all (\`triage.enabled = false\`), so its rows are tier 2 and its ` +
+        `AOR calls are not comparable with B4's on the same rows.\n`,
     );
   }
 

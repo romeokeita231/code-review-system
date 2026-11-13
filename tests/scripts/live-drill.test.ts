@@ -10,6 +10,7 @@ import {
   assertOneShot,
   assertRunDir,
   assertStrata,
+  attachUpstreamContext,
   baselineConfigPath,
   estimateCostTokens,
   evaluate,
@@ -18,18 +19,22 @@ import {
   IMPORTERS_PER_POSITIVE,
   importerPath,
   importerText,
+  loadStagedContext,
   newRunDir,
   NON_DEGRADABLE_GATES,
   ocrDrifted,
   parseDegradedGates,
   POSITIVE_CAP_PER_CLASS,
   planDrill,
+  projectStrata,
   readRunManifest,
   stageDrill,
   toAcceptanceRows,
   writePrompt,
   type StrataRow,
 } from "../../scripts/live-drill.js";
+import { gitBlobSha } from "../../scripts/upstream-context.js";
+import { loadConfig } from "../../src/config/index.js";
 import { loadFrozenPin } from "../../scripts/frozen.js";
 import { loadTruth } from "../../scripts/acceptance.js";
 
@@ -550,11 +555,16 @@ describe("evaluate refuses a drifted measurement", () => {
   async function collectedRun(
     drifted: boolean,
     stratum: "A" | "B" = "A",
+    demoted = 1,
   ): Promise<{ root: string; outDir: string }> {
     const root = await mkdtemp(join(tmpdir(), "crs-eval-"));
     tempDirs.push(root);
     const outDir = newRunDir(root, "ds-2.0.0", "eval", new Date("2026-11-13T04:30:05"));
     await mkdir(outDir, { recursive: true });
+    // `demoted` positive samples: the projection promised tier 1, the rows carry
+    // tier 0. The first one is a real dataset row so the acceptance evaluator has
+    // a truth entry for it.
+    const ids = ["ts-cwe079-0001", "pos-2", "pos-3", "pos-4"].slice(0, demoted);
     await writeFile(
       join(outDir, "run.json"),
       `${JSON.stringify(
@@ -564,21 +574,21 @@ describe("evaluate refuses a drifted measurement", () => {
           // compares the rows with it rather than re-deriving a stratum.
           evidence: {
             strata_projection: {
-              rows: [
-                {
-                  sample_id: "ts-cwe079-0001",
-                  stratum,
-                  path: "src/a.ts",
-                  tier: stratum === "B" ? 1 : 0,
-                  tier_source: "triage",
-                  impacted_files: stratum === "B" ? 4 : 1,
-                  impacted_nodes: 3,
-                  skip_reason: null,
-                  ms: 600,
-                },
-              ],
+              rows: ids.map((id) => ({
+                sample_id: id,
+                baseline: "B4" as const,
+                stratum,
+                path: `src/${id}.ts`,
+                tier: stratum === "B" ? 1 : 0,
+                tier_source: "triage",
+                impacted_files: stratum === "B" ? 4 : 1,
+                impacted_nodes: 3,
+                skip_reason: null,
+                ms: 600,
+              })),
               index_build_ms: { B4: 1000 },
               asserted: "fixture",
+              authored_context: null,
             },
           },
         },
@@ -599,9 +609,17 @@ describe("evaluate refuses a drifted measurement", () => {
         source: "observed" as const,
       },
     };
-    const rows = [
-      toAcceptanceRows([row()], new Map([["src/a.ts", "ts-cwe079-0001"]]), "B4")[0]!,
-    ].map((entry) => ({ ...entry, instrument: instrumentRow }));
+    const rows = ids.map((id) => {
+      const event = row().change_event!;
+      return {
+        ...toAcceptanceRows(
+          [row({ change_event: { ...event, files: [`src/${id}.ts`] } })],
+          new Map([[`src/${id}.ts`, id]]),
+          "B4",
+        )[0]!,
+        instrument: instrumentRow,
+      };
+    });
     await writeFile(join(outDir, "rows.jsonl"), `${rows.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
     return { root, outDir };
   }
@@ -616,17 +634,34 @@ describe("evaluate refuses a drifted measurement", () => {
     ).rejects.toThrow(/refusing to report/);
   });
 
-  it("refuses a positive row that fell back to the static ladder", async () => {
-    // The row is tier 0 while the staging projection promised tier 1: AOR never
-    // saw the file, so counting the row as a miss would blame the detector for a
-    // missing measurement.
+  it("splits the denominators when one positive fell back to the static ladder", async () => {
+    // The row is tier 0 while the projection promised tier 1: AOR never saw the
+    // file. Counting it as a miss would blame the detector for a missing
+    // measurement; voiding the run would let one flake cost the whole thirteen
+    // minutes. So semgrep keeps it (it ran) and AOR drops it (it did not), by
+    // name, in a file the report points at.
     const { root, outDir } = await collectedRun(false, "B");
+    const report = await evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+      language: "typescript",
+      perCwe: { "079": 1 },
+    });
+    expect(report.lines[0]?.detail).toContain("aor_excluded=1");
+    const listed = JSON.parse(readSync(join(outDir, "tier0_despite_projection.json"), "utf8")) as Array<
+      Record<string, unknown>
+    >;
+    expect(listed).toEqual([
+      { sample: "ts-cwe079-0001", baseline: "B4", tier: 0, tier_source: "triage" },
+    ]);
+  });
+
+  it("voids the run when the projection was wrong, not one row unlucky", async () => {
+    const { root, outDir } = await collectedRun(false, "B", 3);
     await expect(
       evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
         language: "typescript",
         perCwe: { "079": 1 },
       }),
-    ).rejects.toThrow(/left their stratum/);
+    ).rejects.toThrow(/run invalid: 3 of 3 positive rows landed at tier 0/);
   });
 
   it("refuses to evaluate a run that was staged without a projection", async () => {
@@ -753,8 +788,8 @@ describe("evaluate refuses a drifted measurement", () => {
 
   it("refuses a negative that the graph rates above tier 0", () => {
     const rows: StrataRow[] = [
-      { sample_id: "neg", stratum: "A", path: "live/neg/a.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
-      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+      { sample_id: "neg", baseline: "B4", stratum: "A", path: "live/neg/a.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+      { sample_id: "pos", baseline: "B4", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
     ];
     expect(() => assertStrata(rows)).toThrow(/negative neg is tier 1/);
   });
@@ -763,7 +798,7 @@ describe("evaluate refuses a drifted measurement", () => {
     // `index_not_ready` gives the static ladder, which rates one file as tier 0:
     // AOR would be skipped for that row and line 3 would lose it silently.
     const rows: StrataRow[] = [
-      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 0, tier_source: "static", impacted_files: 1, impacted_nodes: 0, skip_reason: "index_not_ready", ms: 2 },
+      { sample_id: "pos", baseline: "B4", stratum: "B", path: "live/pos/b.ts", tier: 0, tier_source: "static", impacted_files: 1, impacted_nodes: 0, skip_reason: "index_not_ready", ms: 2 },
     ];
     expect(() => assertStrata(rows)).toThrow(/positive pos is tier 0 source static/);
     expect(() => assertStrata(rows)).toThrow(/index_not_ready/);
@@ -771,15 +806,103 @@ describe("evaluate refuses a drifted measurement", () => {
 
   it("accepts the strata the drill stages: A at 0, B at 1 by triage", () => {
     const rows: StrataRow[] = [
-      { sample_id: "neg", stratum: "A", path: "live/neg/a.ts", tier: 0, tier_source: "triage", impacted_files: 1, impacted_nodes: 0, skip_reason: null, ms: 600 },
-      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+      { sample_id: "neg", baseline: "B4", stratum: "A", path: "live/neg/a.ts", tier: 0, tier_source: "triage", impacted_files: 1, impacted_nodes: 0, skip_reason: null, ms: 600 },
+      { sample_id: "pos", baseline: "B4", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
     ];
     expect(() => assertStrata(rows)).not.toThrow();
+  });
+
+  it("accepts B4g only as a uniform tier 2, which no ladder decided", () => {
+    // `triage.enabled = false` makes `decideTier` return tier 2 / source none for
+    // every row and never query the graph, so a B4g row that agrees with B4's
+    // ladder is the bug this assertion exists for: both baselines staged from one
+    // config, and line 4 comparing a run with itself.
+    const off: StrataRow[] = [
+      { sample_id: "neg", baseline: "B4g", stratum: "A", path: "live/neg/a.ts", tier: 2, tier_source: "none", impacted_files: null, impacted_nodes: null, skip_reason: null, ms: null },
+      { sample_id: "pos", baseline: "B4g", stratum: "B", path: "live/pos/b.ts", tier: 2, tier_source: "none", impacted_files: null, impacted_nodes: null, skip_reason: null, ms: null },
+    ];
+    expect(() => assertStrata(off)).not.toThrow();
+    const copied: StrataRow[] = [
+      { ...off[0]!, tier: 0, tier_source: "triage" },
+      off[1]!,
+    ];
+    expect(() => assertStrata(copied)).toThrow(/B4g neg is tier 0 source triage/);
   });
 
   it("stages B4 and B4g from two configs, not from one", () => {
     expect(baselineConfigPath("configs/b4.json", "B4")).toBe("configs/b4.json");
     expect(baselineConfigPath("configs/b4.json", "B4g")).toBe("configs/b4g.json");
     expect(() => baselineConfigPath("configs/other.json", "B4g")).toThrow(/cannot derive the B4g config/);
+  });
+});
+
+describe("the authored context is declared, not assumed", () => {
+  it("projects B4g as a uniform tier 2 and queries nothing", async () => {
+    // The projection has to mirror `decideTier`: with triage off there is no
+    // ladder and no query, so a B4g row has neither a blast radius nor a tier
+    // that came from one. Staging B4g from a ladder is how both baselines become
+    // the same measurement.
+    const config = await loadConfig("configs/b4g.json");
+    const plan = planDrill(DATASET, { limitPositives: 1 });
+    const rows = await projectStrata(DATASET, config, allSamples(plan), DATASET, "B4g");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        baseline: "B4g",
+        tier: 2,
+        tier_source: "none",
+        impacted_files: null,
+        impacted_nodes: null,
+        ms: null,
+      });
+    }
+  });
+
+  it("joins the upstream measurement onto the projection", () => {
+    const rows: StrataRow[] = [
+      { sample_id: "pos", baseline: "B4", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 500 },
+    ];
+    const context = {
+      dataset_version: "ds-2.0.0",
+      range_sentence: "range",
+      rows: [
+        {
+          sample_id: "pos",
+          authored_context: true,
+          authored_importers: IMPORTERS_PER_POSITIVE,
+          upstream_impacted_files: 97,
+          upstream_importers: 96,
+          would_be_tier: 2 as const,
+        },
+      ],
+    } as unknown as Parameters<typeof attachUpstreamContext>[1];
+    expect(attachUpstreamContext(rows, context)[0]).toMatchObject({
+      authored_context: true,
+      authored_importers: 3,
+      upstream_importers: 96,
+      upstream_would_be_tier: 2,
+    });
+    // A row with no upstream counterpart would print `n/a` and read as "no
+    // difference", so it is an error instead of a blank.
+    expect(() => attachUpstreamContext([{ ...rows[0]!, sample_id: "other" }], context)).toThrow(
+      /no upstream row for other/,
+    );
+  });
+
+  it("reads the artefact only for the dataset it was measured on", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-ctx-"));
+    tempDirs.push(root);
+    expect(loadStagedContext(join(root, "missing.json"))).toBeNull();
+    const path = join(root, "staged-context.json");
+    await writeFile(path, JSON.stringify({ dataset_version: "ds-1.0.0", rows: [] }), "utf8");
+    expect(() => loadStagedContext(path, "ds-2.0.0")).toThrow(/describes ds-1.0.0, not ds-2.0.0/);
+    expect(loadStagedContext(path, "ds-1.0.0")?.rows).toEqual([]);
+  });
+
+  it("hashes bytes the way git names a blob", () => {
+    // The dataset pins `origin.blob_sha`; comparing the checkout against it is
+    // what makes the upstream answer belong to the pinned revision.
+    expect(gitBlobSha(Buffer.from(""))).toBe("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+    expect(gitBlobSha(Buffer.from("hello\n"))).toBe("ce013625030ba8dba906f756967f9e9ca394464a");
   });
 });

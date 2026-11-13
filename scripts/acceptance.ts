@@ -114,6 +114,13 @@ export interface AcceptanceRowLike {
   tier?: number;
   tier_source?: string;
   /**
+   * Did AOR review this row at all? A positive that fell to tier 0 keeps its
+   * semgrep findings and its block decision, but has no correction and no anchor
+   * - so it stays in the block denominators and leaves AOR's. Absent means
+   * "no reason to think otherwise", which is what a replay row is.
+   */
+  aor_participated?: boolean;
+  /**
    * What answered `--version` when this row was produced. Required for any
    * report that quotes a number; `assertInstrumentIdentity` refuses without it.
    */
@@ -375,6 +382,13 @@ export function evaluateAcceptance(
   }
   const negativeEdits = negativesByKind.get("edit") ?? 0;
   const negativeCreates = negativesByKind.get("create") ?? 0;
+  const evaluatedAor = (row: AcceptanceRowLike): boolean => row.aor_participated !== false;
+  // A row that never reached AOR cannot be in a denominator about AOR's output:
+  // it would count as "no anchor" and as "not corrected" while nothing was asked
+  // of it. Counted once per sample - `evaluate` flags both phases of a demoted
+  // row, so the set is the population, not the row count. `evaluate` lists them
+  // by name before this is called.
+  const aorExcluded = new Set(rows.filter((row) => !evaluatedAor(row)).map((row) => row.sample)).size;
   const denied = (row: AcceptanceRowLike): boolean => row.disposition.preDecision === "deny";
   const truePositive = positives.filter(denied);
   const falsePositive = negatives.filter(denied);
@@ -468,6 +482,7 @@ export function evaluateAcceptance(
       `(edit=${negativeEdits} create=${negativeCreates}) ` +
       `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
       `out_of_scope=${outOfScope.length} ` +
+      `aor_excluded=${aorExcluded} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
     metrics: {
       n,
@@ -494,6 +509,7 @@ export function evaluateAcceptance(
       scannable: scannable.length,
       out_of_scope: outOfScope.length,
       excluded: excluded.length,
+      aor_excluded: aorExcluded,
       excluded_classes: excludedClasses.join(","),
       preregistered: String(preregistered),
     },
@@ -513,7 +529,9 @@ export function evaluateAcceptance(
     metrics: { registry_hits: registryHits.length },
   };
 
-  const warned = postRows.filter((row) => row.disposition.postDecision === "inject_warn");
+  const warned = postRows.filter(
+    (row) => row.disposition.postDecision === "inject_warn" && evaluatedAor(row),
+  );
   const perSample = new Map<string, AcceptanceRowLike[]>();
   for (const row of postRows) {
     const list = perSample.get(row.sample) ?? [];

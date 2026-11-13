@@ -179,33 +179,88 @@ each a single `import "../<file>";`) and none for the negatives. The change even
 one file — AOR still scans one file — but the repository now says that file has four
 dependants, which is tier 1 under the *same* `tier0.filesMax = 3` boundary. Measured on the
 staged tree: ten positives at `tier 1 via triage, files=4, nodes=3`; nine negatives at
-`tier 0 via triage, files=1, nodes=0`; index build ~1.1 s per baseline.
+`tier 0 via triage, files=1, nodes=0`; index build ~1.0 s for B4 and none for B4g.
 
-Two consequences worth naming:
+**Those importers are written by this project, and every row says so.** A reader who was not
+told would take `files=4` for a blast radius the system discovered in a real repository. Each
+staged row therefore carries `authored_context: true` and `authored_importers: 3` in
+`run.json`, and `artifacts/staged-context.json` — a committed measurement, regenerated with
+`npm run drill:context` — records what the *same* query answers on the pinned checkout, with
+each file's bytes checked against the dataset's `origin.blob_sha` so the answer belongs to
+the pinned revision. Measured 2026-11-13:
+
+| positive | upstream file | importers upstream | tier unmodified |
+| --- | --- | --- | --- |
+| ts-cwe079-0004 | `track-result.component.ts` | 3 | 1 |
+| ts-cwe022-0001 | `dataErasure.ts` | 3 | 1 |
+| ts-cwe798-0001 | `lib/insecurity.ts` | 96 | 2 |
+| ts-cwe918-0001 | `profileImageUrlUpload.ts` | 3 | 1 |
+| ts-cwe094-0002 | `b2bOrder.ts` | 4 | 1 |
+| ts-cwe079-0003 | `data-export.component.ts` | 3 | 1 |
+| ts-cwe022-0002 | `fileServer.ts` | 4 | 1 |
+| ts-cwe094-0004 | `lib/xml.ts` | 4 | 1 |
+| ts-cwe079-0007 | `last-login-ip.component.ts` | 3 | 1 |
+| ts-cwe079-0005 | `administration.component.ts` | 3 | 1 |
+
+So **0 of the 10 positives would be tier 0 unmodified**: six of them already have exactly
+three importers upstream, three have four, and `lib/insecurity.ts` has 96. The importers do
+not manufacture a blast radius — they reproduce, in a twenty-file tree, what the repository
+already says; and the tier-1 path is not an artefact of them.
+
+The same table limits the claim in the other direction. **The nine negatives are tier 0 in
+the staged subtree only**: upstream, 0 of 9 are tier 0 (route and component files with 3–5
+dependants; the create row `ts-cwe022-9010` has no upstream counterpart at all). Line 4
+therefore measures the tier-0 path on a subset that dropped the importers, not the share of
+low-risk changes a real repository keeps below the boundary. Two further consequences worth
+naming:
 
 - **The importers are not part of the change.** They are written before the baseline commit,
   carry no code, and never appear in a `ChangeEvent`. What the row measures is unchanged;
   what the tier sees is the repository.
-- **Negatives can be promoted by accident.** A low-risk row written to a file that already
-  has three importers of its own would become tier 1 and line 4 would stop measuring tier 0
-  while the report still printed `pairs=8`. That is why staging projects every row's tier
-  before the run.
+- **The tree the tier is decided on is a subset.** `index build` is ~1.0 s against juice-shop's
+  full checkout at 27.9 s, so the projection runs on ~20 files, not 674. `impactedNodes <= 20`
+  is easy to satisfy at that size; a real route file can have dozens of dependants and the
+  same rule would take another branch. The system decides what it is shown, so the measurement
+  is valid, but the conclusion is scoped: **three sources live on a staged subset**, not on a
+  full repository.
 
 ### The projection is a precondition, not a report
 
 `stageDrill` indexes the staged tree and then asks the real triage layer what each of the 19
 rows would decide — `computeTier` over a real `impact` query, no semgrep, no AOR, so the
-projection costs no blindness. It then asserts, and refuses to stage the run otherwise:
+projection costs no blindness. It mirrors `decideTier` rather than re-deriving the ladder,
+because the two baselines do not share one: with `triage.enabled = false` B4g returns tier 2
+with source `none` and never queries the graph at all. Each baseline is asserted against what
+*its own* config can produce, and staging refuses to start otherwise:
 
-- stratum A (9 negatives) must be `tier == 0`;
-- stratum B (10 positives) must be `tier >= 1` **by `triage`** — a row that fell back to the
+- B4, stratum A (9 negatives): `tier == 0`;
+- B4, stratum B (10 positives): `tier >= 1` **by `triage`** — a row that fell back to the
   static ladder is tier 0 and fails the assertion, which is the point: `index_not_ready`
-  looks exactly like "the rule says 0".
+  looks exactly like "the rule says 0";
+- B4g: every row `tier == 2` by `none`. A B4g that agrees with B4 means both baselines were
+  staged from one config and line 4 would be comparing a run with itself.
 
-The same rule is checked again at `evaluate`, on the rows that actually ran: a positive that
-left its stratum never reached AOR, and counting it as a miss would blame the detector for a
-missing measurement. `evaluate` refuses; a positive with no post row at all is printed as a
-`WARN` and left out of the denominator rather than counted as a false negative.
+At `evaluate` the same rows are checked again, with the price of a flake weighed against the
+price of the run. A positive at tier 0 (semgrep ran, AOR did not) keeps its semgrep numbers,
+leaves AOR's, is named in `tier0_despite_projection.json` and counted on line 1 as
+`aor_excluded`; at three of ten the run is void, because three rows is a broken projection,
+not an unlucky one. A negative above tier 0 is still a refusal: line 4's denominator has no
+second copy.
+
+### Which side of the ladder B4 and B4g measure
+
+B4g has no ladder, so **AOR runs on all 19 of its rows while B4 runs it on the ten positives
+only** — the tier-0 negatives skip it. The pairing on eight low-risk samples therefore
+measures *what the ladder excludes*, not what it makes reachable: B4 spends less AOR time and
+fewer tokens on the same rows. The two baselines are not "graph vs no graph with equal work";
+they differ in which rows reach the second source at all, and that is the effect line 4
+attributes.
+
+The contingency table is B4-only by construction (`acceptance.ts` skips other baselines when
+it scores findings), so **P2 and P4 are B4 measurements**; B4g contributes line 4's pairing and
+nothing else. Writing them up as "B4g could not measure it" would be wrong: B4g ran AOR on
+more rows than B4 did.
+
 
 ### A budget below the floor is not a budget
 
@@ -225,6 +280,21 @@ semgrepKillMs 5000 + crgQueryMs 993 = 5993 <= callMs 8000 = turnMs 8000
 ```
 
 A relation that is not asserted is two numbers that happen to sit near each other.
+
+993 ms is 1.5× the pooled p99, which is headroom, not a guarantee: on the first upstream pass
+one of 19 queries came back at 1133 ms, degraded to `files = 1`, and read as "this file has no
+importers" — a false statement about the repository produced by a budget. The measurement now
+gives its own queries a 10 s ceiling and records `within_budget` next to the answer, so the
+two questions stay separate. In the live run the same event is a tier-0 positive, which the
+denominators handle by excluding the row (up to two) rather than voiding the run.
+
+Both pre-path sources are **process-start bound, not work bound**, and that is where half the
+call budget goes. Measured here: `impact` costs 0.56 s on a 674-file repository and 0.50 s on
+a 10-file one (8%), so the graph query is the CLI's start-up, not the graph. Measured
+earlier, not re-measured for this note: semgrep's cold path 2.8 s against 0.65 s warm, the
+same shape. Together the two fixed costs are ~3.4 s of the 8 s `callMs`, before either source
+has read a line. A budget that treats them as marginal times out the way `crgQueryMs = 300`
+did.
 
 ### Wiring is checked without degrading a gate
 
@@ -462,15 +532,30 @@ right after the anchor, so clipping cannot remove it.
   `event_kind` is derived from `before === ""`, and the dataset gate fails if either kind
   disappears from the pool.
 - **A one-file write is tier 0 whatever it contains; the positives are lifted by their
-  blast radius.** `staticTier` counts changed *files* (`triage.tier0.filesMax = 3`), so the
-  create control `ts-cwe022-9010` — one file, 38 lines, `before = ""` — is tier 0, and being
-  a create does not change that. The ten positives are staged with three clean importers
-  each (`live/<id>/__importers__/n.ts`, one `import` per file), which the graph reports as a
-  four-file blast radius: `tier 1 via triage, files=4, nodes=3`. Measured on 2026-11-13: the
-  same 214-line write is `tier 0, tier_source "static", skip_reason "index_not_ready"` on its
-  own, and `tier 1, tier_source "triage"` with the importers and an index. Before
-  `crgQueryMs` was repaired the second number was unreachable, so the file count was the
-  whole rule; ADR-0003 勘误二 records that.
+  blast radius — which this project wrote.** `staticTier` counts changed *files*
+  (`triage.tier0.filesMax = 3`), so the create control `ts-cwe022-9010` — one file, 38 lines,
+  `before = ""` — is tier 0, and being a create does not change that. The ten positives are
+  staged with three clean importers each (`live/<id>/__importers__/n.ts`, one `import` per
+  file), which the graph reports as a four-file blast radius: `tier 1 via triage, files=4,
+  nodes=3`. The importers are authored context and every row says so (`authored_context`,
+  `authored_importers`); the upstream measurement in `artifacts/staged-context.json` shows the
+  same ten files already have 3–96 importers, so **0/10 would be tier 0 unmodified** and the
+  tier-1 path is not an artefact of them. Before `crgQueryMs` was repaired the graph could not
+  answer at all, so the file count was the whole rule; ADR-0003 勘误二 records that.
+- **The tier is computed on ~20 files, not on the repository.** The staged index builds in
+  ~1.0 s; juice-shop's full checkout takes 27.9 s. `impactedNodes <= 20` is easy at that size
+  and a real route file can have dozens of dependants, so the conclusion is scoped to "three
+  sources live on a staged subset". The same is true of line 4's pool: the nine negatives are
+  tier 0 because the subset dropped their importers, while upstream 0/9 are tier 0.
+- **`triage.enabled = false` means tier 2, not tier 0.** `decideTier` returns
+  `{tier: 2, tierSource: "none"}` before it ever looks at the file count
+  (`src/l2/orchestrator.ts:119`), so B4g runs AOR on **all** 19 rows and B4 on the ten
+  positives only. The B4/B4g pairing therefore measures what the ladder excludes; a write-up
+  that calls it "graph vs no graph" gets the direction of the effect wrong.
+- **A positive at tier 0 no longer voids the run on sight.** Semgrep ran, AOR did not, so the
+  row keeps the block denominators, leaves the correction and anchor ones, is listed in
+  `tier0_despite_projection.json`, and line 1 prints `aor_excluded`. Past 2 of 10 the run is
+  void: that is a broken projection, not a flake.
 - **The three sources have never been live at the same time.** The fit run was a
   two-source measurement: with `crgQueryMs = 300` the graph query could not answer, so the
   tier came from the static ladder and the third source never participated. The repaired

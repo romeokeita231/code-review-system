@@ -54,4 +54,16 @@
 - 修复后 tier 1 由**爆炸半径**给出：同一 214 行单文件写入，无 importer 时 `tier 0 / static`；3 个干净 importer（4 文件闭包）时 `tier 1 / triage`、`files=4 nodes=3`、AOR `status ok`、24,200 tok / 19 s。演练的 10 条正样本行即按此布置（`live/<id>/__importers__/n.ts`），9 条负样本保持单文件。
 - 风险已上机制：`prepare` 的「分层投影」对 19 行只跑 `impact` + `computeTier`（零检测器输出），硬断言 A 全 tier 0、B 全 tier ≥1 且 `tier_source = triage`，不满足即拒绝启动；`evaluate` 在实际行上复查同一条规则。
 
+## 勘误三（2026-11-13）：压测用的 importer 是本项目写的；`triage.enabled = false` 等于 tier 2
+
+勘误二把 tier 1 归因于爆炸半径，但没有说清那个半径是谁造的。两件事必须补上，否则数字会被误读。
+
+**一、importer 是自造上下文，须逐行自标。** 十条正样本的 `live/<id>/__importers__/n.ts` 由本项目写入（每行一条 side-effect import）。测量本身正确（图正确报边、`tier0.filesMax = 3` 正确判定），但结论范围受此约束。处置：
+
+- 每个 staged 行在 `run.json` 里带 `authored_context: true`、`authored_importers: 3`。
+- `artifacts/staged-context.json`（`npm run drill:context` 重算）用**同一个 `CrgTriage.analyze`** 在钉定 commit 的**完整**仓库上量同一批文件，并把文件字节按 git blob 与 `origin.blob_sha` 对齐，证明答案属于那个 revision。结果：上游 importer 数 3、3、96、3、4、3、4、4、3、3 ⇒ **未造上下文时 0/10 是 tier 0**，`lib/insecurity.ts` 已是 tier 2。
+- 因此 importer 不制造半径，只是在二十文件的子集里复现仓库本来就有的事实；但**负样本侧相反**：9 条上游全部 tier ≥1（0/9 为 tier 0），子集丢掉 importer 才使它们落到 tier 0。第 4 行测的是「子集里的 tier 0 路径」，不是「真实仓库里低风险改动的占比」。
+
+**二、B4g 的 tier 是 2，不是 0。** `decideTier` 在 `triage.enabled = false` 时直接返回 `{tier: 2, tierSource: "none"}`（`src/l2/orchestrator.ts:119`），**不查图也不看文件数**。所以 B4g 的 19 行全部进 AOR，B4 只有 10 条正样本进 AOR。B4/B4g 之差测的是**阶梯排除了什么**，不是「图让 AOR 变得可达」。分层投影也随之修正：每个 baseline 按自己的 config 断言（B4g 必须全为 `tier 2 / none`），否则「两个 baseline 用了同一份 config」这一故障仍会静默通过。
+
 

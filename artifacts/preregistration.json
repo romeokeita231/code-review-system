@@ -56,7 +56,24 @@
         "P1-P4 and every previously frozen value are unchanged",
         "probe_touched: [ts-cwe079-0001] - the tier probes queried this eval sample through real semgrep, crg and ocr, so its detector output has been seen. It is not one of the ten staged positives, and no criterion above was changed after the probes ran"
       ],
-      "probe_touched": ["ts-cwe079-0001"]
+      "probe_touched": [
+        "ts-cwe079-0001"
+      ]
+    },
+    {
+      "version": 5,
+      "at": "2026-11-13T22:09:58.281+08:00",
+      "note": "v2-v4 are unchanged. This revision writes down what the staged workspace adds, and corrects the reading of B4g against the code, before the run that will quote both.",
+      "changes": [
+        "every positive is staged with 3 importers written by this project: each staged row carries authored_context: true and authored_importers: 3 in run.json, and the same query on the pinned checkouts is recorded per sample below and joined onto the projection",
+        "measured before the run: 0 of the 10 measurable positives would be tier 0 unmodified, 10 are already tier >= 1 (lib/insecurity.ts: 96 importers, tier 2). The tier-1 path is therefore not an artefact of the authored importers, which only reproduce in a twenty-file tree what the repository already says",
+        "0 of 9 negatives are tier 0 upstream: the low-risk pool is tier 0 in the staged subset only, so line 4 measures the tier-0 path on a subset that dropped its importers, not the share of low-risk changes a real repository keeps below the boundary",
+        "the tier is computed on a ~20-file subtree (index build 1.0 s vs 27.9 s for the full juice-shop checkout); impactedNodes <= 20 is easy at that size, so the conclusion is scoped to 'three sources live on a staged subset'",
+        "a positive at tier 0 no longer voids the run on sight: semgrep keeps the row (it ran), AOR drops it (it did not), the row is named in tier0_despite_projection.json and counted on line 1 as aor_excluded; above 2 of 10 the run is void",
+        "B4g reading corrected against src/l2/orchestrator.ts:119: with triage.enabled = false, decideTier returns tier 2 with source none and never queries the graph, so B4g runs AOR on all 19 rows while B4 runs it on the 10 positives. The pairing measures what the ladder excludes; the contingency table is B4-only, so P2 and P4 are B4 measurements and B4g contributes line 4 alone",
+        "the projection carries baseline per row and assertStrata checks each baseline against what its own config can produce: B4g must be uniform tier 2 by none, so two baselines staged from one config cannot pass",
+        "P1-P4 and every previously frozen value are unchanged"
+      ]
     }
   ],
   "observations": {
@@ -126,10 +143,216 @@
             "p99": 652
           }
         ],
-        "pooled": { "n": 44, "p99": 662, "max": 662 },
+        "pooled": {
+          "n": 44,
+          "p99": 662,
+          "max": 662
+        },
         "reading": "latency is dominated by process start, not by graph size: 674 tracked files and 10 differ by less than 8%"
       },
       "invariant": "semgrepKillMs 5000 + crgQueryMs 993 = 5993 ms <= callMs 8000 ms, asserted at config load by assertBudgetRelations"
     }
+  },
+  "staged_context": {
+    "at": "2026-11-13T22:09:58.205+08:00",
+    "artefact": "artifacts/staged-context.json",
+    "method": "`code-review-graph impact` through the same `CrgTriage.analyze` the plugin calls, on the full pinned checkout of each source, with the triage bounds of the config named below and no authored importers. Each file's bytes are hashed as a git blob and compared with the dataset's `origin.blob_sha`, so the answer belongs to the pinned revision rather than to whatever tree was on disk.",
+    "range_sentence": "tier-1 path verified on a workspace where the written file has 3 importers; of the 10 upstream files used, 0 would be tier 0 unmodified, 10 would already be tier >= 1 (1 row creates a path that has no upstream counterpart)",
+    "bounds": {
+      "tier0_filesMax": 3,
+      "tier1_filesMax": 10
+    },
+    "sources": [
+      {
+        "repo": "juice-shop",
+        "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
+        "index_build_ms": 16756
+      }
+    ],
+    "summary": {
+      "staged_rows": 19,
+      "positives": 10,
+      "positives_with_authored_context": 10,
+      "positives_upstream_tier0": 0,
+      "positives_upstream_tier_ge1": 10,
+      "negatives_upstream_tier0": 0,
+      "negatives_upstream_tier_ge1": 8,
+      "not_applicable": 1,
+      "measured_positives": 10,
+      "queries_over_budget": 0
+    },
+    "rows": [
+      {
+        "sample_id": "ts-cwe079-0004",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-0001",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe798-0001",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 97,
+        "upstream_importers": 96,
+        "would_be_tier": 2
+      },
+      {
+        "sample_id": "ts-cwe918-0001",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe094-0002",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 5,
+        "upstream_importers": 4,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe079-0003",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-0002",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 5,
+        "upstream_importers": 4,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe094-0004",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 5,
+        "upstream_importers": 4,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe079-0007",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe079-0005",
+        "stage_group": "positive",
+        "authored_context": true,
+        "authored_importers": 3,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-9002",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe079-9005",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-9001",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe601-0001",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 5,
+        "upstream_importers": 4,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-9003",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 5,
+        "upstream_importers": 4,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe094-9004",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-9008",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 4,
+        "upstream_importers": 3,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe918-9007",
+        "stage_group": "low-risk",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": 6,
+        "upstream_importers": 5,
+        "would_be_tier": 1
+      },
+      {
+        "sample_id": "ts-cwe022-9010",
+        "stage_group": "control",
+        "authored_context": false,
+        "authored_importers": 0,
+        "upstream_impacted_files": null,
+        "upstream_importers": null,
+        "would_be_tier": null
+      }
+    ]
   }
 }
