@@ -910,7 +910,7 @@ export async function evaluate(
     frozenInstruments: run.frozen_instruments,
   });
   await mkdir(acceptanceOut, { recursive: true });
-  await writeFile(join(acceptanceOut, "report.md"), `# 楠屾敹缁撴灉琛紙${report.mode}锛塡n\n${report.resultsTable}\n`, "utf8");
+  await writeFile(join(acceptanceOut, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");
   await writeFile(join(acceptanceOut, "verdict.md"), report.verdict, "utf8");
   await writeFile(
     join(acceptanceOut, "verdict.json"),

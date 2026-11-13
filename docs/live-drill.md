@@ -69,9 +69,23 @@ npx tsx scripts/live-drill.ts --stage prepare --out runs/live/eval-ds-2.0.0-<sta
   --allow-degraded=<gate>[,<gate>]
 ```
 
-The bare flag is an error, an unknown name is an error, and waiving one of the three above
-is an error. Waived gates are printed as `DEGRADED (waived by name)` and recorded in the
-run's `run.json`.
+The bare flag is an error, an unknown name is an error, and waiving one of the gates in
+the table is an error. Waived gates are printed as `DEGRADED (waived by name)` and recorded
+in the run's `run.json`.
+
+### Wiring is checked without degrading a gate
+
+`--allow-degraded` used to double as "let me check the wiring". That is what a bypass for
+the measurement gates would have been used for, so wiring now has its own check:
+
+```bash
+npm run wiring:check
+```
+
+It renders all five lines from **synthesised rows** — no detector runs, no eval sample is
+scanned, nothing is read for its content except the defect spans it needs to place a fake
+finding — and writes into a temporary directory. Its output says so in the first line, and
+a `PASS` there means "the line's inputs are wired", not "the line holds".
 
 ## How the 20 positives are chosen
 
