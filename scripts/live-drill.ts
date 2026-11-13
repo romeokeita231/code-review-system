@@ -17,7 +17,7 @@ import { computeTier, configuredModelOf, parseAorProbe } from "../src/l2/index.j
 import { createCrgTriage } from "../src/l3/index.js";
 import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
+import { evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
 import type { StagedContext } from "./upstream-context.js";
 import {
@@ -442,7 +442,11 @@ export interface RunEvidence {
    */
   strata_projection: {
     rows: StrataRow[];
-    index_build_ms: Record<string, number>;
+    /**
+     * Per baseline. `"not_applicable"` is not `0`: B4g has no ladder, so nothing
+     * queries its graph, and a 0 here would be read as "the build was free".
+     */
+    index_build_ms: Record<string, number | "not_applicable">;
     asserted: string;
     /**
      * The staged tree is a subset this project wrote: three one-line importers
@@ -468,7 +472,8 @@ export interface RunEvidence {
     rows: number;
     per_row_ms: number;
     total_ms: number;
-    index_build_ms: number;
+    /** Filled at staging; `null` until then, never 0. */
+    index_build_ms: number | null;
     components: { semgrep_ms: number; crg_ms: number; aor_ms: number; basis: string };
   } | null;
 }
@@ -934,7 +939,10 @@ export function assertStrata(rows: StrataRow[]): void {
   }
 }
 
-export function formatStrata(rows: StrataRow[], buildMs: Record<string, number>): string {
+export function formatStrata(
+  rows: StrataRow[],
+  buildMs: Record<string, number | "not_applicable">,
+): string {
   const lines = rows.map(
     (row) =>
       `  ${row.stratum} ${row.sample_id} tier=${row.tier} via ${row.tier_source} ` +
@@ -949,7 +957,7 @@ export function formatStrata(rows: StrataRow[], buildMs: Record<string, number>)
     return acc;
   }, {});
   const index = Object.entries(buildMs)
-    .map(([baseline, ms]) => `${baseline} ${ms}ms`)
+    .map(([baseline, ms]) => `${baseline} ${typeof ms === "number" ? `${ms}ms` : ms}`)
     .join(", ");
   return (
     `strata projection (no detector was run): ${JSON.stringify(counts)}\n` +
@@ -1045,7 +1053,7 @@ export async function stageDrill(options: StageOptions): Promise<void> {
   assertRunDir(options.outDir);
   const samples = allSamples(options.plan);
   const strataRows: StrataRow[] = [];
-  const indexBuildMs: Record<string, number> = {};
+  const indexBuildMs: Record<string, number | "not_applicable"> = {};
   const contextPath = options.stagedContext ?? DEFAULT_STAGED_CONTEXT;
   const context = loadStagedContext(contextPath, options.plan.datasetVersion);
   if (context === null && options.index !== false) {
@@ -1133,8 +1141,12 @@ export async function stageDrill(options: StageOptions): Promise<void> {
 
     if (options.index !== false) {
       // B4g has no ladder, so its index is not queried by anything; building it
-      // would only pay for a measurement nothing reads.
-      const buildMs = config.triage.enabled ? await buildIndex(scratch) : 0;
+      // would only pay for a measurement nothing reads. That is "not applicable",
+      // not "0 ms": a degradation that prints as a plausible measurement is how
+      // this run would end up quoting a build cost that never happened.
+      const buildMs: number | "not_applicable" = config.triage.enabled
+        ? await buildIndex(scratch)
+        : "not_applicable";
       const projected = await projectStrata(scratch, config, samples, options.datasetDir, baseline);
       const rows = context === null ? projected : attachUpstreamContext(projected, context);
       assertStrata(rows);
@@ -1184,8 +1196,11 @@ export async function stageDrill(options: StageOptions): Promise<void> {
   };
   const estimate = options.evidence.wall_clock_estimate;
   if (estimate) {
-    estimate.index_build_ms = Object.values(indexBuildMs).reduce((sum, ms) => sum + ms, 0);
-    estimate.total_ms += estimate.index_build_ms;
+    // Only the baselines that built an index contribute to the build cost; a
+    // `not_applicable` baseline did not build one in 0 ms, it did not build one.
+    const builds = Object.values(indexBuildMs).filter((ms): ms is number => typeof ms === "number");
+    estimate.index_build_ms = builds.length === 0 ? null : builds.reduce((sum, ms) => sum + ms, 0);
+    if (estimate.index_build_ms !== null) estimate.total_ms += estimate.index_build_ms;
   }
   if (context !== null) process.stdout.write(`authored context: ${context.range_sentence}\n`);
   await writeRunManifest(options);
@@ -2124,7 +2139,8 @@ export async function evaluate(
     (row) => row.baseline === "B4" && row.stratum === "B",
   ).length;
   const demotedSamples = new Set(demoted.map((row) => row.sample));
-  if (demoted.length > MAX_DEMOTED_POSITIVES) {    throw new Error(
+  if (demoted.length > MAX_DEMOTED_POSITIVES) {
+    throw new Error(
       `run invalid: ${demoted.length} of ${projectedPositives} positive ` +
         `rows landed at tier 0 despite the projection (${demoted.map((row) => row.sample).join(", ")}). ` +
         `Above ${MAX_DEMOTED_POSITIVES} this is not a flake but a broken projection, and a run whose ` +
@@ -2178,9 +2194,51 @@ export async function evaluate(
         `so they are missing from the denominator rather than counted as misses\n`,
     );
   }
+  // Line 4's ratio is a property of the tree this drill wrote: the importers that
+  // lift each staged file above the tier boundary are ours. What those files would
+  // be in the pinned repositories is measured outside the run, at staging time;
+  // it is read back here and compared with the copy `run.json` froze, so the report
+  // cannot quote a counterfactual the run did not stage.
+  const contextPath = resolve(DEFAULT_STAGED_CONTEXT);
+  const recorded = projection.authored_context ?? null;
+  // A run whose staging recorded no counterfactual does not acquire one here: the
+  // detail says the measurement is absent rather than borrowing one from disk.
+  const counterfactual =
+    recorded === null || !existsSync(contextPath) ? undefined : tier0Counterfactual(contextPath);
+  if (counterfactual !== undefined && recorded !== null) {
+    const differences: Array<{ field: string; staged: number; now: number }> = [
+      { field: "pairs_tier0", staged: recorded.negatives_upstream_tier0, now: counterfactual.pairs_tier0 },
+      {
+        field: "pairs_measured",
+        staged: recorded.negatives_upstream_tier0 + recorded.negatives_upstream_tier_ge1,
+        now: counterfactual.pairs_measured,
+      },
+      {
+        field: "rows_tier0",
+        staged: recorded.upstream_tier0 + recorded.negatives_upstream_tier0,
+        now: counterfactual.rows_tier0,
+      },
+      {
+        field: "rows_measured",
+        staged:
+          recorded.measured_positives +
+          recorded.negatives_upstream_tier0 +
+          recorded.negatives_upstream_tier_ge1,
+        now: counterfactual.rows_measured,
+      },
+    ].filter((entry) => entry.staged !== entry.now);
+    if (differences.length > 0) {
+      throw new Error(
+        `refusing to evaluate: ${contextPath} no longer matches the counterfactual ${outDir} was staged ` +
+          `with (${differences.map((entry) => `${entry.field} ${entry.staged} -> ${entry.now}`).join(", ")}). ` +
+          `Line 4's detail would quote a number the run did not stage.`,
+      );
+    }
+  }
   const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, {
     coverage,
     frozenInstruments: run.frozen_instruments,
+    ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
   });
   await mkdir(acceptanceOut, { recursive: true });
   await writeFile(join(acceptanceOut, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");
@@ -2474,7 +2532,9 @@ async function main(): Promise<void> {
       rows,
       per_row_ms: perRowMs,
       total_ms: rows * perRowMs,
-      index_build_ms: 0,
+      // Not measured yet, so not 0: `prepare` runs before the graph is built and
+      // staging is the stage that knows the number.
+      index_build_ms: null,
       components: {
         semgrep_ms: budgets["semgrepKillMs"] ?? 0,
         crg_ms: budgets["crgQueryMs"] ?? 0,

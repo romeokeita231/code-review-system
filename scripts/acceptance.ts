@@ -1,5 +1,5 @@
 import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AorModel, Instruments, ReviewRow, RunRecord } from "../src/contracts/index.js";
 import { loadDataset } from "../src/l5/replay.js";
@@ -38,12 +38,103 @@ export interface RuleCoverage {
   perCwe: Record<string, number>;
 }
 
+/**
+ * What the staged rows would be in the pinned upstream checkout, where this
+ * project wrote none of the importers.
+ *
+ * Line 4 divides two token counts measured on a tree the drill assembled: each
+ * staged file has three one-line importers, and those importers are what put it
+ * above the tier boundary. The ratio therefore answers "does the ladder save
+ * tokens when the radius is below the boundary", not "does it save tokens on this
+ * corpus" - on the pinned repositories 0 of the 18 measurable rows is tier 0
+ * (smallest file: 3 importers, boundary: 3). That counterfactual is measured once
+ * by `scripts/upstream-context.ts` and frozen in `artifacts/staged-context.json`;
+ * it belongs in line 4's `detail` so the ratio cannot be quoted without it.
+ */
+export interface Tier0Counterfactual {
+  /** The defect-free rows line 4 pairs: how many had an upstream counterpart. */
+  pairs_measured: number;
+  pairs_tier0: number;
+  /** Every staged row with an upstream counterpart, ten positives included. */
+  rows_measured: number;
+  rows_tier0: number;
+  min_importers: number | null;
+  files_max: number;
+  source: string;
+}
+
+interface StagedContextRow {
+  upstream_applicable?: boolean;
+  upstream_importers?: number | null;
+  would_be_tier?: number | null;
+}
+
+interface StagedContextFile {
+  bounds?: { tier0_filesMax?: number };
+  rows?: StagedContextRow[];
+  summary?: {
+    positives_upstream_tier0?: number;
+    negatives_upstream_tier0?: number;
+    negatives_upstream_tier_ge1?: number;
+    measured_positives?: number;
+  };
+}
+
+/**
+ * Read the counterfactual, refusing a file whose rows and summary disagree.
+ *
+ * A missing artefact is `undefined` (the detail says the measurement was never
+ * taken); a malformed one throws, because "0 of 0" is exactly the shape a
+ * degraded measurement has and this project has already paid for reading that as
+ * a fact four times.
+ */
+export function tier0Counterfactual(path: string): Tier0Counterfactual {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as StagedContextFile;
+  const summary = raw.summary;
+  const filesMax = raw.bounds?.tier0_filesMax;
+  if (summary === undefined || filesMax === undefined || !Array.isArray(raw.rows)) {
+    throw new Error(
+      `${path} is not a staged-context artefact: bounds.tier0_filesMax, summary and rows are required`,
+    );
+  }
+  const posTier0 = summary.positives_upstream_tier0 ?? 0;
+  const negTier0 = summary.negatives_upstream_tier0 ?? 0;
+  const negAbove = summary.negatives_upstream_tier_ge1 ?? 0;
+  const measuredPos = summary.measured_positives ?? 0;
+  const measurable = raw.rows.filter((entry) => entry.upstream_applicable === true);
+  const counted = measurable.filter((entry) => entry.would_be_tier === 0).length;
+  if (counted !== posTier0 + negTier0 || measurable.length !== measuredPos + posTier0 + negTier0 + negAbove) {
+    throw new Error(
+      `${path} contradicts itself: ${measurable.length} measurable rows (${counted} at tier 0) against ` +
+        `summary ${measuredPos + posTier0 + negTier0 + negAbove} rows (${posTier0 + negTier0} at tier 0)`,
+    );
+  }
+  const importers = measurable
+    .map((entry) => entry.upstream_importers)
+    .filter((value): value is number => typeof value === "number");
+  return {
+    pairs_measured: negTier0 + negAbove,
+    pairs_tier0: negTier0,
+    rows_measured: measurable.length,
+    rows_tier0: posTier0 + negTier0,
+    min_importers: importers.length === 0 ? null : Math.min(...importers),
+    files_max: filesMax,
+    source: path,
+  };
+}
+
 export interface AcceptanceOptions {
   minSamples?: number;
   /** Precision's gate counts findings, not samples; a separate unit needs its own n. */
   minFindings?: number;
   /** Absent means "coverage unknown" - then every labelled eval sample counts. */
   coverage?: RuleCoverage;
+  /**
+   * What line 4's population would be in the pinned repositories. Absent means
+   * the counterfactual was never measured, which the detail says in words rather
+   * than defaulting to zero.
+   */
+  stagedContext?: Tier0Counterfactual;
   /**
    * What the five numbers are allowed to have been produced on. When given, a
    * mismatch refuses the report instead of warning about it: the failure mode
@@ -614,14 +705,38 @@ export function evaluateAcceptance(
   const medianTokens = median(
     pairs.map((pair) => pair.tokenRatio).filter((value): value is number => value !== null),
   );
+  // The ratio is a fact about the tree the drill wrote, and on its own it reads as
+  // "the ladder saved tokens on this corpus". The counterfactual - measured on the
+  // pinned repositories, not inside the run - says the opposite, so it travels in
+  // the detail: whoever quotes the ratio quotes the sentence with it.
+  const counterfactual = options.stagedContext;
+  const tier0 = counterfactual === undefined
+    ? "upstream_tier0=na"
+    : `upstream_tier0=${counterfactual.pairs_tier0}/${counterfactual.pairs_measured}`;
+  const counterfactualNote =
+    counterfactual === undefined
+      ? "counterfactual=not_measured (no staged-context artefact: the upstream tier of these rows was never derived)"
+      : counterfactual.rows_tier0 === 0 && counterfactual.pairs_tier0 === 0
+        ? "counterfactual=" +
+          `本行验证阶梯在「爆炸半径确实小于边界」时的花费单调性；本语料 ${counterfactual.rows_measured} 个可测行` +
+          `无一为 tier 0（最小 ${counterfactual.min_importers ?? "?"} 个 importer，边界 ` +
+          `\`filesMax=${counterfactual.files_max}\`），故该语料上阶梯不产生节省。观测到的比值属于构造拓扑。`
+        : `counterfactual=contradicted (${counterfactual.rows_tier0}/${counterfactual.rows_measured} measurable ` +
+          `rows would be tier 0 upstream, so the registered reading no longer applies)`;
   const line4: LineResult = {
     name: "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
     pass: pairs.length === 8 && medianTokens !== null && medianTokens <= 1,
     detail:
       `pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
       `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"} ` +
-      `available_pairs=${pairedCandidates.length}`,
-    metrics: { pairs: pairs.length, median_token_ratio: medianTokens, median_latency_ratio: medianLatency },
+      `available_pairs=${pairedCandidates.length} ${tier0} ${counterfactualNote}`,
+    metrics: {
+      pairs: pairs.length,
+      median_token_ratio: medianTokens,
+      median_latency_ratio: medianLatency,
+      upstream_tier0: counterfactual?.pairs_tier0 ?? null,
+      upstream_tier0_measured: counterfactual?.pairs_measured ?? null,
+    },
   };
 
   const anchored = warned.filter(
@@ -840,9 +955,14 @@ async function main(): Promise<void> {
   // the thing under test, and a report that reads its own goalposts can move
   // them. The rows must agree with the frozen values or no number is printed.
   const pin = loadFrozenPin();
+  // Line 4's counterfactual lives outside the run by construction (it is measured
+  // on the pinned repositories). Optional: a replay report has no staged tree, and
+  // then the detail says the measurement is absent instead of quoting zero.
+  const stagedContextPath = resolve(arg("--staged-context", "artifacts/staged-context.json"));
   const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
     frozenInstruments: pin,
+    ...(existsSync(stagedContextPath) ? { stagedContext: tier0Counterfactual(stagedContextPath) } : {}),
   });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");

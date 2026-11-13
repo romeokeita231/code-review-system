@@ -16,6 +16,7 @@ import {
   evaluate,
   existingEvalRuns,
   flagValue,
+  formatStrata,
   IMPORTERS_PER_POSITIVE,
   importerPath,
   importerText,
@@ -833,6 +834,15 @@ describe("evaluate refuses a drifted measurement", () => {
     expect(baselineConfigPath("configs/b4.json", "B4")).toBe("configs/b4.json");
     expect(baselineConfigPath("configs/b4.json", "B4g")).toBe("configs/b4g.json");
     expect(() => baselineConfigPath("configs/other.json", "B4g")).toThrow(/cannot derive the B4g config/);
+  });
+
+  it("prints a baseline that built no index as not applicable, never as 0 ms", () => {
+    // B4g has no ladder, so nothing queries its graph. `0` would be read as "the
+    // build was free", which is the class of degradation that has already fooled
+    // this project four times (`n=0`, `available=0`, `files=1`, and this one).
+    const text = formatStrata([], { B4: 1009, B4g: "not_applicable" });
+    expect(text).toContain("index build: B4 1009ms, B4g not_applicable");
+    expect(text).not.toContain("B4g 0ms");
   });
 });
 

@@ -179,7 +179,9 @@ each a single `import "../<file>";`) and none for the negatives. The change even
 one file — AOR still scans one file — but the repository now says that file has four
 dependants, which is tier 1 under the *same* `tier0.filesMax = 3` boundary. Measured on the
 staged tree: ten positives at `tier 1 via triage, files=4, nodes=3`; nine negatives at
-`tier 0 via triage, files=1, nodes=0`; index build ~1.0 s for B4 and none for B4g.
+`tier 0 via triage, files=1, nodes=0`; index build 1.0 s for B4 and
+`"not_applicable"` for B4g — a baseline that built nothing is not a baseline that built in
+0 ms (ADR-0008).
 
 **Those importers are written by this project, and every row says so.** A reader who was not
 told would take `files=4` for a blast radius the system discovered in a real repository. Each
@@ -211,8 +213,34 @@ The same table limits the claim in the other direction. **The nine negatives are
 the staged subtree only**: upstream, 0 of 9 are tier 0 (route and component files with 3–5
 dependants; the create row `ts-cwe022-9010` has no upstream counterpart at all). Line 4
 therefore measures the tier-0 path on a subset that dropped the importers, not the share of
-low-risk changes a real repository keeps below the boundary. Two further consequences worth
-naming:
+low-risk changes a real repository keeps below the boundary.
+
+**That limit travels with the number.** Line 4's ratio is quotable on its own, and alone it
+reads as "the ladder saved tokens on this corpus" — which the counterfactual contradicts. So
+`acceptance.ts` prints `upstream_tier0=0/8` (the eight paired rows) and the registered sentence
+in the line's `detail`, read from `artifacts/staged-context.json`:
+
+> 本行验证阶梯在「爆炸半径确实小于边界」时的花费单调性；本语料 18 个可测行无一为 tier 0（最小 3 个
+> importer，边界 `filesMax=3`），故该语料上阶梯不产生节省。观测到的比值属于构造拓扑。
+
+The wording was frozen before the run (preregistration v6). A report whose artefact is missing
+prints `upstream_tier0=na` and `counterfactual=not_measured` instead of the sentence; one whose
+artefact disagrees with the copy `run.json` froze at staging is refused.
+
+What the line verifies is monotonicity **when the radius really is below the boundary**. That
+condition holds for every paired row, so the line is not vacuous — and it is not line 1b's
+`na (n=0)` either: there the claim has no sample, here the claim has a sample and a measurement.
+What is *not* verified is that the ladder saves tokens on this corpus; on this corpus it cannot,
+because no row reaches tier 0 unmodified.
+
+**A sampling property, not a wrong constant.** The 18 staged rows are files that either carry a
+defect or sit next to one, so they are cited by construction; `lib/insecurity.ts` with 96
+importers is the extreme of that selection. A random sample of changes would put many more rows
+below the boundary. `tier 0 is unreachable on this corpus` therefore says nothing about
+`tier0.filesMax = 3` — this corpus cannot identify that constant — and moving the constant until
+tier 0 appears would be reading a consequence and then adjusting the rule that produced it.
+
+Two further consequences worth naming:
 
 - **The importers are not part of the change.** They are written before the baseline commit,
   carry no code, and never appear in a `ChangeEvent`. What the row measures is unchanged;

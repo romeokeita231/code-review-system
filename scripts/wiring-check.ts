@@ -196,7 +196,7 @@ async function main(): Promise<void> {
               ms: 600,
               ...row,
             })),
-            index_build_ms: { B4: 1000, B4g: 1000 },
+            index_build_ms: { B4: 1000, B4g: "not_applicable" },
             asserted: "wiring check: synthetic projection, no graph was queried",
           },
         },

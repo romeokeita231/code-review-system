@@ -74,6 +74,20 @@
         "the projection carries baseline per row and assertStrata checks each baseline against what its own config can produce: B4g must be uniform tier 2 by none, so two baselines staged from one config cannot pass",
         "P1-P4 and every previously frozen value are unchanged"
       ]
+    },
+    {
+      "version": 6,
+      "at": "2026-11-13T23:56:55.586+08:00",
+      "note": "v2-v5 are unchanged. This revision freezes the wording line 4 will carry before the run that produces its ratio, and names the one place where a degraded observation was still printing as a normal value.",
+      "changes": [
+        "line 4's detail carries the counterfactual next to the ratio: upstream_tier0=0/8 over the eight paired rows, plus the registered sentence below, both read from artifacts/staged-context.json",
+        "the sentence is registered verbatim so the ratio cannot be quoted without it; its numbers are filled from the artefact (18 measurable rows, smallest 3 importers, boundary filesMax = 3) rather than typed into the code",
+        "a report whose artefact is missing prints upstream_tier0=na and counterfactual=not_measured instead of the sentence; one whose artefact disagrees with the copy run.json froze at staging is refused. Absence is never rendered as 0/0",
+        "what the line verifies is monotonicity when the blast radius really is below the boundary - every paired row satisfies that condition, so the line is not vacuous and is not line 1b's na (n=0): there the claim has no sample, here it has a sample and a measurement",
+        "what it does not verify is that the ladder saves tokens on this corpus: no row reaches tier 0 unmodified, so it cannot. tier 0 unreachable is a sampling property of 18 files that each carry a defect or sit next to one, and it does not identify tier0.filesMax = 3 - the constant is not to be moved on this evidence",
+        "strata_projection.index_build_ms.B4g 0 -> \"not_applicable\", and wall_clock_estimate.index_build_ms null before staging: a baseline that built no index is not a baseline that built in 0 ms. ADR-0008 states the general rule - a degradation may only be null / not_applicable / degraded, never 0, \"\", [] or false",
+        "no bound, tier boundary, budget, exclusion rule or criterion was changed; P1-P4 and every previously frozen value are unchanged"
+      ]
     }
   ],
   "observations": {
@@ -354,5 +368,21 @@
         "would_be_tier": null
       }
     ]
+  },
+  "line4_reading": {
+    "at": "2026-11-13T23:56:55.586+08:00",
+    "sentence": "本行验证阶梯在「爆炸半径确实小于边界」时的花费单调性；本语料 18 个可测行无一为 tier 0（最小 3 个 importer，边界 `filesMax=3`），故该语料上阶梯不产生节省。观测到的比值属于构造拓扑。",
+    "detail_carries": [
+      "pairs",
+      "median_token_ratio",
+      "median_latency_ratio",
+      "available_pairs",
+      "upstream_tier0=0/8",
+      "the sentence above"
+    ],
+    "source": "artifacts/staged-context.json (negatives_upstream_tier0 0, negatives_upstream_tier_ge1 8, 18 measurable rows, smallest 3 importers)",
+    "verified": "monotonicity when the blast radius really is below the boundary (every paired row satisfies it, so the condition is not vacuous)",
+    "not_verified": "that the ladder saves tokens on this corpus - no row reaches tier 0 unmodified, so it cannot",
+    "sampling_limit": "the 18 staged rows are defect carriers or their neighbours and are therefore cited by construction (lib/insecurity.ts at 96 importers is the extreme); a random sample of changes would put many more rows below the boundary, so this corpus cannot identify tier0.filesMax = 3"
   }
 }

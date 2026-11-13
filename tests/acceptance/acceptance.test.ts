@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assertInstrumentIdentity,
   evaluateAcceptance,
+  tier0Counterfactual,
   type AcceptanceRowLike,
   type BlockGaps,
   type SampleTruth,
@@ -129,6 +133,86 @@ describe("acceptance", () => {
     // selector hid it from the denominator entirely.
     expect(report.lines[0]!.metrics).toMatchObject({ n: 22, k: 20, recall: 20 / 22 });
     expect(report.verdict).toContain("5/5");
+  });
+
+  // Line 4's ratio is measured on a tree this project wrote. The counterfactual -
+  // what the same rows would be in the pinned repositories - has to travel with
+  // the number, and its absence has to read as absence, not as 0/0.
+  it("carries the tier-0 counterfactual in line4's detail, or says it is absent", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      const sample = `s-${index}`;
+      truth.set(sample, truthOf(sample, "high", ["semgrep"]));
+      rows.push(
+        row({
+          sample,
+          baseline: "B4",
+          ts: index,
+          disposition: {
+            preDecision: "deny",
+            postDecision: "none",
+            finalDisposition: "mechanical_block",
+            text: "[CRS-BLOCK] src/a.ts:1 CWE-79 rule",
+          },
+          findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+        }),
+      );
+    }
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push(row({ sample, baseline: "B4g", ts: 500 + index, latency_ms: 400, tokens: 100 }));
+      rows.push(row({ sample, baseline: "B4", ts: 600 + index, latency_ms: 1000, tokens: 50 }));
+    }
+    const bare = evaluateAcceptance(rows, truth, gaps).lines[3]!;
+    expect(bare.pass).toBe(true);
+    expect(bare.detail).toContain("upstream_tier0=na");
+    expect(bare.detail).toContain("counterfactual=not_measured");
+    expect(bare.metrics).toMatchObject({ upstream_tier0: null, upstream_tier0_measured: null });
+
+    const measured = evaluateAcceptance(rows, truth, gaps, {
+      stagedContext: tier0Counterfactual("artifacts/staged-context.json"),
+    }).lines[3]!;
+    expect(measured.pass).toBe(true);
+    expect(measured.detail).toContain("upstream_tier0=0/8");
+    expect(measured.detail).toContain("本语料 18 个可测行无一为 tier 0");
+    expect(measured.detail).toContain("最小 3 个 importer");
+    expect(measured.detail).toContain("观测到的比值属于构造拓扑");
+    expect(measured.metrics).toMatchObject({ upstream_tier0: 0, upstream_tier0_measured: 8 });
+  });
+
+  it("reads the frozen counterfactual and refuses one that contradicts itself", () => {
+    const counterfactual = tier0Counterfactual("artifacts/staged-context.json");
+    expect(counterfactual).toMatchObject({
+      pairs_measured: 8,
+      pairs_tier0: 0,
+      rows_measured: 18,
+      rows_tier0: 0,
+      min_importers: 3,
+      files_max: 3,
+    });
+    const broken = join(tmpdir(), `staged-context-${process.pid}.json`);
+    writeFileSync(
+      broken,
+      JSON.stringify({
+        bounds: { tier0_filesMax: 3 },
+        // Rows and summary disagree: one row says tier 0, the summary says none.
+        rows: [
+          { sample_id: "a", upstream_applicable: true, upstream_importers: 3, would_be_tier: 0 },
+          { sample_id: "b", upstream_applicable: false, upstream_importers: null, would_be_tier: null },
+        ],
+        summary: {
+          positives_upstream_tier0: 0,
+          negatives_upstream_tier0: 0,
+          negatives_upstream_tier_ge1: 1,
+          measured_positives: 0,
+        },
+      }),
+      "utf8",
+    );
+    expect(() => tier0Counterfactual(broken)).toThrow(/contradicts itself/);
+    expect(() => tier0Counterfactual(join(tmpdir(), `absent-${process.pid}.json`))).toThrow();
   });
 
   it("refuses to mix live and replay rows", () => {
