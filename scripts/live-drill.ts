@@ -8,7 +8,7 @@ import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
 import { calibrationCategories } from "../src/contracts/index.js";
 import { assertCalibrationMatches, loadCalibration, sha256 } from "../src/config/index.js";
 import { loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { collectJsonl, evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
+import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
 import {
   coverageCounts,
@@ -750,12 +750,17 @@ export async function evaluate(
   acceptanceOut: string,
   coverage: RuleCoverage,
 ): Promise<{ pass: number; lines: Array<{ name: string; pass: boolean; detail: string }> }> {
+  // Only the collected acceptance rows. `B4/review.jsonl` is the plugin's own
+  // shape (one row per phase, `pre_decision` not `disposition`); reading the
+  // whole tree mixed the two shapes and crashed on the first plugin row.
+  const rowsPath = join(outDir, "rows.jsonl");
+  if (!existsSync(rowsPath)) {
+    throw new Error(`${rowsPath} is missing: run --stage collect before --stage evaluate`);
+  }
   const rows: AcceptanceRowLike[] = [];
-  for (const file of await collectJsonl(outDir)) {
-    for (const line of (await readFile(file, "utf8")).split("\n")) {
-      if (line.trim().length === 0) continue;
-      rows.push(JSON.parse(line) as AcceptanceRowLike);
-    }
+  for (const line of (await readFile(rowsPath, "utf8")).split("\n")) {
+    if (line.trim().length === 0) continue;
+    rows.push(JSON.parse(line) as AcceptanceRowLike);
   }
   const gaps = existsSync(gapsPath) ? JSON.parse(await readFile(gapsPath, "utf8")) : null;
   const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, { coverage });
