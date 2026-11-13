@@ -38,3 +38,20 @@
 
 `risk_level` 的唯一用途是数据集池的划分（低风险负样本池），不是成本门控。任何按 `risk_level` 分档汇总的报告都是错的。
 
+## 勘误二（2026-11-13）：`crgQueryMs = 300` 是 bug，不是预算；第三来源从未上过 live
+
+勘误一记录了「live 轨查图不生效」，但没有把它当成缺陷处理。补做延迟测量后，事实是：
+
+- `code-review-graph impact` 的可观测地板是 ~600 ms（进程启动主导，与图规模几乎无关）。三母体钉定 commit 上 n = 44 次实测：goof p99 662、dvna p99 639、juice-shop（674 文件）p99 652；合并 p99 662 ms，最大 662 ms。
+- 300 ms 低于地板 ⇒ **任何调用都无法满足的预算** ⇒ `analyze` 每次都 `timedOut` ⇒ `computeTier` 从未执行 ⇒ `tier_source` 恒为 `static`。
+- 因此 `fit` 那次是**两来源**测量，不是三来源；爆炸半径（第三来源）自上線以来没有任何 live 数据。
+
+处置：
+
+- `crgQueryMs = ceil(p99 × 1.5) = 993 ms`。**先定值、后看 tier**：取值时没有计算任何 tier，`tier` 结果不是输入。冻结进 `artifacts/preregistration.json` 的 `frozen.budgets.crg_query_ms`，preflight 的 `crg budget` 闸门比对 config。
+- 被测对象不动：`tier0.filesMax = 3`、`tier1.filesMax = 10`、变更单位（单文件事件）、规则集、阈值、`staticTier` 全部不变。
+- 预路径预算关系进配置校验（`assertBudgetRelations`）：`semgrepKillMs 5000 + crgQueryMs 993 = 5993 ≤ min(callMs 8000, turnMs 8000)`。此前这两个数各自被填过，彼此的关系从未被断言。
+- 修复后 tier 1 由**爆炸半径**给出：同一 214 行单文件写入，无 importer 时 `tier 0 / static`；3 个干净 importer（4 文件闭包）时 `tier 1 / triage`、`files=4 nodes=3`、AOR `status ok`、24,200 tok / 19 s。演练的 10 条正样本行即按此布置（`live/<id>/__importers__/n.ts`），9 条负样本保持单文件。
+- 风险已上机制：`prepare` 的「分层投影」对 19 行只跑 `impact` + `computeTier`（零检测器输出），硬断言 A 全 tier 0、B 全 tier ≥1 且 `tier_source = triage`，不满足即拒绝启动；`evaluate` 在实际行上复查同一条规则。
+
+

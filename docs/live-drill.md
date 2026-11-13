@@ -71,7 +71,7 @@ The old `dataset detectability` check is **gone**, not relaxed: it scanned plann
 freeze. It also measured ds-1. Its replacement is the fit-run coverage matrix
 (`npm run record:fit`), which only ever touches fit rows.
 
-### Gates: eight have no bypass
+### Gates: nine have no bypass
 
 `--allow-degraded` used to be one switch for the whole preflight, which meant "waive
 anything" — the same shape as the deleted `--allow-short`. It is now a per-gate whitelist,
@@ -86,6 +86,7 @@ and these gates are not on it:
 | `plugin bundle` | shipped identity: the rows are written by `dist/plugin.js`, so a bundle older than `src/` measures the previous system, and its rows are in a shape `evaluate` refuses — discovered after the eval is spent |
 | `aor model` | the deepest instrument: `ocr`'s commit says which client asked, the served model says what answered, and P2/P4 read AOR's output |
 | `frozen pin` | the pin and the config must agree; otherwise an edit to the config silently moves the goalposts |
+| `crg budget` | `crgQueryMs` decides whether the triage layer answers at all: below the graph CLI's floor the query times out, the tier falls back to the static ladder, and every row is tier 0 without anything reporting a failure. The value is frozen with the latency table that produced it |
 | `secret not tracked` | the repository is public; a key in a tracked file is a leak no `.gitignore` can undo |
 
 The `plugin bundle` check is a **proxy**: it compares mtimes. A checkout or a copy moves a
@@ -157,6 +158,73 @@ npx tsx scripts/live-drill.ts --stage prepare --allow-eval=<name> \
 The bare flag is an error, an unknown name is an error, and waiving one of the gates in
 the table is an error. Waived gates are printed as `DEGRADED (waived by name)` and recorded
 in the run's `run.json`.
+
+`prepare` also prints a wall-clock estimate: `rows x (semgrepKillMs + crgQueryMs +
+measured ocr probe)`, plus the graph builds measured at staging. Its AOR term is one 38-line
+probe call, so the total is a floor for AOR time and a ceiling for everything else. The
+number is recorded in `run.json.evidence.wall_clock_estimate` next to the components, so a
+later reader can re-derive it instead of trusting it.
+
+### The tier is a property of the repository, not of the change's size
+
+`staticTier` reads one input: how many files the change event carries. The host's write tool
+carries exactly one `file_path`, so a one-file change is tier 0 however large the file is,
+and no amount of vulnerable code in it moves the tier. Measured on 2026-11-13 with the real
+sources (`ts-cwe079-0001`, post event, 214 lines): `tier: 0`, `tier_source: "static"`,
+`sources` = semgrep only.
+
+`computeTier` reads something else: the blast radius the graph reports for that file. So the
+drill stages **three clean importers per positive row** (`live/<id>/__importers__/n.ts`,
+each a single `import "../<file>";`) and none for the negatives. The change event is still
+one file — AOR still scans one file — but the repository now says that file has four
+dependants, which is tier 1 under the *same* `tier0.filesMax = 3` boundary. Measured on the
+staged tree: ten positives at `tier 1 via triage, files=4, nodes=3`; nine negatives at
+`tier 0 via triage, files=1, nodes=0`; index build ~1.1 s per baseline.
+
+Two consequences worth naming:
+
+- **The importers are not part of the change.** They are written before the baseline commit,
+  carry no code, and never appear in a `ChangeEvent`. What the row measures is unchanged;
+  what the tier sees is the repository.
+- **Negatives can be promoted by accident.** A low-risk row written to a file that already
+  has three importers of its own would become tier 1 and line 4 would stop measuring tier 0
+  while the report still printed `pairs=8`. That is why staging projects every row's tier
+  before the run.
+
+### The projection is a precondition, not a report
+
+`stageDrill` indexes the staged tree and then asks the real triage layer what each of the 19
+rows would decide — `computeTier` over a real `impact` query, no semgrep, no AOR, so the
+projection costs no blindness. It then asserts, and refuses to stage the run otherwise:
+
+- stratum A (9 negatives) must be `tier == 0`;
+- stratum B (10 positives) must be `tier >= 1` **by `triage`** — a row that fell back to the
+  static ladder is tier 0 and fails the assertion, which is the point: `index_not_ready`
+  looks exactly like "the rule says 0".
+
+The same rule is checked again at `evaluate`, on the rows that actually ran: a positive that
+left its stratum never reached AOR, and counting it as a miss would blame the detector for a
+missing measurement. `evaluate` refuses; a positive with no post row at all is printed as a
+`WARN` and left out of the denominator rather than counted as a false negative.
+
+### A budget below the floor is not a budget
+
+`crgQueryMs` was 300 ms. The graph CLI's own floor is ~600 ms (p99 662 ms over 44 `impact`
+calls on the three pinned sources at their pinned commits: goof 662, dvna 639, juice-shop
+652; latency is process start, not graph size — 674 files and 10 differ by 8%). So the query
+timed out on every live row, `computeTier` never ran, and the tier was the file count. The
+blast radius — the third source — had never taken part in a live measurement, including the
+fit run.
+
+`crgQueryMs = ceil(p99 x 1.5) = 993 ms`, derived before any tier was computed, frozen in
+`artifacts/preregistration.json` as `frozen.budgets.crg_query_ms` with the table above, and
+asserted at config load:
+
+```
+semgrepKillMs 5000 + crgQueryMs 993 = 5993 <= callMs 8000 = turnMs 8000
+```
+
+A relation that is not asserted is two numbers that happen to sit near each other.
 
 ### Wiring is checked without degrading a gate
 
@@ -393,24 +461,22 @@ right after the anchor, so clipping cannot remove it.
   proves the create branch is not dead code; `n = 1` and no precision claim is made for it.
   `event_kind` is derived from `before === ""`, and the dataset gate fails if either kind
   disappears from the pool.
-- **A bigger create does not move its tier, and neither does anything else in this drill.**
-  The static rule counts changed *files* (`triage.tier0.filesMax = 3`), so one write is
-  always tier 0 regardless of line count, and AOR is skipped for it (`semgrep` and
-  `registry` still run). The 30-line change makes the sample a real write and keeps it out
-  of the low-risk pool; it does not reach tier 1.
-  This is not a property of the create: **the drill writes one file per tool call, so every
-  row is tier 0** — 10 positives and 9 negatives alike. Measured on 2026-11-13 with the real
-  sources (`ts-cwe079-0001`, post event, 214 lines): `tier: 0`, `tier_source: "static"`,
-  `skip_reason: "index_not_ready"`, and `sources` contains semgrep only. The same event with
-  four files gives `tier: 1` and AOR runs (81,686 tokens, 34 s). The 300 ms
-  `crgQueryMs` budget means the graph never answers in a live run, so the file count is the
-  whole rule.
-  Consequence: on this plan P2 (AOR recall ≥ 3× semgrep) and P4 (the three-cell table) have
-  no AOR rows to read, and lines 3/5 keep only semgrep's warn, which fires for CWE-089
-  alone. Reaching tier ≥ 1 needs a change event that carries ≥ 4 files, and the host's tool
-  contract has no such call — a 4-file `ChangeEvent` is a system change, not a staging
-  change. `prepare` prints this as a `NOTE` so the report's create caveat cannot be read as
-  "AOR covered it".
+- **A one-file write is tier 0 whatever it contains; the positives are lifted by their
+  blast radius.** `staticTier` counts changed *files* (`triage.tier0.filesMax = 3`), so the
+  create control `ts-cwe022-9010` — one file, 38 lines, `before = ""` — is tier 0, and being
+  a create does not change that. The ten positives are staged with three clean importers
+  each (`live/<id>/__importers__/n.ts`, one `import` per file), which the graph reports as a
+  four-file blast radius: `tier 1 via triage, files=4, nodes=3`. Measured on 2026-11-13: the
+  same 214-line write is `tier 0, tier_source "static", skip_reason "index_not_ready"` on its
+  own, and `tier 1, tier_source "triage"` with the importers and an index. Before
+  `crgQueryMs` was repaired the second number was unreachable, so the file count was the
+  whole rule; ADR-0003 勘误二 records that.
+- **The three sources have never been live at the same time.** The fit run was a
+  two-source measurement: with `crgQueryMs = 300` the graph query could not answer, so the
+  tier came from the static ladder and the third source never participated. The repaired
+  run is the first in which semgrep, the graph and AOR are all live in the same process —
+  and therefore the first whose numbers have no earlier live run to be compared with. This
+  is a limitation of the eval, not a footnote.
 - **JavaScript is `out_of_scope`.** 6 of the 35 rows are `.js`; the shipped config has no
   JavaScript subset and no `sMax['javascript']`, so they are never scanned. This is the
   second appearance of "declared != shipped" (the first was `ts_all` vs `ts_dedup`): the

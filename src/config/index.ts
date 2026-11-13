@@ -37,6 +37,32 @@ export function configHash(config: RunConfig): string {
   return sha256(stableStringify(config));
 }
 
+/**
+ * The pre path spends two of its budgets inside one call: the graph query the
+ * tier needs, and the semgrep scan the decision needs.
+ *
+ * Each value was filled in on its own, so nothing noticed that `crgQueryMs` had
+ * fallen below the graph CLI's own floor (300 ms against a ~600 ms query on the
+ * samples' upstream repositories). The consequence was not a slow query but an
+ * absent subsystem: every live row degraded to the static ladder, and the tier
+ * became a function of the file count alone. A relation between budgets that is
+ * never asserted is not a budget, it is two numbers that happen to sit near each
+ * other.
+ */
+export function assertBudgetRelations(config: RunConfig): void {
+  const { callMs, turnMs, semgrepKillMs, crgQueryMs } = config.budgets;
+  const prePath = semgrepKillMs + crgQueryMs;
+  const ceiling = Math.min(callMs, turnMs);
+  if (prePath > ceiling) {
+    throw new ConfigError(
+      `budgets do not fit: semgrepKillMs ${semgrepKillMs} + crgQueryMs ${crgQueryMs} = ${prePath} ms ` +
+        `> ${ceiling} ms (callMs ${callMs}, turnMs ${turnMs}). The pre path runs the graph query and ` +
+        `the scan inside one call, so a sum above the ceiling is a budget the path can never meet - ` +
+        `raise the ceiling or lower a component, but do not ship a plan whose parts do not add up.`,
+    );
+  }
+}
+
 export function parseConfig(raw: unknown, origin = "<inline>"): RunConfig {
   const parsed = RunConfig.safeParse(raw);
   if (!parsed.success) {
@@ -45,6 +71,7 @@ export function parseConfig(raw: unknown, origin = "<inline>"): RunConfig {
       .join("; ");
     throw new ConfigError(`invalid RunConfig at ${origin}: ${issues}`);
   }
+  assertBudgetRelations(parsed.data);
   return parsed.data;
 }
 

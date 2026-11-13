@@ -64,3 +64,31 @@ export function loadCostCeiling(path = PREREGISTRATION): number {
   }
   return Math.trunc(ceiling);
 }
+
+/**
+ * The pre-path budget fixed before the run, with the measurement behind it.
+ *
+ * `crgQueryMs` is the one value that decides whether the triage layer exists at
+ * all: below the graph CLI's floor the query always times out, the tier falls
+ * back to the static ladder, and every row becomes tier 0 without anything
+ * reporting a failure. So the value is frozen with the latency table that
+ * produced it, and the config is compared with it before the run rather than
+ * after the numbers exist.
+ */
+export interface FrozenBudgets {
+  crg_query_ms: number;
+  derivation: string | null;
+}
+
+export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as {
+    frozen?: { budgets?: { crg_query_ms?: unknown; derivation?: unknown } };
+  };
+  const value = raw.frozen?.budgets?.crg_query_ms;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  const derivation = raw.frozen?.budgets?.derivation;
+  return {
+    crg_query_ms: Math.trunc(value),
+    derivation: typeof derivation === "string" ? derivation : null,
+  };
+}

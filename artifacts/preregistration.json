@@ -43,6 +43,20 @@
         "frozen.cost.ceiling_tokens = 2000000: the prepare-time cost probe x rows must stay under it, or the run is refused",
         "P3 keeps the degenerate branch from v2; no bound was relaxed and no direction was flipped"
       ]
+    },
+    {
+      "version": 4,
+      "at": "2026-11-13T21:05:00+08:00",
+      "note": "v2 and v3 are unchanged. This revision repairs a configuration value that made a subsystem unreachable, before any eval row exists, and records the one eval sample a probe ever queried.",
+      "changes": [
+        "budgets.crgQueryMs 300 -> 993: 300 ms is below the observable floor of `code-review-graph impact` (p99 662 ms over 44 calls on the three pinned sources), so the query timed out on every live row and the tier fell back to the static ladder. The graph has therefore never taken part in a live measurement, including the fit run",
+        "the value is derived mechanically: ceil(p99 x 1.5) from the latency table below. No tier was consulted while choosing it, and no tier was computed before it was written",
+        "the tier boundaries (tier0.filesMax = 3, tier1.filesMax = 10), the change unit (one file per event), the ruleset, the thresholds and staticTier are untouched",
+        "frozen.budgets.crg_query_ms pins the new value; preflight refuses a config whose crgQueryMs differs from it",
+        "P1-P4 and every previously frozen value are unchanged",
+        "probe_touched: [ts-cwe079-0001] - the tier probes queried this eval sample through real semgrep, crg and ocr, so its detector output has been seen. It is not one of the ten staged positives, and no criterion above was changed after the probes ran"
+      ],
+      "probe_touched": ["ts-cwe079-0001"]
     }
   ],
   "observations": {
@@ -72,6 +86,50 @@
     "cost": {
       "ceiling_tokens": 2000000,
       "basis": "one file probe x 2 (preview + scan) x 38 staged rows x 1.5 correction headroom; above it the run stops before staging"
+    },
+    "budgets": {
+      "at": "2026-11-13T21:05:00+08:00",
+      "crg_query_ms": 993,
+      "derivation": "crgQueryMs = ceil(p99(impact latency) x 1.5) = ceil(662 x 1.5) = 993 ms; measured on the three pinned sources, n = 44, before any tier was computed",
+      "latency": {
+        "method": "`code-review-graph impact --repo <pinned checkout> --files <one file>` timed through CrgTriage.analyze, files sampled evenly from `git ls-files`; each repository indexed once with `build --skip-flows`",
+        "unit": "ms",
+        "samples": [
+          {
+            "repo": "snyk-labs/nodejs-goof",
+            "commit": "add14ba59e98240d9e00a235dd7d42cd61ae9912",
+            "tracked_code_files": 10,
+            "n": 10,
+            "build_ms": 1510,
+            "p50": 581,
+            "p90": 649,
+            "p99": 662
+          },
+          {
+            "repo": "appsecco/dvna",
+            "commit": "9ba473add536f66ac9007966acb2a775dd31277a",
+            "tracked_code_files": 14,
+            "n": 14,
+            "build_ms": 1051,
+            "p50": 528,
+            "p90": 575,
+            "p99": 639
+          },
+          {
+            "repo": "juice-shop/juice-shop",
+            "commit": "266448aba68cd8ba5915f526a128da4fa7bc3f9f",
+            "tracked_code_files": 674,
+            "n": 20,
+            "build_ms": 27928,
+            "p50": 598,
+            "p90": 632,
+            "p99": 652
+          }
+        ],
+        "pooled": { "n": 44, "p99": 662, "max": 662 },
+        "reading": "latency is dominated by process start, not by graph size: 674 tracked files and 10 differ by less than 8%"
+      },
+      "invariant": "semgrepKillMs 5000 + crgQueryMs 993 = 5993 ms <= callMs 8000 ms, asserted at config load by assertBudgetRelations"
     }
   }
 }

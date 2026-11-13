@@ -9,10 +9,15 @@ import {
   assertCostCeiling,
   assertOneShot,
   assertRunDir,
+  assertStrata,
+  baselineConfigPath,
   estimateCostTokens,
   evaluate,
   existingEvalRuns,
   flagValue,
+  IMPORTERS_PER_POSITIVE,
+  importerPath,
+  importerText,
   newRunDir,
   NON_DEGRADABLE_GATES,
   ocrDrifted,
@@ -23,6 +28,7 @@ import {
   stageDrill,
   toAcceptanceRows,
   writePrompt,
+  type StrataRow,
 } from "../../scripts/live-drill.js";
 import { loadFrozenPin } from "../../scripts/frozen.js";
 import { loadTruth } from "../../scripts/acceptance.js";
@@ -413,8 +419,13 @@ describe("run identity", () => {
           probe_tokens: 3189,
           method: "probe x 2 x rows x 1.5",
         },
+        strata_projection: null,
+        wall_clock_estimate: null,
       },
       oneShot: { run: outDir.split(/[\\/]/).pop()!, at: "2026-11-13T04:00:00Z", restarts: [] },
+      // The graph CLI is a measuring tool, not a fixture: this test asserts the
+      // staged tree and the manifest, not the tier projection.
+      index: false,
     });
 
     const manifest = readRunManifest(outDir, DATASET);
@@ -525,8 +536,21 @@ describe("frozen pin", () => {
   });
 });
 
+const evaluateFixtureRun = {
+  dataset_version: "ds-2.0.0",
+  dataset_dir: DATASET,
+  config_hash: "hash",
+  frozen_instruments: loadFrozenPin(),
+  created_at: "2026-11-13T04:30:05Z",
+  plan: { positives: 1, low_risk: 1, controls: 0, probe: 1, negatives_create: 1 },
+  degraded_gates: [],
+};
+
 describe("evaluate refuses a drifted measurement", () => {
-  async function collectedRun(drifted: boolean): Promise<{ root: string; outDir: string }> {
+  async function collectedRun(
+    drifted: boolean,
+    stratum: "A" | "B" = "A",
+  ): Promise<{ root: string; outDir: string }> {
     const root = await mkdtemp(join(tmpdir(), "crs-eval-"));
     tempDirs.push(root);
     const outDir = newRunDir(root, "ds-2.0.0", "eval", new Date("2026-11-13T04:30:05"));
@@ -535,13 +559,28 @@ describe("evaluate refuses a drifted measurement", () => {
       join(outDir, "run.json"),
       `${JSON.stringify(
         {
-          dataset_version: "ds-2.0.0",
-          dataset_dir: DATASET,
-          config_hash: "hash",
-          frozen_instruments: loadFrozenPin(),
-          created_at: "2026-11-13T04:30:05Z",
-          plan: { positives: 1, low_risk: 1, controls: 0, probe: 1, negatives_create: 1 },
-          degraded_gates: [],
+          ...evaluateFixtureRun,
+          // The projection is what the run promised at staging time; `evaluate`
+          // compares the rows with it rather than re-deriving a stratum.
+          evidence: {
+            strata_projection: {
+              rows: [
+                {
+                  sample_id: "ts-cwe079-0001",
+                  stratum,
+                  path: "src/a.ts",
+                  tier: stratum === "B" ? 1 : 0,
+                  tier_source: "triage",
+                  impacted_files: stratum === "B" ? 4 : 1,
+                  impacted_nodes: 3,
+                  skip_reason: null,
+                  ms: 600,
+                },
+              ],
+              index_build_ms: { B4: 1000 },
+              asserted: "fixture",
+            },
+          },
         },
         null,
         2,
@@ -575,6 +614,33 @@ describe("evaluate refuses a drifted measurement", () => {
         perCwe: { "079": 1 },
       }),
     ).rejects.toThrow(/refusing to report/);
+  });
+
+  it("refuses a positive row that fell back to the static ladder", async () => {
+    // The row is tier 0 while the staging projection promised tier 1: AOR never
+    // saw the file, so counting the row as a miss would blame the detector for a
+    // missing measurement.
+    const { root, outDir } = await collectedRun(false, "B");
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: { "079": 1 },
+      }),
+    ).rejects.toThrow(/left their stratum/);
+  });
+
+  it("refuses to evaluate a run that was staged without a projection", async () => {
+    const { root, outDir } = await collectedRun(false);
+    const runPath = join(outDir, "run.json");
+    const manifest = JSON.parse(readSync(runPath, "utf8")) as Record<string, unknown>;
+    manifest["evidence"] = { strata_projection: null };
+    await writeFile(runPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await expect(
+      evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+        language: "typescript",
+        perCwe: { "079": 1 },
+      }),
+    ).rejects.toThrow(/no strata projection/);
   });
 
   it("writes a report that names the instruments it was produced on", async () => {
@@ -670,5 +736,50 @@ describe("evaluate refuses a drifted measurement", () => {
     const negative = truth.get("ts-cwe022-9010")!;
     expect(negative.labels).toEqual([]);
     expect(negative.event_kind).toBe("create");
+  });
+
+  it("stages three clean importers per positive and none for a negative", () => {
+    const plan = planDrill(DATASET, {});
+    const positive = plan.positives[0]!;
+    expect(IMPORTERS_PER_POSITIVE).toBe(3);
+    expect(importerPath(positive, 1)).toBe(`live/${positive.sampleId}/__importers__/1.ts`);
+    // The specifier resolves from `__importers__/n.ts` back to the written file,
+    // so the edge the graph reads is the edge the driver's write creates.
+    expect(importerText(positive.path)).toBe(
+      `import "../${positive.path.split("/").at(-1)}";\n`,
+    );
+    expect(importerPath(positive, 1).split("/").slice(0, 2).join("/")).toBe(`live/${positive.sampleId}`);
+  });
+
+  it("refuses a negative that the graph rates above tier 0", () => {
+    const rows: StrataRow[] = [
+      { sample_id: "neg", stratum: "A", path: "live/neg/a.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+    ];
+    expect(() => assertStrata(rows)).toThrow(/negative neg is tier 1/);
+  });
+
+  it("refuses a positive that never reached the graph", () => {
+    // `index_not_ready` gives the static ladder, which rates one file as tier 0:
+    // AOR would be skipped for that row and line 3 would lose it silently.
+    const rows: StrataRow[] = [
+      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 0, tier_source: "static", impacted_files: 1, impacted_nodes: 0, skip_reason: "index_not_ready", ms: 2 },
+    ];
+    expect(() => assertStrata(rows)).toThrow(/positive pos is tier 0 source static/);
+    expect(() => assertStrata(rows)).toThrow(/index_not_ready/);
+  });
+
+  it("accepts the strata the drill stages: A at 0, B at 1 by triage", () => {
+    const rows: StrataRow[] = [
+      { sample_id: "neg", stratum: "A", path: "live/neg/a.ts", tier: 0, tier_source: "triage", impacted_files: 1, impacted_nodes: 0, skip_reason: null, ms: 600 },
+      { sample_id: "pos", stratum: "B", path: "live/pos/b.ts", tier: 1, tier_source: "triage", impacted_files: 4, impacted_nodes: 3, skip_reason: null, ms: 600 },
+    ];
+    expect(() => assertStrata(rows)).not.toThrow();
+  });
+
+  it("stages B4 and B4g from two configs, not from one", () => {
+    expect(baselineConfigPath("configs/b4.json", "B4")).toBe("configs/b4.json");
+    expect(baselineConfigPath("configs/b4.json", "B4g")).toBe("configs/b4g.json");
+    expect(() => baselineConfigPath("configs/other.json", "B4g")).toThrow(/cannot derive the B4g config/);
   });
 });

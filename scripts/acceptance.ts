@@ -106,6 +106,14 @@ export interface AcceptanceRowLike {
    */
   review_skip_reason?: string | null;
   /**
+   * The tier the row was reviewed at. Carried so `evaluate` can refuse a run in
+   * which a positive row silently fell back to the static ladder: that row never
+   * reached AOR, and its absence from the contingency table looks like a
+   * detection failure rather than a missing measurement.
+   */
+  tier?: number;
+  tier_source?: string;
+  /**
    * What answered `--version` when this row was produced. Required for any
    * report that quotes a number; `assertInstrumentIdentity` refuses without it.
    */

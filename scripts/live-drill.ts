@@ -3,11 +3,19 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import type { Baseline, Mode, ReviewRow } from "../src/contracts/index.js";
+import { basename, dirname, join, resolve } from "node:path";
+import type { Baseline, ChangeEvent, Mode, ReviewRow, RunConfig, Tier } from "../src/contracts/index.js";
 import { calibrationCategories, DatasetManifest } from "../src/contracts/index.js";
-import { assertCalibrationMatches, loadCalibration, sha256, TOOL_ENV } from "../src/config/index.js";
-import { configuredModelOf, parseAorProbe } from "../src/l2/index.js";
+import {
+  assertBudgetRelations,
+  assertCalibrationMatches,
+  loadCalibration,
+  sha256,
+  TOOL_ENV,
+} from "../src/config/index.js";
+import { computeTier, configuredModelOf, parseAorProbe } from "../src/l2/index.js";
+import { createCrgTriage } from "../src/l3/index.js";
+import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
 import { evaluateAcceptance, loadTruth, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
@@ -347,11 +355,18 @@ export interface StageOptions {
   evidence: RunEvidence;
   /** The one-shot token: the run name, and any run it archived to get here. */
   oneShot: OneShot;
+  /**
+   * Build the graph and project every row's tier. On by default; tests stage a
+   * tree without it, because the graph CLI is a measuring tool, not a fixture.
+   * A run staged with `index: false` has `strata_projection: null`, which reads
+   * as "not probed" and never as "projected and fine".
+   */
+  index?: boolean;
 }
 
 /** Where the frozen values live. A pin that is only in someone's head is not a pin. */
-export { PREREGISTRATION, loadCostCeiling, loadFrozenPin } from "./frozen.js";
-import { loadCostCeiling, loadFrozenPin, PREREGISTRATION } from "./frozen.js";
+export { PREREGISTRATION, loadCostCeiling, loadFrozenBudgets, loadFrozenPin } from "./frozen.js";
+import { loadCostCeiling, loadFrozenBudgets, loadFrozenPin, PREREGISTRATION } from "./frozen.js";
 
 /** A run directory is self-identifying: eval-<dataset>-<timestamp>. */
 export const RUN_DIR_PATTERN = /^(?:eval|smoke)-[A-Za-z0-9._-]+-\d{8}T\d{6}$/;
@@ -412,6 +427,23 @@ export interface RunEvidence {
     rows: number;
     probe_tokens: number;
     method: string;
+  } | null;
+  /**
+   * The tier each staged row will get, decided from the staged tree before the
+   * run. No detector output is involved: only `impact` is queried.
+   */
+  strata_projection: {
+    rows: StrataRow[];
+    index_build_ms: Record<string, number>;
+    asserted: string;
+  } | null;
+  /** How long the run should take, from the caps and the measured AOR probe. */
+  wall_clock_estimate: {
+    rows: number;
+    per_row_ms: number;
+    total_ms: number;
+    index_build_ms: number;
+    components: { semgrep_ms: number; crg_ms: number; aor_ms: number; basis: string };
   } | null;
 }
 
@@ -665,12 +697,213 @@ export function readRunManifest(outDir: string, datasetDir: string): RunManifest
 }
 
 /** Materialise the scratch repos, configs and profile overlays for one run. */
+/**
+ * Three clean importers per positive row.
+ *
+ * `staticTier` reads one thing: how many files the change event carries. The
+ * host's write tool carries exactly one `file_path`, so a one-file change is
+ * tier 0 however large the file is, and no amount of vulnerable code in it moves
+ * the tier. The graph reads something else: a file with three dependants has a
+ * blast radius of four files, which is tier 1 under the *same*
+ * `tier0.filesMax` boundary.
+ *
+ * These files therefore do not change the review unit - the change event is
+ * still one file, and AOR still scans one file - they change what the repository
+ * says about that file, which is the question the triage layer exists to answer.
+ * Each is a single import statement: it carries the edge the graph needs, and it
+ * has no code in it that a detector could find.
+ */
+export const IMPORTERS_PER_POSITIVE = 3;
+
+export function importerPath(sample: PlannedSample, index: number): string {
+  return `live/${sample.sampleId}/__importers__/${index}.ts`;
+}
+
+/** The specifier is the edge; the graph resolves `../<name>.ts` as written. */
+export function importerText(target: string): string {
+  return `import "../${basename(target)}";\n`;
+}
+
+/** One row of the projection: what the triage layer would decide, before the run. */
+export interface StrataRow {
+  sample_id: string;
+  stratum: "A" | "B";
+  path: string;
+  tier: Tier;
+  tier_source: "triage" | "static" | "none";
+  impacted_files: number;
+  impacted_nodes: number;
+  skip_reason: string | null;
+  ms: number;
+}
+
+/**
+ * Index the staged tree.
+ *
+ * The plugin only ever queries the graph; it never builds one, and a query
+ * against a missing index takes the degraded path. So the index is built here,
+ * once per baseline, after the baseline commit and before the run - and the
+ * time it takes is recorded, because it is part of the run's wall clock.
+ */
+export async function buildIndex(root: string): Promise<number> {
+  const started = Date.now();
+  await execa("code-review-graph", ["build", "--repo", root, "-q", "--skip-flows"], {
+    cwd: root,
+    timeout: 600_000,
+  });
+  return Date.now() - started;
+}
+
+/**
+ * Ask the real triage layer, on the real staged tree, what each row's tier is.
+ *
+ * Zero detector output is produced here: only `impact` runs, so the projection
+ * costs no blindness. It exists because three clean importers per positive row
+ * turn tier 0 into tier 1 by blast radius, and a negative row on a file that
+ * happens to have three importers of its own would silently become tier 1 too -
+ * at which point line 4 ("no false positive on the low-risk pool") would stop
+ * measuring tier 0 while the report still printed `pairs=8`.
+ */
+export async function projectStrata(
+  root: string,
+  config: RunConfig,
+  samples: PlannedSample[],
+  datasetDir: string,
+): Promise<StrataRow[]> {
+  const triage = createCrgTriage(config, { root });
+  const boundaries = { tier0: config.triage.tier0, tier1: config.triage.tier1 };
+  const rows: StrataRow[] = [];
+  for (const sample of samples) {
+    if (sample.kind === "dep-probe") continue;
+    const after = stagedText(sample, datasetDir);
+    const event: ChangeEvent = {
+      id: `strata-${sample.sampleId}`,
+      sessionId: "strata",
+      rootCallId: "strata",
+      phase: "post",
+      trigger: "write",
+      files: [sample.path],
+      diff: synthesizeDiff(sample.path, "", after),
+      diffProvenance: "synthesized",
+      ts: Date.now(),
+    };
+    const started = Date.now();
+    const analysis = await triage.analyze(event, Date.now() + config.budgets.crgQueryMs);
+    const ms = Date.now() - started;
+    const decision = computeTier(
+      {
+        changedFiles: 1,
+        impactedFiles: analysis.impactedFiles,
+        impactedNodes: analysis.impactedNodes,
+        truncated: analysis.truncated,
+        unresolvedCallSites: analysis.unresolvedCallSites,
+        indexReady: analysis.indexReady,
+        indexStale: analysis.indexStale,
+      },
+      boundaries,
+    );
+    rows.push({
+      sample_id: sample.sampleId,
+      stratum: sample.kind === "positive" ? "B" : "A",
+      path: sample.path,
+      tier: decision.tier,
+      tier_source: decision.source,
+      impacted_files: analysis.impactedFiles,
+      impacted_nodes: analysis.impactedNodes,
+      skip_reason: decision.skipReason,
+      ms,
+    });
+  }
+  return rows;
+}
+
+/**
+ * The projection is a precondition, not a report.
+ *
+ * Line 4 measures false positives on a pool of defect-free changes that are
+ * supposed to stay below the tier boundary; line 3 and line 5 need AOR to have
+ * run at all, which happens only above it. A row that lands in the wrong stratum
+ * makes one of those lines vacuous while still printing a number, so the run
+ * refuses to start instead of averaging it away afterwards.
+ */
+export function assertStrata(rows: StrataRow[]): void {
+  const negatives = rows.filter((row) => row.stratum === "A");
+  const positives = rows.filter((row) => row.stratum === "B");
+  const problems: string[] = [];
+  for (const row of negatives) {
+    if (row.tier !== 0) {
+      problems.push(`negative ${row.sample_id} is tier ${row.tier} (want 0): ${row.impacted_files} files`);
+    }
+  }
+  for (const row of positives) {
+    if (row.tier < 1 || row.tier_source !== "triage") {
+      problems.push(
+        `positive ${row.sample_id} is tier ${row.tier} source ${row.tier_source} (want >= 1 by triage): ` +
+          `${row.impacted_files} files, skip ${row.skip_reason ?? "none"}`,
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `stratification projection failed, refusing to stage the run:\n  ${problems.join("\n  ")}\n` +
+        `A negative that is tier >= 1 removes line 4's denominator; a positive that is tier 0 removes ` +
+        `AOR from the row entirely. Fix the staged tree (importers, or which file a row writes) - do ` +
+        `not let the report average this out.`,
+    );
+  }
+}
+
+export function formatStrata(rows: StrataRow[], buildMs: Record<string, number>): string {
+  const lines = rows.map(
+    (row) =>
+      `  ${row.stratum} ${row.sample_id} tier=${row.tier} via ${row.tier_source} ` +
+      `files=${row.impacted_files} nodes=${row.impacted_nodes} ${row.ms}ms`,
+  );
+  const counts = rows.reduce<Record<string, number>>((acc, row) => {
+    const key = `${row.stratum}:tier${row.tier}`;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const index = Object.entries(buildMs)
+    .map(([baseline, ms]) => `${baseline} ${ms}ms`)
+    .join(", ");
+  return (
+    `strata projection (no detector was run): ${JSON.stringify(counts)}\n` +
+    `${lines.join("\n")}\n` +
+    `index build: ${index}`
+  );
+}
+
+/**
+ * B4 and B4g are two configs, not one config under two labels.
+ *
+ * The only difference between them is `triage.enabled`, which is the whole point
+ * of line 4's pairing: B4 runs the tier decision, B4g does not. Staging both
+ * baselines from `b4.json` would have run the same ladder twice and printed the
+ * difference as an effect of triage.
+ */
+export function baselineConfigPath(baseConfig: string, baseline: "B4" | "B4g"): string {
+  if (baseline === "B4") return baseConfig;
+  const sibling = baseConfig.replace(/b4\.json$/, "b4g.json");
+  if (sibling === baseConfig) {
+    throw new Error(
+      `cannot derive the B4g config from ${baseConfig}: B4g differs from B4 in triage.enabled, ` +
+        `so staging both from one file would run the same ladder twice`,
+    );
+  }
+  if (!existsSync(sibling)) throw new Error(`missing ${sibling}: the B4g baseline needs its own config`);
+  return sibling;
+}
+
 export async function stageDrill(options: StageOptions): Promise<void> {
   assertRunDir(options.outDir);
-  const base = JSON.parse(await readFile(options.baseConfig, "utf8")) as Record<string, unknown>;
   const samples = allSamples(options.plan);
+  const strataRows: StrataRow[] = [];
+  const indexBuildMs: Record<string, number> = {};
 
   for (const baseline of ["B4", "B4g"] as const) {
+    const basePath = baselineConfigPath(options.baseConfig, baseline);
+    const base = JSON.parse(await readFile(basePath, "utf8")) as Record<string, unknown>;
     const scratch = join(options.outDir, "scratch", baseline);
     await mkdir(scratch, { recursive: true });
     await writeFile(join(scratch, "README.md"), `# CRS live drill ${baseline}\n`, "utf8");
@@ -680,6 +913,18 @@ export async function stageDrill(options: StageOptions): Promise<void> {
       const target = join(scratch, sample.path);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, "", "utf8");
+    }
+    // Positives get three importers each: the run's change event stays one file,
+    // but the repository now has a blast radius for that file, which is what
+    // `computeTier` reads. Negatives get none, so they stay at tier 0.
+    for (const sample of samples) {
+      if (sample.kind !== "positive") continue;
+      for (let index = 1; index <= IMPORTERS_PER_POSITIVE; index += 1) {
+        const path = importerPath(sample, index);
+        const target = join(scratch, path);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, importerText(sample.path), "utf8");
+      }
     }
     await writeFile(
       join(scratch, "plan.json"),
@@ -725,7 +970,20 @@ export async function stageDrill(options: StageOptions): Promise<void> {
         ...(base["persistence"] as Record<string, unknown>),
         jsonlPath: join(options.outDir, baseline, "review.jsonl"),
       },
-    };
+    } as unknown as RunConfig;
+    // The staged config is the one the plugin will load, so it is the one the
+    // budget relation has to hold for. Failing here costs a staging run; failing
+    // at load costs the run.
+    assertBudgetRelations(config);
+
+    if (options.index !== false) {
+      const buildMs = await buildIndex(scratch);
+      const rows = await projectStrata(scratch, config, samples, options.datasetDir);
+      assertStrata(rows);
+      process.stdout.write(`${baseline}: ${formatStrata(rows, { [baseline]: buildMs })}\n`);
+      strataRows.push(...rows);
+      indexBuildMs[baseline] = buildMs;
+    }
     const configPath = join(options.outDir, baseline, "config.json");
     await mkdir(dirname(configPath), { recursive: true });
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
@@ -743,6 +1001,16 @@ export async function stageDrill(options: StageOptions): Promise<void> {
       ].join("\n"),
       "utf8",
     );
+  }
+  options.evidence.strata_projection = {
+    rows: strataRows,
+    index_build_ms: indexBuildMs,
+    asserted: "A: tier 0; B: tier >= 1 by triage (index_not_ready would fail the run)",
+  };
+  const estimate = options.evidence.wall_clock_estimate;
+  if (estimate) {
+    estimate.index_build_ms = Object.values(indexBuildMs).reduce((sum, ms) => sum + ms, 0);
+    estimate.total_ms += estimate.index_build_ms;
   }
   await writeRunManifest(options);
 }
@@ -875,13 +1143,23 @@ async function newestSource(dir: string): Promise<{ path: string; at: number } |
 }
 
 /** The pin as the config declares it. Only ever compared with the frozen pin. */
-function frozenFromConfig(baseConfig: string): { semgrep: { version: string }; ocr: { commit: string } } {
+function frozenFromConfig(baseConfig: string): {
+  semgrep: { version: string };
+  ocr: { commit: string };
+  budgets: { crgQueryMs: number; semgrepKillMs: number; callMs: number };
+} {
   const base = JSON.parse(readFileSync(baseConfig, "utf8")) as {
     sources?: { semgrep?: { version?: string }; aor?: { versionCommit?: string } };
+    budgets?: { crgQueryMs?: number; semgrepKillMs?: number; callMs?: number };
   };
   return {
     semgrep: { version: base.sources?.semgrep?.version ?? "" },
     ocr: { commit: base.sources?.aor?.versionCommit ?? "" },
+    budgets: {
+      crgQueryMs: base.budgets?.crgQueryMs ?? 0,
+      semgrepKillMs: base.budgets?.semgrepKillMs ?? 0,
+      callMs: base.budgets?.callMs ?? 0,
+    },
   };
 }
 
@@ -925,7 +1203,14 @@ async function trackedFilesContaining(needle: string): Promise<string[]> {
 
 export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
-  const evidence: RunEvidence = { bundle: null, aor_probe: null, cost_probe: null, cost_estimate: null };
+  const evidence: RunEvidence = {
+    bundle: null,
+    aor_probe: null,
+    cost_probe: null,
+    cost_estimate: null,
+    strata_projection: null,
+    wall_clock_estimate: null,
+  };
   const env = { ...process.env, PATH: toolPath(), ...TOOL_ENV };
 
   const run = async (name: string, file: string, args: string[], cwd = process.cwd()) => {
@@ -1137,6 +1422,32 @@ export async function preflight(profile: string, options: PreflightOptions = {})
         mismatches.length === 0
           ? `${PREREGISTRATION} agrees with the config and with the probes`
           : mismatches.join("; "),
+    });
+
+    // `crgQueryMs` decides whether the triage layer answers at all, so it is
+    // pinned like an instrument rather than left as a tunable: a value below the
+    // graph CLI's floor does not slow the tier down, it removes it.
+    const frozenBudgets = loadFrozenBudgets();
+    const configBudgets = frozenFromConfig(
+      options.baseConfig ?? resolve(arg("--config", "configs/b4.json")),
+    ).budgets;
+    const prePath = configBudgets.semgrepKillMs + configBudgets.crgQueryMs;
+    const fits = prePath <= configBudgets.callMs;
+    const matches = frozenBudgets !== null && configBudgets.crgQueryMs === frozenBudgets.crg_query_ms;
+    checks.push({
+      name: "crg budget",
+      ok: matches && fits,
+      detail: !fits
+        ? `semgrepKillMs ${configBudgets.semgrepKillMs} + crgQueryMs ${configBudgets.crgQueryMs} = ` +
+          `${prePath}ms exceeds callMs ${configBudgets.callMs}ms`
+        : frozenBudgets === null
+          ? `${PREREGISTRATION} has no frozen.budgets.crg_query_ms: the value that decides whether ` +
+            `the triage layer answers was never frozen, so there is nothing to hold the config to`
+          : matches
+            ? `crgQueryMs ${configBudgets.crgQueryMs} == frozen; pre path ${configBudgets.semgrepKillMs} + ` +
+              `${configBudgets.crgQueryMs} = ${prePath}ms <= callMs ${configBudgets.callMs}ms` +
+              `${frozenBudgets.derivation === null ? "" : `; ${frozenBudgets.derivation}`}`
+            : `config crgQueryMs ${configBudgets.crgQueryMs} != frozen ${frozenBudgets.crg_query_ms}`,
     });
   }
   // The repository is public. A key that lands in a tracked file is a leak no
@@ -1480,6 +1791,8 @@ export function toAcceptanceRows(
       latency_ms: row.latency_ms,
       change_event: { sessionId: row.change_event.sessionId, ts: row.change_event.ts, phase: row.change_event.phase },
       review_skip_reason: row.review_skip_reason,
+      tier: row.tier,
+      tier_source: row.tier_source,
       // Carried through untouched: the acceptance report must be able to refuse
       // a run whose binaries are not the frozen ones, and a consumer that
       // re-derives this could silently "fix" the drift it is meant to catch.
@@ -1563,6 +1876,41 @@ export async function evaluate(
     rows.push(JSON.parse(line) as AcceptanceRowLike);
   }
   const gaps = existsSync(gapsPath) ? JSON.parse(await readFile(gapsPath, "utf8")) : null;
+  // The staging projection promised A: tier 0 and B: tier >= 1. If a row lands
+  // somewhere else during the run, the tier fell back to the static ladder,
+  // AOR never saw that file, and the contingency table would report it as a
+  // miss. That is a measurement failure wearing a detection failure's clothes.
+  const projection = run.evidence?.strata_projection ?? null;
+  if (projection === null) {
+    throw new Error(
+      `refusing to evaluate: ${outDir} has no strata projection. The run was staged without an ` +
+        `index, so nothing says which rows were above the tier boundary and nothing can check it.`,
+    );
+  }
+  const stratumOf = new Map(projection.rows.map((row) => [row.sample_id, row.stratum]));
+  const posted = rows.filter((row) => row.change_event?.phase === "post" && stratumOf.has(row.sample));
+  const wrong = posted.filter((row) =>
+    stratumOf.get(row.sample) === "B" ? (row.tier ?? 0) < 1 : row.tier !== 0,
+  );
+  if (wrong.length > 0) {
+    throw new Error(
+      `refusing to evaluate: ${wrong.length} row(s) left their stratum at run time ` +
+        `(${wrong
+          .map((row) => `${row.sample} tier ${row.tier ?? "?"} via ${row.tier_source ?? "?"}`)
+          .join(", ")}). ` +
+        `A positive below tier 1 never reached AOR; a negative above tier 0 removes line 4's ` +
+        `denominator. Re-stage with a crgQueryMs that the graph actually meets.`,
+    );
+  }
+  const withAor = new Set(posted.filter((row) => (row.tier ?? 0) >= 1).map((row) => row.sample));
+  const unreviewed = projection.rows.filter((row) => row.stratum === "B" && !withAor.has(row.sample_id));
+  if (unreviewed.length > 0) {
+    process.stdout.write(
+      `WARN ${unreviewed.length} positive row(s) have no post-phase row at tier >= 1: ` +
+        `${unreviewed.map((row) => row.sample_id).join(", ")} - the driver wrote nothing for them, ` +
+        `so they are missing from the denominator rather than counted as misses\n`,
+    );
+  }
   const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, {
     coverage,
     frozenInstruments: run.frozen_instruments,
@@ -1611,6 +1959,7 @@ export const NON_DEGRADABLE_GATES = [
   "plugin bundle",
   "aor model",
   "frozen pin",
+  "crg budget",
   "secret not tracked",
 ] as const;
 
@@ -1700,19 +2049,20 @@ async function main(): Promise<void> {
       plan.warnings.map((warning) => `WARN ${warning}\n`).join(""),
   );
 
-  // The tier is a function of how many files one change event carries, and the
-  // host's write/edit tools take exactly one path. So every staged row is tier
-  // 0, not just the create: AOR is skipped for all of them, and P2/P4 have no
-  // AOR rows to read. This is a property of the change unit, not of any sample.
+  // The change event is one file (the host's write tool takes one path), so the
+  // tier cannot come from the change size. It comes from the repository: each
+  // positive is staged with three clean importers, which the graph reports as a
+  // four-file blast radius, and each negative stays alone. Staging projects both
+  // strata and refuses to start if either is wrong.
   const tier0 = (JSON.parse(readFileSync(baseConfig, "utf8")) as { triage: { tier0: { filesMax: number } } })
     .triage.tier0.filesMax;
   if (tier0 >= 1) {
     process.stdout.write(
-      `NOTE every staged row writes one file, so every row is tier 0 (triage.tier0.filesMax=${tier0}) ` +
-        `and AOR is skipped for all of them while semgrep and the registry run: P2/P4 and the ` +
-        `[CRS-WARN] lines have no AOR rows. A tier>=1 event needs >${tier0} files in one change, and ` +
-        `the host's write/edit tool carries exactly one path - that is a change to the review unit, ` +
-        `not to the plan.\n`,
+      `NOTE one change event is one file, so the tier comes from the staged repository: each ` +
+        `positive carries ${IMPORTERS_PER_POSITIVE} clean importers (blast radius ` +
+        `${IMPORTERS_PER_POSITIVE + 1} > triage.tier0.filesMax=${tier0} -> tier 1) and each negative ` +
+        `stays a single file (tier 0). Staging projects every row's tier and refuses to start ` +
+        `otherwise.\n`,
     );
   }
 
@@ -1767,7 +2117,14 @@ async function main(): Promise<void> {
       profile,
       plan,
       frozen: loadFrozenPin(),
-      evidence: { bundle: null, aor_probe: null, cost_probe: null, cost_estimate: null },
+      evidence: {
+        bundle: null,
+        aor_probe: null,
+        cost_probe: null,
+        cost_estimate: null,
+        strata_projection: null,
+        wall_clock_estimate: null,
+      },
       oneShot: { run: outDir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "", at: new Date().toISOString(), restarts: [] },
     });
     const first = plan.positives[0]!;
@@ -1834,6 +2191,32 @@ async function main(): Promise<void> {
     process.stdout.write(
       `cost: probe ${costProbe.tokens} tokens/${costProbe.file_lines} lines in ${costProbe.elapsed_ms}ms ` +
         `-> up to ${estimate} tokens for ${rows} rows (ceiling ${ceiling})\n`,
+    );
+    // Wall clock, from the caps the pre path can spend plus the one AOR call
+    // that was actually measured. The AOR term is a 38-line file, so the total
+    // is a floor for the AOR part and a ceiling for everything else; the index
+    // build is measured at staging time and added there.
+    const budgets = (JSON.parse(readFileSync(baseConfig, "utf8")) as { budgets: Record<string, number> })
+      .budgets;
+    const perRowMs =
+      (budgets["semgrepKillMs"] ?? 0) + (budgets["crgQueryMs"] ?? 0) + costProbe.elapsed_ms;
+    const wall = {
+      rows,
+      per_row_ms: perRowMs,
+      total_ms: rows * perRowMs,
+      index_build_ms: 0,
+      components: {
+        semgrep_ms: budgets["semgrepKillMs"] ?? 0,
+        crg_ms: budgets["crgQueryMs"] ?? 0,
+        aor_ms: costProbe.elapsed_ms,
+        basis: "caps for semgrep and crg, one measured ocr call for aor; index build added at staging",
+      },
+    };
+    ready.evidence.wall_clock_estimate = wall;
+    process.stdout.write(
+      `wall clock: ${rows} rows x (semgrep ${wall.components.semgrep_ms}ms + crg ${wall.components.crg_ms}ms ` +
+        `+ aor ${wall.components.aor_ms}ms) = ${(wall.total_ms / 60_000).toFixed(1)} min ` +
+        `(plus graph builds, plus the driver's own turns)\n`,
     );
     const restarts = await assertOneShot(outDir, plan.datasetVersion, restartReason);
     if (restarts.length > 0) {

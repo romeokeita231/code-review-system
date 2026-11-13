@@ -64,6 +64,11 @@ async function main(): Promise<void> {
       tokens: 1000,
       latency_ms: 1000,
       review_skip_reason: null,
+      // The tier a staged row would carry: positives sit above the boundary and
+      // negatives below it, which is what `evaluate` re-checks against the
+      // staging projection.
+      tier: 0,
+      tier_source: "triage",
       instrument,
       disposition: { preDecision: "allow", postDecision: "none", finalDisposition: "record", text: null },
       change_event: { sessionId: "wiring", ts, phase: "post" },
@@ -78,6 +83,7 @@ async function main(): Promise<void> {
     push({
       sample: positive.sampleId,
       baseline: "B4",
+      tier: 1,
       change_event: { sessionId: "wiring", ts, phase: "pre" },
       disposition: {
         preDecision: "deny",
@@ -90,6 +96,7 @@ async function main(): Promise<void> {
     push({
       sample: positive.sampleId,
       baseline: "B4",
+      tier: 1,
       findings_merged: [{ file: defect.file, startLine: defect.line_start, endLine: defect.line_end, cwe: defect.cwe }],
     });
   }
@@ -101,6 +108,7 @@ async function main(): Promise<void> {
     push({
       sample: warned.sampleId,
       baseline: "B4",
+      tier: 1,
       disposition: {
         preDecision: "allow",
         postDecision: "inject_warn",
@@ -111,7 +119,7 @@ async function main(): Promise<void> {
         { file: warnedDefect.file, startLine: warnedDefect.line_start, endLine: warnedDefect.line_end, cwe: warnedDefect.cwe },
       ],
     });
-    push({ sample: warned.sampleId, baseline: "B4" });
+    push({ sample: warned.sampleId, baseline: "B4", tier: 1 });
   }
 
   // Line 4: both baselines on every defect-free low-risk row. Each write also
@@ -167,6 +175,31 @@ async function main(): Promise<void> {
           ).length,
         },
         degraded_gates: [],
+        evidence: {
+          strata_projection: {
+            // Synthetic, like the rows: every positive is above the boundary and
+            // every negative below it, so the check exercises the comparison
+            // rather than the refusal.
+            rows: [
+              ...plan.positives.map((sample) => ({ sample_id: sample.sampleId, stratum: "B" as const, tier: 1 })),
+              ...[...plan.lowRisk, ...plan.controls].map((sample) => ({
+                sample_id: sample.sampleId,
+                stratum: "A" as const,
+                tier: 0,
+              })),
+            ].map((row) => ({
+              path: "wiring",
+              tier_source: "triage",
+              impacted_files: row.tier === 1 ? 4 : 1,
+              impacted_nodes: row.tier === 1 ? 3 : 0,
+              skip_reason: null,
+              ms: 600,
+              ...row,
+            })),
+            index_build_ms: { B4: 1000, B4g: 1000 },
+            asserted: "wiring check: synthetic projection, no graph was queried",
+          },
+        },
       },
       null,
       2,

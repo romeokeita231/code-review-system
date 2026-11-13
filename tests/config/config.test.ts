@@ -183,4 +183,28 @@ describe("calibration provenance (#7 D2)", () => {
     // survive in the artifact even though 75 recorded findings still carry it.
     expect(committed.categories).not.toContain("CWE-502");
   });
+
+  it("refuses a pre path whose parts do not fit one call", () => {
+    // This is the shape that hid for two revisions: each budget was plausible on
+    // its own, the sum was not, and the graph query never answered.
+    const config = raw("b4") as RunConfig;
+    config.budgets.crgQueryMs = config.budgets.callMs;
+    expect(() => parseConfig(config)).toThrow(ConfigError);
+    expect(() => parseConfig(config)).toThrow(/do not fit/);
+  });
+
+  it("accepts a pre path that exactly fills the ceiling", () => {
+    const config = raw("b4") as RunConfig;
+    config.budgets.semgrepKillMs = config.budgets.callMs - config.budgets.crgQueryMs;
+    expect(() => parseConfig(config)).not.toThrow();
+  });
+
+  it("ships every config with a pre path inside its ceiling", () => {
+    for (const name of ["b1", "b2", "b3", "b4g", "b4", "single"]) {
+      const budgets = load(name).budgets;
+      expect(budgets.semgrepKillMs + budgets.crgQueryMs).toBeLessThanOrEqual(
+        Math.min(budgets.callMs, budgets.turnMs),
+      );
+    }
+  });
 });
