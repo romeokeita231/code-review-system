@@ -443,7 +443,7 @@ export interface LineResult {
    * language), not about the detector, and it leaves the gate denominator
    * instead of counting as a failure.
    */
-  state?: "pass" | "fail" | "na";
+  state: "pass" | "fail" | "na";
   pass: boolean;
   /** Required when `state === "na"`: why the line cannot be measured. */
   na_reason?: string;
@@ -1079,8 +1079,12 @@ export function evaluateAcceptance(
         ]),
     "",
     table(
-      ["line", "pass", "detail"],
-      [line1, line2, line3, line4, line5].map((line) => [line.name, String(line.pass), line.detail]),
+      ["line", "state", "detail"],
+      [line1, line2, line3, line4, line5].map((line) => [
+        line.name,
+        line.state.toUpperCase(),
+        line.detail,
+      ]),
     ),
     "",
     "line1 units (the two faces do not share a denominator):",
@@ -1091,9 +1095,13 @@ export function evaluateAcceptance(
         [
           "recall",
           "sample",
-          String(n),
+          `${n} samples (${positives.length} pre rows)`,
           `>= ${minSamples}`,
-          recallGated ? "gated" : `insufficient_n (descriptive, not gated)`,
+          recallStatus === "gated"
+            ? `gated (${certifiedText})`
+            : recallStatus === "na"
+              ? `na (${naReason})`
+              : `insufficient_n (descriptive, not gated; ${certifiedText})`,
         ],
         [
           "precision",
@@ -1152,10 +1160,15 @@ export function evaluateAcceptance(
       : []),
   ].join("\n");
 
+  const lineEntries = [line1, line2, line3, line4, line5];
+  const gatedLines = lineEntries.filter((line) => line.state !== "na");
+  const naLines = lineEntries.filter((line) => line.state === "na");
+  const passedLines = gatedLines.filter((line) => line.state === "pass");
   const verdict = [
     `# 验收结论（${mode}）`,
     "",
-    `五条线：${[line1, line2, line3, line4, line5].filter((line) => line.pass).length}/5 通过。`,
+    `闸门 ${passedLines.length}/${gatedLines.length} 通过（${mode}）` +
+      `${naLines.length === 0 ? "。" : `；另有 ${naLines.length} 条 na，单列、不进闸门分母。`}`,
     "",
     instruments === null
       ? "量具身份：未核对（未提供冻结值）。"
@@ -1169,13 +1182,34 @@ export function evaluateAcceptance(
     "line1 的分母按单位分开：召回以样本计（每个漏洞样本是否被抓到），" +
       `精度以 finding 计（每条 finding 是否落在真值行上）。召回 ${n} / 门槛 ${minSamples}（${recallStatus}，` +
       `available ${availableN} staged ${stagedN}）；精度 ${findingN} / 门槛 ${minFindings}（${precisionStatus}）。`,
-    ...(recallGated
+    ...(recallGated || naReason !== null
       ? []
       : [
           "",
           `召回面 insufficient_n：recall=${recall.toFixed(3)}（${hits}/${n}）` +
             `${interval === null ? "" : `，Wilson 95% [${interval.low.toFixed(3)}, ${interval.high.toFixed(3)}]`}，` +
             "仅作描述性报告，不进门禁；“测不了”与“没测”是两回事。",
+        ]),
+    ...(classedSamples === 0
+      ? []
+      : [
+          "",
+          `line3 的判据是「每条 warn 均被处理」，不是「大部分被处理」：同一 classed 样本内 5 条 warn 已修、` +
+            `1 条未处理，该样本整条记 \`unfixed\`（优先级 recurred > unfixed > corrected）。` +
+            `所以 corrected ${correctedSamples.length}/${classedSamples} 读作「闭环合上的样本数为 ${correctedSamples.length}」，` +
+            `不是「多数失败」。本线不设容忍度；将来若要容忍度，须是新的预注册阈值，而不是本次读数的注脚。`,
+        ]),
+    ...(naLines.length === 0
+      ? []
+      : [
+          "",
+          "na（不可测，不进闸门分母）：" +
+            naLines
+              .map((line) => `${line.name.split(":")[0]} — ${line.na_reason ?? ""}`)
+              .join("；") +
+            "。“测不了”既不等于“没通过”，也不等于“通过”。后果按线分：line1 不在闸门分母内，G 不变；" +
+            "line2–5 是闸线，任一为 na 都会使 G 减 1，而 na 永不记为通过，故闸线上一旦出现 na，" +
+            "通过数最多 G−1，闸门必然失败 —— 闸线上的 na 劣于 FAIL，这是反空转设计，不因读数难看而豁免。",
         ]),
     ...(availableN === stagedN
       ? []
@@ -1204,7 +1238,7 @@ export function evaluateAcceptance(
     "",
   ].join("\n");
 
-  return { mode, lines: [line1, line2, line3, line4, line5], resultsTable, verdict };
+  return { mode, lines: lineEntries, resultsTable, verdict };
 }
 
 async function main(): Promise<void> {
@@ -1243,10 +1277,22 @@ async function main(): Promise<void> {
   await writeFile(join(outDir, "verdict.md"), report.verdict, "utf8");
   await writeFile(
     join(outDir, "verdict.json"),
-    `${JSON.stringify(report.lines.map(({ name, pass, metrics }) => ({ name, pass, metrics })), null, 2)}\n`,
+    `${JSON.stringify(
+      report.lines.map(({ name, state, pass, na_reason, metrics }) => ({
+        name,
+        state,
+        pass,
+        ...(na_reason === undefined ? {} : { na_reason }),
+        metrics,
+      })),
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
-  process.stdout.write(`${report.lines.map((line) => `${line.pass ? "PASS" : "FAIL"} ${line.name}`).join("\n")}\n`);
+  process.stdout.write(
+    `${report.lines.map((line) => `${line.state.toUpperCase()} ${line.name}`).join("\n")}\n`,
+  );
 }
 
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("scripts/acceptance.ts")) {

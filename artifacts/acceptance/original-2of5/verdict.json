@@ -1,0 +1,69 @@
+[
+  {
+    "name": "line1: block precision/recall on the covered, scannable eval positives",
+    "pass": false,
+    "metrics": {
+      "n": 50,
+      "k": 0,
+      "recall": 0,
+      "wilson_low": 0,
+      "wilson_high": 0.07135003417431873,
+      "recall_status": "gated",
+      "available": 11,
+      "staged": 10,
+      "not_staged": 1,
+      "precision": 0.1511627906976744,
+      "findings_n": 86,
+      "findings_tp": 13,
+      "precision_status": "gated",
+      "false_positive": 0,
+      "negatives": 11,
+      "negatives_edit": 10,
+      "negatives_create": 1,
+      "missed": 50,
+      "scannable": 50,
+      "out_of_scope": 0,
+      "excluded": 0,
+      "aor_excluded": 0,
+      "excluded_classes": "",
+      "preregistered": "true"
+    }
+  },
+  {
+    "name": "line2: dependency hallucination closed by a registry hit",
+    "pass": true,
+    "metrics": {
+      "registry_hits": 2
+    }
+  },
+  {
+    "name": "line3: no repeat of the same class after a correction",
+    "pass": false,
+    "metrics": {
+      "warned": 53,
+      "classed": 40,
+      "corrected": 26,
+      "repeats": 14
+    }
+  },
+  {
+    "name": "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
+    "pass": false,
+    "metrics": {
+      "pairs": 8,
+      "rows_source": "live",
+      "median_token_ratio": null,
+      "median_latency_ratio": 0.0409436338113504,
+      "upstream_tier0": 0,
+      "upstream_tier0_measured": 8
+    }
+  },
+  {
+    "name": "line5: correction anchor visible on the next request",
+    "pass": true,
+    "metrics": {
+      "warned": 53,
+      "anchored": 53
+    }
+  }
+]

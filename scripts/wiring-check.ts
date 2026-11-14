@@ -228,8 +228,10 @@ async function main(): Promise<void> {
   process.stdout.write(
     "WIRING CHECK - synthetic rows, no detector ran, nothing here is a result.\n" +
       `dataset: ${plan.datasetVersion}  rows: ${rows.length}  pinned: semgrep ${frozen.semgrep.version}, ocr ${frozen.ocr.commit}\n\n` +
-      `${result.lines.map((line) => `${line.pass ? "PASS" : "FAIL"} ${line.name} :: ${line.detail}`).join("\n")}\n\n` +
-      `rendered ${result.pass}/5 (a PASS here means the line's inputs were wired, not that it holds)\n` +
+      `${result.lines.map((line) => `${line.state.toUpperCase()} ${line.name} :: ${line.detail}`).join("\n")}\n\n` +
+      `rendered 闸门 ${result.pass}/${result.gated}` +
+      `${result.na === 0 ? "" : `（另有 ${result.na} 条 na，不计入闸门）`}` +
+      ` (a PASS here means the line's inputs were wired, not that it holds)\n` +
       `artefacts: ${join(root, "out")}\n` +
       "The real run writes artifacts/acceptance/ and is the only thing that may be quoted.\n",
   );

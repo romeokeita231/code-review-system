@@ -1,0 +1,89 @@
+[
+  {
+    "name": "line1: block precision/recall on the covered, scannable eval positives",
+    "state": "na",
+    "pass": false,
+    "na_reason": "no certified TS rule (blockRules is empty for this language in the pinned config)",
+    "metrics": {
+      "n": 10,
+      "k": 0,
+      "rows": 50,
+      "recall": 0,
+      "wilson_low": 0,
+      "wilson_high": 0.2775401687666165,
+      "recall_status": "na",
+      "certified": 0,
+      "uncertified": 10,
+      "block_face": "na",
+      "available": 11,
+      "staged": 10,
+      "not_staged": 1,
+      "precision": 0.1511627906976744,
+      "findings_n": 86,
+      "findings_tp": 13,
+      "findings_without_class": 81,
+      "precision_status": "gated",
+      "false_positive": 0,
+      "negatives": 11,
+      "negatives_edit": 10,
+      "negatives_create": 1,
+      "missed": 10,
+      "scannable": 50,
+      "out_of_scope": 0,
+      "excluded": 0,
+      "aor_excluded": 0,
+      "excluded_classes": "",
+      "preregistered": "true"
+    }
+  },
+  {
+    "name": "line2: dependency hallucination closed by a registry hit",
+    "state": "pass",
+    "pass": true,
+    "metrics": {
+      "registry_hits": 2
+    }
+  },
+  {
+    "name": "line3: no repeat of the same class after a correction",
+    "state": "fail",
+    "pass": false,
+    "metrics": {
+      "warned_rows": 53,
+      "warned_samples": 20,
+      "classed": 10,
+      "corrected": 0,
+      "recurred": 1,
+      "unfixed": 9,
+      "classed_rows": 40,
+      "corrected_rows": 26,
+      "recurred_rows": 4,
+      "unfixed_rows": 10
+    }
+  },
+  {
+    "name": "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
+    "state": "pass",
+    "pass": true,
+    "metrics": {
+      "pairs": 8,
+      "rows_source": "live",
+      "median_token_ratio": null,
+      "median_token_ratio_derived": 0,
+      "tokens_derived_pairs": 8,
+      "undetermined_pairs": 0,
+      "median_latency_ratio": 0.0409436338113504,
+      "upstream_tier0": 0,
+      "upstream_tier0_measured": 8
+    }
+  },
+  {
+    "name": "line5: correction anchor visible on the next request",
+    "state": "pass",
+    "pass": true,
+    "metrics": {
+      "warned": 53,
+      "anchored": 53
+    }
+  }
+]

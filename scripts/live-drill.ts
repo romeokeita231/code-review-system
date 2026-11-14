@@ -2034,8 +2034,22 @@ export async function evaluate(
    * shaped exactly like a measured one, so line 4 would otherwise render a
    * fixture's ratio as a result (ADR-0008).
    */
-  options: { rowsSource?: "live" | "synthetic" } = {},
-): Promise<{ pass: number; lines: Array<{ name: string; pass: boolean; detail: string }> }> {
+  options: {
+    rowsSource?: "live" | "synthetic";
+    /**
+     * The config's block-certification face. Absent means "the caller did not
+     * say"; line 1 is then gated the way it always was. When given and no
+     * positive's language has a certified rule, line 1 reports `na` instead of a
+     * recall of 0 (`certifiedSubsets`).
+     */
+    certifiedRules?: ReadonlyArray<{ langs: readonly string[]; blockRules: readonly string[] }>;
+  } = {},
+): Promise<{
+  pass: number;
+  gated: number;
+  na: number;
+  lines: Array<{ name: string; state: "pass" | "fail" | "na"; pass: boolean; detail: string }>;
+}> {
   // The run directory names its dataset and its pin; both are checked before any
   // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
   const run = readRunManifest(outDir, datasetDir);
@@ -2247,6 +2261,7 @@ export async function evaluate(
     coverage,
     frozenInstruments: run.frozen_instruments,
     ...(options.rowsSource === undefined ? {} : { rowsSource: options.rowsSource }),
+    ...(options.certifiedRules === undefined ? {} : { subsets: options.certifiedRules }),
     ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
   });
   await mkdir(acceptanceOut, { recursive: true });
@@ -2254,12 +2269,25 @@ export async function evaluate(
   await writeFile(join(acceptanceOut, "verdict.md"), report.verdict, "utf8");
   await writeFile(
     join(acceptanceOut, "verdict.json"),
-    `${JSON.stringify(report.lines.map(({ name, pass, metrics }) => ({ name, pass, metrics })), null, 2)}\n`,
+    `${JSON.stringify(
+      report.lines.map(({ name, state, pass, na_reason, metrics }) => ({
+        name,
+        state,
+        pass,
+        ...(na_reason === undefined ? {} : { na_reason }),
+        metrics,
+      })),
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
+  const gated = report.lines.filter((line) => line.state !== "na").length;
   return {
-    pass: report.lines.filter((line) => line.pass).length,
-    lines: report.lines.map(({ name, pass, detail }) => ({ name, pass, detail })),
+    pass: report.lines.filter((line) => line.state === "pass").length,
+    gated,
+    na: report.lines.length - gated,
+    lines: report.lines.map(({ name, state, pass, detail }) => ({ name, state, pass, detail })),
   };
 }
 
@@ -2628,13 +2656,18 @@ async function main(): Promise<void> {
       coverage,
       // `--stage evaluate` only ever reads a directory `run` produced here; a
       // synthetic report is built by `wiring:check`, which declares its own.
-      { rowsSource: "live" },
+      // The certified block face is read from the config the run was staged
+      // with, so line 1 can say `na` instead of a recall of 0.
+      { rowsSource: "live", certifiedRules: certifiedSubsets(baseConfig) },
     );
     process.stdout.write(
-      `${result.lines.map((line) => `${line.pass ? "PASS" : "FAIL"} ${line.name} :: ${line.detail}`).join("\n")}\n`,
+      `${result.lines.map((line) => `${line.state.toUpperCase()} ${line.name} :: ${line.detail}`).join("\n")}\n`,
     );
-    process.stdout.write(`acceptance: ${result.pass}/5\n`);
-    if (result.pass < 5) process.exitCode = 3;
+    process.stdout.write(
+      `闸门 ${result.pass}/${result.gated}` +
+        `${result.na === 0 ? "" : `（另有 ${result.na} 条 na，不计入闸门）`}\n`,
+    );
+    if (result.pass < result.gated || result.pass + result.na < 5) process.exitCode = 3;
   }
 }
 

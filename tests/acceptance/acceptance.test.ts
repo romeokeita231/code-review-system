@@ -784,6 +784,8 @@ describe("event kinds in the false-positive denominator", () => {
       certified: 0,
       uncertified: 3,
     });
+    expect(report.resultsTable).toContain("NA");
+    expect(report.verdict).toContain("no certified TS rule");
   });
 
   it("keeps line1 gated when the config certifies a rule for the language", () => {
@@ -955,6 +957,7 @@ describe("event kinds in the false-positive denominator", () => {
     expect(report.lines[3]!.metrics).toMatchObject({ pairs: 8, undetermined_pairs: 7 });
     // The consequence is stated where a reader meets it: `na` on a gate line is
     // worse than `fail`, because it shrinks the gate denominator as well.
+    expect(report.verdict).toContain("闸线上的 na 劣于 FAIL");
   });
   it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
     // The wiring bug this guards: truth and rows disagree about which samples
