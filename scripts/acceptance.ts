@@ -746,52 +746,95 @@ export function evaluateAcceptance(
   const warned = postRows.filter(
     (row) => row.disposition.postDecision === "inject_warn" && evaluatedAor(row),
   );
+  type Line3State = "corrected" | "recurred" | "unfixed";
   const perSample = new Map<string, AcceptanceRowLike[]>();
   for (const row of postRows) {
     const list = perSample.get(row.sample) ?? [];
     list.push(row);
     perSample.set(row.sample, list);
   }
-  const repeats: string[] = [];
-  const corrected: string[] = [];
-  const classed: AcceptanceRowLike[] = [];
-  for (const row of warned) {
+  // Line 3 is three outcomes per warned *sample*, not one repeat count: a sample
+  // whose later writes no longer carry the class was corrected; one whose later
+  // writes do carry it recurred; one that was never written again after the
+  // warning was not corrected at all. The last two are different failures - "it
+  // was told and submitted the same class again" versus "it was told and stopped
+  // touching the file" - so they are counted apart, and both stay in the gate:
+  // a warning nobody acts on is not a successful correction.
+  const rowStates: Array<{ row: AcceptanceRowLike; state: Line3State }> = [];
+  const sampleStates = new Map<string, Line3State>();
+  const warnedSamples = [...new Set(warned.map((row) => row.sample))];
+  for (const sample of warnedSamples) {
     const classes = new Set(
-      (truth.get(row.sample)?.labels ?? [])
+      (truth.get(sample)?.labels ?? [])
         .map((label) => label.cwe)
         .filter((cwe): cwe is string => cwe !== null),
     );
     // A warned sample without ground-truth classes (e.g. the dependency probe)
     // cannot carry line 3's assertion either way.
     if (classes.size === 0) continue;
-    classed.push(row);
-    // Line 3: after the correction lands, the same class must not reappear in
-    // that sample's later writes (the corrected file), for up to two fixes.
-    const later = (perSample.get(row.sample) ?? []).filter(
-      (candidate) =>
-        (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
-    );
-    const reappeared = later.some((candidate) =>
-      candidate.findings_merged.some((finding) => finding.cwe !== null && classes.has(finding.cwe)),
-    );
-    if (later.length === 0) {
-      repeats.push(`${row.sample}:unfixed`);
-      continue;
+    const warnedRows = warned.filter((candidate) => candidate.sample === sample);
+    for (const row of warnedRows) {
+      // Line 3: after the correction lands, the same class must not reappear in
+      // that sample's later writes (the corrected file), for up to two fixes.
+      const later = (perSample.get(row.sample) ?? []).filter(
+        (candidate) => (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
+      );
+      const reappeared = later.some((candidate) =>
+        candidate.findings_merged.some((finding) => finding.cwe !== null && classes.has(finding.cwe)),
+      );
+      rowStates.push({
+        row,
+        state: later.length === 0 ? "unfixed" : reappeared ? "recurred" : "corrected",
+      });
     }
-    if (reappeared) repeats.push(`${row.sample}:same-class`);
-    else corrected.push(row.sample);
+    // Worst observation wins: a sample that reappeared anywhere is a recurrence
+    // even if another of its writes was never revisited. When a warning lands on
+    // what turns out to be the final write, "no later write" says nothing about
+    // whether the code was fixed, and letting it override a confirmed
+    // reappearance would hide the stronger fact behind the weaker one.
+    const states = new Set(
+      rowStates.filter((entry) => entry.row.sample === sample).map((entry) => entry.state),
+    );
+    sampleStates.set(
+      sample,
+      states.has("recurred") ? "recurred" : states.has("unfixed") ? "unfixed" : "corrected",
+    );
   }
+  const samplesIn = (state: Line3State): string[] =>
+    [...sampleStates].filter(([, value]) => value === state).map(([sample]) => sample);
+  const correctedSamples = samplesIn("corrected");
+  const recurredSamples = samplesIn("recurred");
+  const unfixedSamples = samplesIn("unfixed");
+  const classedSamples = sampleStates.size;
+  const rowsIn = (state: Line3State): number =>
+    rowStates.filter((entry) => entry.state === state).length;
+  const line3Pass =
+    classedSamples > 0 &&
+    correctedSamples.length === classedSamples &&
+    recurredSamples.length === 0 &&
+    unfixedSamples.length === 0;
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
-    pass: classed.length > 0 && corrected.length === classed.length && repeats.length === 0,
+    state: stateOf(null, line3Pass),
+    pass: line3Pass,
     detail:
-      `warned=${warned.length} classed=${classed.length} corrected=${corrected.length} repeats=${repeats.length}` +
-      `${repeats.length > 0 ? ` first=${repeats[0]}` : ""}`,
+      `warned_rows=${warned.length} warned_samples=${warnedSamples.length} ` +
+      `classed=${classedSamples} samples corrected=${correctedSamples.length} ` +
+      `recurred=${recurredSamples.length}${recurredSamples.length > 0 ? `(${recurredSamples.join(",")})` : ""} ` +
+      `unfixed=${unfixedSamples.length}${unfixedSamples.length > 0 ? `(${unfixedSamples.join(",")})` : ""} ` +
+      `| rows corrected=${rowsIn("corrected")} recurred=${rowsIn("recurred")} unfixed=${rowsIn("unfixed")}` +
+      ` | criterion=all-warns-handled (precedence recurred>unfixed>corrected)`,
     metrics: {
-      warned: warned.length,
-      classed: classed.length,
-      corrected: corrected.length,
-      repeats: repeats.length,
+      warned_rows: warned.length,
+      warned_samples: warnedSamples.length,
+      classed: classedSamples,
+      corrected: correctedSamples.length,
+      recurred: recurredSamples.length,
+      unfixed: unfixedSamples.length,
+      classed_rows: rowStates.length,
+      corrected_rows: rowsIn("corrected"),
+      recurred_rows: rowsIn("recurred"),
+      unfixed_rows: rowsIn("unfixed"),
     },
   };
 

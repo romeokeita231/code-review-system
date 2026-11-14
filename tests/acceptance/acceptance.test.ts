@@ -285,7 +285,7 @@ describe("acceptance", () => {
     ];
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(false);
-    expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+    expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, recurred: 0, unfixed: 1 });
   });
 
   it("counts each sample once when a live write emits pre and post rows", () => {
@@ -496,7 +496,13 @@ describe("acceptance", () => {
     ];
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(true);
-    expect(report.lines[2]!.metrics).toMatchObject({ warned: 1, corrected: 1, repeats: 0 });
+    expect(report.lines[2]!.metrics).toMatchObject({
+      warned_rows: 1,
+      classed: 1,
+      corrected: 1,
+      recurred: 0,
+      unfixed: 0,
+    });
   });
 
   it("fails line3 when the same class reappears in the corrected sample", () => {
@@ -525,7 +531,7 @@ describe("acceptance", () => {
     ];
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(false);
-    expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+    expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, recurred: 1, unfixed: 0 });
   });
 
   it("fails line3 when a warned sample is never corrected", () => {
@@ -547,7 +553,7 @@ describe("acceptance", () => {
     ];
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(false);
-    expect(report.lines[2]!.metrics).toMatchObject({ repeats: 1 });
+    expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, corrected: 0, unfixed: 1 });
   });
 
   it("keeps a never-attempted language out of the recall denominator", () => {
@@ -798,6 +804,48 @@ describe("event kinds in the false-positive denominator", () => {
       block_face: "measurable",
       recall_status: "insufficient_n",
     });
+  });
+
+  it("counts a sample as recurred when any warning reappeared, even if another was never revisited", () => {
+    const truth = new Map<string, SampleTruth>([["a", truthOf("a", "high", ["aor"])]]);
+    const warn = (ts: number): AcceptanceRowLike =>
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts,
+        change_event: { sessionId: "s1", ts, phase: "post" },
+        disposition: {
+          preDecision: "allow",
+          postDecision: "inject_warn",
+          finalDisposition: "instruction_correction",
+          text: "[CRS-WARN] src/a.ts:1 CWE-79 r",
+        },
+        findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+      });
+    const rows = [
+      warn(10),
+      warn(30),
+      row({
+        sample: "a",
+        baseline: "B4",
+        ts: 20,
+        change_event: { sessionId: "s1", ts: 20, phase: "post" },
+        findings_merged: [{ file: "src/a.ts", startLine: 9, endLine: 9, cwe: "CWE-79" }],
+      }),
+    ];
+    const report = evaluateAcceptance(rows, truth, gaps);
+    // The write after the first warning still carries the class (recurred); the
+    // last warning lands on what turns out to be the final write (unfixed). The
+    // sample is one recurrence: letting `unfixed` win would let a confirmed
+    // reappearance hide behind a warning nobody could have answered.
+    expect(report.lines[2]!.metrics).toMatchObject({
+      classed: 1,
+      recurred: 1,
+      unfixed: 0,
+      recurred_rows: 1,
+      unfixed_rows: 1,
+    });
+    expect(report.lines[2]!.pass).toBe(false);
   });
   it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
     // The wiring bug this guards: truth and rows disagree about which samples
