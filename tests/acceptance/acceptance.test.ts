@@ -131,7 +131,7 @@ describe("acceptance", () => {
     // `corr` is a labelled eval sample that was only warned (twice, so two
     // rows), so it is two missed positives; the old `expected_detectable_by`
     // selector hid it from the denominator entirely.
-    expect(report.lines[0]!.metrics).toMatchObject({ n: 22, k: 20, recall: 20 / 22 });
+    expect(report.lines[0]!.metrics).toMatchObject({ n: 21, k: 20, rows: 22, recall: 20 / 21 });
     expect(report.verdict).toContain("5/5");
   });
 
@@ -753,6 +753,52 @@ describe("event kinds in the false-positive denominator", () => {
     expect(report.verdict).toContain("不支撑任何精度主张");
   });
 
+  it("reports line1 as na when the config certifies no block rule for the language", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const sample = `p-${index}`;
+      truth.set(sample, truthOf(sample, "high", ["semgrep"]));
+      rows.push(row({ sample, baseline: "B4", ts: 10 + index }));
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, {
+      subsets: [{ langs: ["typescript"], blockRules: [] }],
+    });
+    // `blockRules: []` means a finding can never be certified, and an
+    // uncertified finding never reaches `triggering`, so `deny` is unreachable:
+    // the number 0 would describe the config, not the detector.
+    expect(report.lines[0]!.state).toBe("na");
+    expect(report.lines[0]!.na_reason).toMatch(/no certified TS rule/);
+    expect(report.lines[0]!.pass).toBe(false);
+    expect(report.lines[0]!.metrics).toMatchObject({
+      n: 3,
+      k: 0,
+      recall_status: "na",
+      block_face: "na",
+      certified: 0,
+      uncertified: 3,
+    });
+  });
+
+  it("keeps line1 gated when the config certifies a rule for the language", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const sample = `p-${index}`;
+      truth.set(sample, truthOf(sample, "high", ["semgrep"]));
+      rows.push(row({ sample, baseline: "B4", ts: 10 + index }));
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, {
+      subsets: [{ langs: ["typescript"], blockRules: ["certified-rule"] }],
+    });
+    expect(report.lines[0]!.state).toBe("fail");
+    expect(report.lines[0]!.metrics).toMatchObject({
+      certified: 3,
+      uncertified: 0,
+      block_face: "measurable",
+      recall_status: "insufficient_n",
+    });
+  });
   it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
     // The wiring bug this guards: truth and rows disagree about which samples
     // exist, so `available` is 0 next to a pile of rows. That is not a small

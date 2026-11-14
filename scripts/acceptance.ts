@@ -123,6 +123,33 @@ export function tier0Counterfactual(path: string): Tier0Counterfactual {
   };
 }
 
+/**
+ * The pinned config's block-certification face: per ruleset subset, its
+ * languages and the rule ids it may deny on.
+ *
+ * `semgrep.ts:493` marks a finding `certified` only when its id is in
+ * `blockRules`, and `orchestrator.ts:385` drops every finding that is not
+ * certified, so a language whose subsets list no rule has no reachable `deny`.
+ * That is why line 1 has to say `na` there instead of "missed every sample": the
+ * number 0 would be a fact about the config wearing the detector's clothes.
+ *
+ * Read from the pinned file rather than from the run: `blockRules` is wiring, not
+ * a goalpost, and the run records only the config hash.
+ */
+export function certifiedSubsets(path: string): Array<{ langs: string[]; blockRules: string[] }> {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as {
+    sources?: { semgrep?: { subsets?: Array<{ langs?: unknown; blockRules?: unknown }> } };
+  };
+  const subsets = raw.sources?.semgrep?.subsets;
+  if (!Array.isArray(subsets)) {
+    throw new Error(`${path} declares no sources.semgrep.subsets: cannot tell which rules may block`);
+  }
+  return subsets.map((subset) => ({
+    langs: Array.isArray(subset.langs) ? subset.langs.map(String) : [],
+    blockRules: Array.isArray(subset.blockRules) ? subset.blockRules.map(String) : [],
+  }));
+}
+
 export interface AcceptanceOptions {
   minSamples?: number;
   /** Precision's gate counts findings, not samples; a separate unit needs its own n. */
@@ -148,6 +175,17 @@ export interface AcceptanceOptions {
    * this guards is a complete-looking artefact built on a different binary.
    */
   frozenInstruments?: FrozenInstruments;
+  /**
+   * The config's block-certification face: per ruleset subset, its languages and
+   * the rule ids it may deny on. `semgrep.ts:493` marks a finding `certified`
+   * only when its id is listed there, and `orchestrator.ts:385` drops every
+   * uncertified finding, so a subset with `blockRules: []` makes `deny`
+   * unreachable for its language. Recall is then `na`, not 0: nothing was
+   * attempted that could have succeeded, and calling that a miss would report
+   * the ruleset's hole as the detector's blindness. Absent means the caller did
+   * not say, and the line is gated the way it always was.
+   */
+  subsets?: ReadonlyArray<{ langs: readonly string[]; blockRules: readonly string[] }>;
 }
 
 export type { FrozenInstruments } from "./frozen.js";
@@ -391,9 +429,24 @@ function median(values: number[]): number | null {
 
 export interface LineResult {
   name: string;
+  /**
+   * Three states, because "not measured" is not "failed". `na` is a fact about
+   * the instrument (the pinned config certifies no block rule for the rows'
+   * language), not about the detector, and it leaves the gate denominator
+   * instead of counting as a failure.
+   */
+  state?: "pass" | "fail" | "na";
   pass: boolean;
+  /** Required when `state === "na"`: why the line cannot be measured. */
+  na_reason?: string;
   detail: string;
   metrics?: Record<string, number | string | null>;
+}
+
+/** `na` wins over both verdicts: an unmeasured line is never a pass. */
+function stateOf(naReason: string | null, pass: boolean): LineResult["state"] {
+  if (naReason !== null) return "na";
+  return pass ? "pass" : "fail";
 }
 
 export interface AcceptanceReport {
@@ -489,18 +542,64 @@ export function evaluateAcceptance(
   // by name before this is called.
   const aorExcluded = new Set(rows.filter((row) => !evaluatedAor(row)).map((row) => row.sample)).size;
   const denied = (row: AcceptanceRowLike): boolean => row.disposition.preDecision === "deny";
-  const truePositive = positives.filter(denied);
   const falsePositive = negatives.filter(denied);
-  const missed = positives.length - truePositive.length;
-  // Recall's unit is the sample: did the write get caught at all. Precision's
-  // unit is the finding: of everything the pipeline surfaced, how much names a
-  // real defect. Sharing one `n` between them mixed the units, so each face has
-  // its own denominator, its own gate and its own status.
-  const n = positives.length;
-  const hits = truePositive.length;
+  // Recall's unit is the sample: did the write get caught at all. A positive is
+  // written several times per drill (on ds-2: 50 pre rows over 10 samples), so
+  // counting rows here multiplies the denominator by the number of writes and
+  // turns a 10-sample run into an `n=50` one. Precision's unit stays the
+  // finding: of everything the pipeline surfaced, how much names a real defect.
+  // Each face has its own denominator, its own gate and its own status.
+  const positiveSamples = [...new Set(positives.map((row) => row.sample))];
+  const caughtSamples = positiveSamples.filter((sample) =>
+    positives.some((row) => row.sample === sample && denied(row)),
+  );
+  const n = positiveSamples.length;
+  const hits = caughtSamples.length;
+  const missed = n - hits;
   const recall = n === 0 ? 0 : hits / n;
   const recallGated = n >= minSamples;
   const interval = wilsonInterval(hits, n);
+  // Certification is a property of the pinned config, decidable before any row is
+  // read: a finding can be denied only when its rule id is listed in its
+  // subset's `blockRules` (`semgrep.ts:493`), and an uncertified finding never
+  // enters `triggering` (`orchestrator.ts:385`). An empty list for the positives'
+  // language means the block face was never wired for it.
+  const certifiedRuleCount = (language: string): number => {
+    const target = semgrepLanguage(language);
+    const rules = new Set<string>();
+    for (const subset of options.subsets ?? []) {
+      if (!subset.langs.some((lang) => lang.toLowerCase() === target)) continue;
+      for (const rule of subset.blockRules) rules.add(rule);
+    }
+    return rules.size;
+  };
+  const positiveLanguages = [
+    ...new Set(positiveSamples.map((sample) => truth.get(sample)?.language ?? "")),
+  ].filter((language) => language.length > 0);
+  const certifiedSamples = positiveSamples.filter((sample) => {
+    const language = truth.get(sample)?.language;
+    return language !== undefined && certifiedRuleCount(language) > 0;
+  });
+  const uncertifiedSamples = n - certifiedSamples.length;
+  const shortLanguage = (language: string): string => {
+    const normalized = semgrepLanguage(language);
+    if (normalized === "typescript") return "TS";
+    if (normalized === "javascript") return "JS";
+    if (normalized === "python") return "Python";
+    return normalized.toUpperCase();
+  };
+  const languageLabel = [...new Set(positiveLanguages.map(shortLanguage))].join("/") || "?";
+  // Only a *complete* absence is `na`: if some positives have a certified rule the
+  // face is measurable, and the mixed case is printed rather than silently split.
+  const blockMeasurable = options.subsets === undefined || n === 0 || certifiedSamples.length > 0;
+  // Without the config the certification face is unknown, not empty: printing
+  // "0/10 certified" would claim that no rule can block when nobody looked.
+  const certifiedText =
+    options.subsets === undefined ? "certified=na (config not supplied)" : `certified=${certifiedSamples.length}/${n}`;
+  const naReason = blockMeasurable
+    ? null
+    : `no certified ${languageLabel} rule (blockRules is empty for this language in the pinned config)`;
+  const recallStatus = naReason !== null ? "na" : recallGated ? "gated" : "insufficient_n";
   const inCoverageLanguage = (sample: SampleTruth): boolean =>
     coverage === undefined || semgrepLanguage(sample.language) === coverage.language;
   const evalTruth = [...truth.values()].filter(
@@ -537,10 +636,12 @@ export function evaluateAcceptance(
     );
   let findingTp = 0;
   let findingFp = 0;
+  let findingWithoutClass = 0;
   for (const row of postRows) {
     const sample = truth.get(row.sample);
     if (sample === undefined || sample.split !== "eval" || row.baseline !== "B4") continue;
     for (const finding of row.findings_merged) {
+      if (finding.cwe === null) findingWithoutClass += 1;
       if (overlapsTruth(finding, sample)) findingTp += 1;
       else findingFp += 1;
     }
@@ -549,7 +650,6 @@ export function evaluateAcceptance(
   const precisionMeasurable = negatives.length > 0;
   const precisionGated = precisionMeasurable && findingN >= minFindings;
   const precision = precisionMeasurable && findingN > 0 ? findingTp / findingN : null;
-  const recallStatus = recallGated ? "gated" : "insufficient_n";
   const precisionStatus = !precisionMeasurable
     ? "no_negatives"
     : findingN >= minFindings
@@ -571,12 +671,19 @@ export function evaluateAcceptance(
   const excludedClasses = [...new Set(excluded.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"))];
   const line1: LineResult = {
     name: "line1: block precision/recall on the covered, scannable eval positives",
+    state: stateOf(naReason, line1Pass),
     pass: line1Pass,
+    ...(naReason === null ? {} : { na_reason: naReason }),
     detail:
-      `mode=${mode} recall n=${n} (available=${availableN} staged=${stagedN}) hits=${hits} ` +
+      `mode=${mode} recall n=${n} samples (${positives.length} pre rows) ` +
+      `(available=${availableN} staged=${stagedN}) hits=${hits} ` +
       `recall=${recall.toFixed(3)} wilson=[${interval === null ? "na" : `${interval.low.toFixed(3)},${interval.high.toFixed(3)}`}] ` +
-      `recall_gate=${recallStatus}${recallGated ? "" : " (descriptive, not gated)"} ` +
+      `recall_gate=${recallStatus}` +
+      `${recallGated || naReason !== null ? "" : " (descriptive, not gated)"} ` +
+      `${certifiedText}` +
+      `${naReason === null ? "" : ` block_face=na (${naReason})`} ` +
       `precision findings=${findingN} tp=${findingTp} precision=${precision === null ? "na" : precision.toFixed(3)} ` +
+      `without_class=${findingWithoutClass} ` +
       `precision_gate=${precisionStatus} negatives=${negatives.length} ` +
       `(edit=${negativeEdits} create=${negativeCreates}) ` +
       `excluded=${excluded.length}${excludedClasses.length > 0 ? `(${excludedClasses.join(",")})` : ""} ` +
@@ -584,27 +691,33 @@ export function evaluateAcceptance(
       `aor_excluded=${aorExcluded} ` +
       `preregistered_gaps=${preregistered} predicted_gaps=${predictedGap.length}`,
     metrics: {
+      /** Recall's denominator: samples, not rows. */
       n,
       k: hits,
+      rows: positives.length,
       recall,
       // The number exists even when the gate does not: "cannot be gated" is not
       // the same claim as "was not measured".
       wilson_low: interval?.low ?? null,
       wilson_high: interval?.high ?? null,
       recall_status: recallStatus,
+      certified: options.subsets === undefined ? null : certifiedSamples.length,
+      uncertified: options.subsets === undefined ? null : uncertifiedSamples,
+      block_face: naReason === null ? "measurable" : "na",
       available: availableN,
       staged: stagedN,
       not_staged: availableN - stagedN,
       precision,
       findings_n: findingN,
       findings_tp: findingTp,
+      findings_without_class: findingWithoutClass,
       precision_status: precisionStatus,
       false_positive: falsePositive.length,
       negatives: negatives.length,
       negatives_edit: negativeEdits,
       negatives_create: negativeCreates,
       missed,
-      // Every row that exists, once: n + excluded + out_of_scope = eval positives.
+      // Every row that exists, once: positives rows + excluded + out_of_scope.
       scannable: scannable.length,
       out_of_scope: outOfScope.length,
       excluded: excluded.length,
@@ -621,9 +734,11 @@ export function evaluateAcceptance(
         source.findings.some((finding) => (finding.evidence ?? "").startsWith("package not found")),
     ),
   );
+  const line2Pass = mode === "live" && registryHits.length > 0;
   const line2: LineResult = {
     name: "line2: dependency hallucination closed by a registry hit",
-    pass: mode === "live" && registryHits.length > 0,
+    state: stateOf(null, line2Pass),
+    pass: line2Pass,
     detail: `mode=${mode} registry_hits=${registryHits.length}`,
     metrics: { registry_hits: registryHits.length },
   };
@@ -754,9 +869,11 @@ export function evaluateAcceptance(
       row.disposition.text.includes("[CRS-WARN]") &&
       /CWE-\d+|\.\w{1,5}:\d+/.test(row.disposition.text),
   );
+  const line5Pass = anchored.length > 0 && anchored.length === warned.length;
   const line5: LineResult = {
     name: "line5: correction anchor visible on the next request",
-    pass: anchored.length > 0 && anchored.length === warned.length,
+    state: stateOf(null, line5Pass),
+    pass: line5Pass,
     detail: `warned=${warned.length} anchored=${anchored.length}`,
     metrics: { warned: warned.length, anchored: anchored.length },
   };
@@ -968,9 +1085,13 @@ async function main(): Promise<void> {
   // on the pinned repositories). Optional: a replay report has no staged tree, and
   // then the detail says the measurement is absent instead of quoting zero.
   const stagedContextPath = resolve(arg("--staged-context", "artifacts/staged-context.json"));
+  // The certified block face comes from the config, not from the run: the run
+  // records only its hash, and `blockRules` is wiring rather than a result.
+  const configPath = resolve(arg("--config", "configs/b4.json"));
   const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
     frozenInstruments: pin,
+    subsets: certifiedSubsets(configPath),
     ...(existsSync(stagedContextPath) ? { stagedContext: tier0Counterfactual(stagedContextPath) } : {}),
   });
   await mkdir(outDir, { recursive: true });
