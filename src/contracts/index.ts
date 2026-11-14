@@ -366,6 +366,15 @@ export const ReviewRow = z.object({
   gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),
   text: z.string().nullable(),
   tokens: z.number().int().nonnegative().nullable(),
+  /**
+   * Was a semantic pass (AOR) asked of this row at all?
+   *
+   * `tokens: null` says "no number", not why: a tier-0 row never calls AOR, so
+   * its cost is 0 by construction, while a tier-2 row whose call timed out has a
+   * cost that is unknown. Consumers read this field instead of inferring the
+   * call from a null token count (ADR-0008: an unmeasured value is not a 0).
+   */
+  aor_invoked: z.boolean(),
   latency_ms: z.number().nonnegative(),
   status: z.enum(["ok", "partial", "timeout", "failed", "unknown", "skipped"]),
   toolchain: Toolchain,

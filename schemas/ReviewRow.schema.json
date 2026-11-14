@@ -5,6 +5,9 @@
     "ReviewRow": {
       "additionalProperties": false,
       "properties": {
+        "aor_invoked": {
+          "type": "boolean"
+        },
         "baseline": {
           "enum": [
             "B0",
@@ -838,6 +841,7 @@
         "threshold_source",
         "text",
         "tokens",
+        "aor_invoked",
         "latency_ms",
         "status",
         "toolchain",

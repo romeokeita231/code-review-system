@@ -17,7 +17,7 @@ import { computeTier, configuredModelOf, parseAorProbe } from "../src/l2/index.j
 import { createCrgTriage } from "../src/l3/index.js";
 import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
+import { certifiedSubsets, evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { arg } from "./shared.js";
 import type { StagedContext } from "./upstream-context.js";
 import {
@@ -1979,6 +1979,7 @@ export function toAcceptanceRows(
         })),
       })),
       tokens: row.tokens,
+      aor_invoked: row.aor_invoked,
       latency_ms: row.latency_ms,
       change_event: { sessionId: row.change_event.sessionId, ts: row.change_event.ts, phase: row.change_event.phase },
       review_skip_reason: row.review_skip_reason,

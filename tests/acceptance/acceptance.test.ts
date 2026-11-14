@@ -847,6 +847,115 @@ describe("event kinds in the false-positive denominator", () => {
     });
     expect(report.lines[2]!.pass).toBe(false);
   });
+
+  it("derives a token ratio of 0 only when the row says AOR was never asked", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    // One labelled positive, or the report refuses to run at all (a denominator
+    // of zero rows next to sixteen is a wiring error, not this line's subject).
+    truth.set("pos-1", truthOf("pos-1", "high", ["semgrep"]));
+    rows.push(row({ sample: "pos-1", baseline: "B4", ts: 1 }));
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push({
+        ...row({ sample, baseline: "B4", ts: 500 + index, latency_ms: 400 }),
+        tokens: null,
+        tier: 0,
+        tier_source: "triage",
+      });
+      rows.push({
+        ...row({ sample, baseline: "B4g", ts: 600 + index, latency_ms: 400 }),
+        tokens: [9000, 11000, 12000][index % 3]!,
+        tier: 2,
+        tier_source: "none",
+      });
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, { rowsSource: "live" });
+    // The B4 side never asked AOR (tier 0 via triage), so its cost is 0 by
+    // construction. The raw ratio is still `na`, and both numbers are printed:
+    // filling 0 silently would turn "nothing was asked" into "100% saved".
+    expect(report.lines[3]!.state).toBe("pass");
+    expect(report.lines[3]!.metrics).toMatchObject({
+      pairs: 8,
+      median_token_ratio: null,
+      median_token_ratio_derived: 0,
+      tokens_derived_pairs: 8,
+    });
+    expect(report.lines[3]!.detail).toContain("median_token_ratio=na");
+    expect(report.lines[3]!.detail).toContain("median_token_ratio_derived=0.000");
+  });
+
+  it("refuses to derive 0 for a row that did ask AOR and lost the token count", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    truth.set("pos-1", truthOf("pos-1", "high", ["semgrep"]));
+    rows.push(row({ sample: "pos-1", baseline: "B4", ts: 1 }));
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push({
+        ...row({ sample, baseline: "B4", ts: 500 + index, latency_ms: 400 }),
+        tokens: null,
+        tier: 2,
+        tier_source: "none",
+        aor_invoked: true,
+      });
+      rows.push({
+        ...row({ sample, baseline: "B4g", ts: 600 + index, latency_ms: 400 }),
+        tokens: 10000,
+        tier: 2,
+        tier_source: "none",
+        aor_invoked: true,
+      });
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, { rowsSource: "live" });
+    // `aor_invoked: true` with `tokens: null` is a lost measurement, not a 0, and
+    // a pair without a ratio makes the whole line undetermined rather than
+    // passable on the strength of a shorter median.
+    expect(report.lines[3]!.state).toBe("na");
+    expect(report.lines[3]!.na_reason).toMatch(/undetermined_pairs/);
+    expect(report.lines[3]!.metrics).toMatchObject({
+      median_token_ratio: null,
+      median_token_ratio_derived: null,
+      tokens_derived_pairs: 0,
+      undetermined_pairs: 8,
+    });
+  });
+
+  it("refuses to pass line4 on one computable pair out of eight", () => {
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    truth.set("pos-1", truthOf("pos-1", "high", ["semgrep"]));
+    rows.push(row({ sample: "pos-1", baseline: "B4", ts: 1 }));
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      // Seven pairs asked AOR and lost the count; one measured 0 against 1000.
+      // "pairs === 8" and "median(<=1)" both hold here, which is exactly the
+      // silent pass this line must not be able to produce.
+      rows.push({
+        ...row({ sample, baseline: "B4", ts: 500 + index, latency_ms: 400 }),
+        tokens: index === 0 ? 0 : null,
+        tier: 2,
+        tier_source: "none",
+        aor_invoked: true,
+      });
+      rows.push({
+        ...row({ sample, baseline: "B4g", ts: 600 + index, latency_ms: 400 }),
+        tokens: 1000,
+        tier: 2,
+        tier_source: "none",
+        aor_invoked: true,
+      });
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, { rowsSource: "live" });
+    expect(report.lines[3]!.state).toBe("na");
+    expect(report.lines[3]!.pass).toBe(false);
+    expect(report.lines[3]!.metrics).toMatchObject({ pairs: 8, undetermined_pairs: 7 });
+    // The consequence is stated where a reader meets it: `na` on a gate line is
+    // worse than `fail`, because it shrinks the gate denominator as well.
+  });
   it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
     // The wiring bug this guards: truth and rows disagree about which samples
     // exist, so `available` is 0 next to a pile of rows. That is not a small

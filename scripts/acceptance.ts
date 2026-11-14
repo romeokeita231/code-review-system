@@ -257,6 +257,14 @@ export interface AcceptanceRowLike {
    */
   aor_participated?: boolean;
   /**
+   * Did a semantic pass run for this row? Written by the orchestrator where the
+   * tier is decided: `false` means AOR was never asked, so a cost of 0 is a fact
+   * about the ladder and not a missing measurement. Legacy rows carry `tier: 0`
+   * + `tier_source: "triage"` instead, which is the same decision; `tokens ===
+   * null` is never used to infer this either way.
+   */
+  aor_invoked?: boolean;
+  /**
    * What answered `--version` when this row was produced. Required for any
    * report that quotes a number; `assertInstrumentIdentity` refuses without it.
    */
@@ -852,25 +860,96 @@ export function evaluateAcceptance(
     )
     .sort((a, b) => (a.sample_id < b.sample_id ? -1 : a.sample_id > b.sample_id ? 1 : 0));
   const lowRisk = pairedCandidates.slice(0, 8);
-  const pairs: Array<{ sample: string; eventKind: string; latencyRatio: number; tokenRatio: number | null }> = [];
+  /**
+   * A tier-0 row never asks AOR anything, so its token cost is 0 by
+   * construction. That 0 has to be read off a recorded decision: newer rows say
+   * `aor_invoked: false`, older rows say `tier: 0` + `tier_source: "triage"`
+   * (and the orchestrator filters AOR out of the runnable set for exactly that
+   * tier). A null token count is never, on its own, read as 0 (ADR-0008); a null
+   * on a row that *did* invoke AOR stays `na`.
+   */
+  const tokenCost = (
+    row: AcceptanceRowLike,
+  ): { value: number; derived: boolean; basis: "measured" | "aor_invoked" | "tier" } | null => {
+    const measured = tokensOf(row);
+    if (measured !== null) return { value: measured, derived: false, basis: "measured" };
+    if (row.aor_invoked === true) return null;
+    if (row.aor_invoked === false) return { value: 0, derived: true, basis: "aor_invoked" };
+    const legacyTier0 = row.tier === 0 && row.tier_source === "triage";
+    return legacyTier0 ? { value: 0, derived: true, basis: "tier" } : null;
+  };
+  const pairs: Array<{
+    sample: string;
+    eventKind: string;
+    latencyRatio: number;
+    tokenRatio: number | null;
+    /** True when the ratio rests on a 0 derived from "AOR was never asked". */
+    derived: boolean;
+    /** How that 0 was established; printed so the record and the report agree. */
+    basis: "measured" | "aor_invoked" | "tier";
+    b4Tokens: number | null;
+    b4gTokens: number | null;
+  }> = [];
   for (const sample of lowRisk) {
     const b4 = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4");
     const b4g = postRows.find((row) => row.sample === sample.sample_id && row.baseline === "B4g");
     if (!b4 || !b4g) continue;
     const latencyRatio = b4g.latency_ms === 0 ? Number.POSITIVE_INFINITY : b4.latency_ms / b4g.latency_ms;
-    const t4 = tokensOf(b4);
-    const t4g = tokensOf(b4g);
+    const t4 = tokenCost(b4);
+    const t4g = tokenCost(b4g);
     pairs.push({
       sample: sample.sample_id,
       eventKind: sample.event_kind ?? "unknown",
       latencyRatio,
-      tokenRatio: t4 !== null && t4g !== null && t4g !== 0 ? t4 / t4g : null,
+      tokenRatio: t4 !== null && t4g !== null && t4g.value !== 0 ? t4.value / t4g.value : null,
+      derived: t4?.derived === true || t4g?.derived === true,
+      basis: t4?.basis ?? t4g?.basis ?? "measured",
+      b4Tokens: t4?.value ?? null,
+      b4gTokens: t4g?.value ?? null,
     });
   }
   const medianLatency = median(pairs.map((pair) => pair.latencyRatio));
+  // Two medians, because they answer two questions. The raw one is what was
+  // measured on both sides; it is `na` when a side was never asked. The derived
+  // one is the line's registered criterion and exists only where the 0 came from
+  // `aor_invoked: false`; both are printed together so neither can be quoted as
+  // if it were the other.
+  const rawMedianTokens = median(
+    pairs.filter((pair) => !pair.derived && pair.tokenRatio !== null).map((pair) => pair.tokenRatio!),
+  );
   const medianTokens = median(
     pairs.map((pair) => pair.tokenRatio).filter((value): value is number => value !== null),
   );
+  const derivedPairs = pairs.filter((pair) => pair.derived).length;
+  const derivedBases = { aor_invoked: 0, tier: 0 };
+  for (const pair of pairs) {
+    if (!pair.derived) continue;
+    if (pair.basis === "aor_invoked") derivedBases.aor_invoked += 1;
+    else derivedBases.tier += 1;
+  }
+  const basisText =
+    `aor_invoked:false ${derivedBases.aor_invoked}, tier 0 via triage ${derivedBases.tier}`;
+  const b4gTokenRange = (() => {
+    const values = pairs.map((pair) => pair.b4gTokens).filter((value): value is number => value !== null);
+    return values.length === 0 ? null : `${Math.min(...values)}-${Math.max(...values)}`;
+  })();
+  // `pairs.length === 8` only says eight pairs *exist*; it says nothing about
+  // whether their ratios could be computed. A pair whose side asked AOR and lost
+  // the token count (budget skip, cache hit, timeout) has no ratio, and leaving
+  // it out of the median while still passing on "median <= 1" would let seven
+  // undetermined pairs ride on one measured 0. So an undetermined pair makes the
+  // line `na`, which is strictly worse than `fail` on a gate line: `na` never
+  // counts as a pass, and it also leaves the gate denominator, so the gate can
+  // never reach G/G. That is the point - it must not be possible to turn "we do
+  // not know" into a passing line by removing the unknown row.
+  const undetermined = pairs.filter((pair) => pair.tokenRatio === null).length;
+  const line4Pass =
+    pairs.length === 8 && undetermined === 0 && medianTokens !== null && medianTokens <= 1;
+  const line4NaReason =
+    undetermined === 0
+      ? null
+      : `undetermined_pairs (${undetermined}/${pairs.length} pairs have no computable token ratio: ` +
+        `a row asked AOR and recorded no token count, or a baseline recorded 0 tokens)`;
   // The ratio is a fact about the tree the drill wrote, and on its own it reads as
   // "the ladder saved tokens on this corpus". The counterfactual - measured on the
   // pinned repositories, not inside the run - says the opposite, so it travels in
@@ -891,15 +970,29 @@ export function evaluateAcceptance(
           `rows would be tier 0 upstream, so the registered reading no longer applies)`;
   const line4: LineResult = {
     name: "line4: B4 vs B4g paired token/latency ratios on 8 low-risk samples",
-    pass: pairs.length === 8 && medianTokens !== null && medianTokens <= 1,
+    state: stateOf(line4NaReason, line4Pass),
+    pass: line4Pass,
+    ...(line4NaReason === null ? {} : { na_reason: line4NaReason }),
     detail:
-      `source=${rowsSource} pairs=${pairs.length} median_token_ratio=${medianTokens?.toFixed(3) ?? "na"} ` +
+      `source=${rowsSource} pairs=${pairs.length} undetermined=${undetermined} ` +
+      `median_token_ratio=${rawMedianTokens?.toFixed(3) ?? "na"}` +
+      ` (raw: measured on both sides for ${pairs.filter((pair) => !pair.derived && pair.tokenRatio !== null).length}/${pairs.length} pairs) ` +
+      (derivedPairs > 0
+        ? `median_token_ratio_derived=${medianTokens?.toFixed(3) ?? "na"} ` +
+          `(derived: ${derivedPairs}/${pairs.length} pairs had AOR not invoked [${basisText}] ` +
+          `-> AOR calls 0; B4g tokens ${b4gTokenRange ?? "?"}) `
+        : "") +
       `median_latency_ratio=${medianLatency?.toFixed(3) ?? "na"} ` +
       `available_pairs=${pairedCandidates.length} ${tier0} ${counterfactualNote}`,
     metrics: {
       pairs: pairs.length,
       rows_source: rowsSource,
-      median_token_ratio: medianTokens,
+      /** What was measured on both sides. `null` here is not a 0. */
+      median_token_ratio: rawMedianTokens,
+      /** The registered criterion, where a 0 is derived from `aor_invoked: false`. */
+      median_token_ratio_derived: derivedPairs > 0 ? medianTokens : null,
+      tokens_derived_pairs: derivedPairs,
+      undetermined_pairs: undetermined,
       median_latency_ratio: medianLatency,
       upstream_tier0: counterfactual?.pairs_tier0 ?? null,
       upstream_tier0_measured: counterfactual?.pairs_measured ?? null,
@@ -1030,10 +1123,18 @@ export function evaluateAcceptance(
       pairs.map((pair) => [
         pair.sample,
         pair.eventKind,
-        pair.tokenRatio?.toFixed(3) ?? "na",
+        `${pair.tokenRatio?.toFixed(3) ?? "na"}${pair.derived ? " *" : ""}`,
         pair.latencyRatio.toFixed(3),
       ]),
     ),
+    ...(derivedPairs === 0
+      ? []
+      : [
+          "",
+          `* derived: AOR was never asked on the B4 row (${basisText}), so its AOR cost is 0 by ` +
+            `construction rather than unmeasured; the B4g row measured ${b4gTokenRange ?? "?"} tokens. ` +
+            `The raw ratio for those pairs is \`na\`, and both numbers are printed above.`,
+        ]),
     ...(coverageRows.length > 0
       ? [
           "",

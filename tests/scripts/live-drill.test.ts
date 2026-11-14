@@ -270,6 +270,7 @@ const row = (over: Partial<ReviewRow> = {}): ReviewRow => ({
   threshold_source: null,
   text: null,
   tokens: null,
+  aor_invoked: false,
   latency_ms: 4,
   status: "ok",
   toolchain: { semgrep: "1.184.0", aor: "04deca6", crg: "python", node: "v22", platform: "win32" },
@@ -293,6 +294,9 @@ describe("acceptance row conversion", () => {
     expect(converted?.mode).toBe("live");
     expect(converted?.disposition.preDecision).toBe("allow");
     expect(converted?.change_event?.phase).toBe("post");
+    // Carried through, not re-derived: a consumer that rebuilt the flag from
+    // `tokens === null` would read a lost measurement as "AOR was never asked".
+    expect(converted?.aor_invoked).toBe(false);
   });
 
   it("drops command events and unplanned paths", () => {

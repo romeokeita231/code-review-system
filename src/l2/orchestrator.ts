@@ -244,6 +244,10 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
   let skipReason: ReviewSkipReason | null = null;
   let skipped = false;
   let mergedFindings: MergedFinding[] = [];
+  // The tier decides whether AOR is asked at all (`runnable` below). Recorded on
+  // the row so a 0-token row can be told apart from a lost measurement; a
+  // consumer must never reconstruct it from `tokens === null` (ADR-0008).
+  let aorInvoked = false;
 
   const base = (): Omit<Disposition, "mechanism" | "finalDisposition"> => ({
     findings: [],
@@ -288,6 +292,7 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
       gate: disposition.gate,
       text: disposition.text,
       tokens,
+      aor_invoked: aorInvoked,
       latency_ms: elapsed,
       status: aggregateStatus(results, skipped),
       toolchain,
@@ -407,6 +412,10 @@ export async function review(change: ChangeEvent, ctx: ReviewContext): Promise<R
 
   const postSources = change.phase === "post" ? ctx.sources.filter((source) => source.name !== "semgrep") : [];
   const runnable = postSources.filter((source) => !(source.name === "aor" && tier === 0));
+  // "Asked" means the source was in the phase's runnable set. A tier-0 row, a
+  // pre row and a skipped row all record `false`; a row whose call was cancelled
+  // by the budget records `true` with `tokens: null`, which is `na`, not 0.
+  aorInvoked = runnable.some((source) => source.name === "aor");
   const semanticLedger = new TurnBudgetLedger(ctx.config.sources.aor.outerCapMs, clock);
 
   const limit = pLimit(
