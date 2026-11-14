@@ -18,6 +18,7 @@ import { createCrgTriage } from "../src/l3/index.js";
 import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
 import { certifiedSubsets, evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
+import { runSecretGate } from "./secret-gate.js";
 import { arg } from "./shared.js";
 import type { StagedContext } from "./upstream-context.js";
 import {
@@ -1358,40 +1359,6 @@ function sameCommitText(a: string, b: string): boolean {
   return a.length > 0 && b.length > 0 && (a.startsWith(b) || b.startsWith(a));
 }
 
-async function trackedFiles(): Promise<string[]> {
-  const listed = await execa("git", ["ls-files", "-z"], { reject: true });
-  return `${listed.stdout ?? ""}`.split("\0").filter((file) => file.length > 0);
-}
-
-async function trackedFileCount(): Promise<number> {
-  return (await trackedFiles()).length;
-}
-
-/**
- * Files under version control whose bytes contain `needle`.
- *
- * `git grep` would put the secret on a command line, where every process on the
- * machine can read it; this reads the working tree instead. Binary files are
- * safe to search this way because the comparison is on raw bytes.
- */
-async function trackedFilesContaining(needle: string): Promise<string[]> {
-  if (needle.length < 8) {
-    throw new Error("the key is shorter than 8 characters, which is not a usable credential");
-  }
-  const hits: string[] = [];
-  for (const file of await trackedFiles()) {
-    let bytes: Buffer;
-    try {
-      bytes = await readFile(file);
-    } catch {
-      continue;
-    }
-    if (bytes.length > 8_000_000) continue;
-    if (bytes.includes(needle, 0, "utf8")) hits.push(file);
-  }
-  return hits;
-}
-
 export async function preflight(profile: string, options: PreflightOptions = {}): Promise<Preflight> {
   const checks: Preflight["checks"] = [];
   const evidence: RunEvidence = {
@@ -1641,27 +1608,20 @@ export async function preflight(profile: string, options: PreflightOptions = {})
             : `config crgQueryMs ${configBudgets.crgQueryMs} != frozen ${frozenBudgets.crg_query_ms}`,
     });
   }
-  // The repository is public. A key that lands in a tracked file is a leak no
-  // `.gitignore` can undo, so the check reads the key from the environment and
-  // greps the *tracked* tree for its value. Paths are printed; the value is not.
-  const secret = process.env["DEEPSEEK_API_KEY"] ?? "";
-  if (secret.length > 0) {
-    try {
-      const leaks = await trackedFilesContaining(secret);
-      checks.push({
-        name: "secret not tracked",
-        ok: leaks.length === 0,
-        detail:
-          leaks.length === 0
-            ? `DEEPSEEK_API_KEY not found in ${await trackedFileCount()} tracked files`
-            : `DEEPSEEK_API_KEY appears in ${leaks.length} tracked file(s): ${leaks.slice(0, 5).join(", ")}`,
-      });
-    } catch (error) {
-      checks.push({
-        name: "secret not tracked",
-        ok: false,
-        detail: `could not scan tracked files: ${(error as Error).message.slice(-300)}`,
-      });
+  // The repository is public, and three of its zones are exempt from GitHub's
+  // secret scanning (`.github/secret_scanning.yml`): the ones that hold external
+  // bytes. The gate is two layers and `scripts/secret-gate.ts` holds the
+  // argument - outside the zones any provider shape fails, inside them the same
+  // shape is recorded and has to be traceable to a source repository and commit.
+  // The literal-value check rides on top of both: it matches the key itself, so
+  // it is the one check that does not depend on the key looking the way any
+  // provider list predicts.
+  try {
+    checks.push(...(await runSecretGate()));
+  } catch (error) {
+    const detail = `could not scan tracked files: ${(error as Error).message.slice(-300)}`;
+    for (const name of ["secret outside exempt zones", "secret in exempt zones"] as const) {
+      checks.push({ name, ok: false, detail });
     }
   }
   const profileCheck = await execa(process.execPath, [dshBinPath(), "plugin", "--profile", profile, "list"], {
@@ -2302,11 +2262,12 @@ export async function evaluate(
  * bundle older than `src/` measures the previous version of the system and its
  * rows are in a shape the evaluator refuses - discovered after the eval is spent.
  *
- * `aor model`, `frozen pin` and `secret not tracked` joined it later. The first
- * two are the same class as `ocr pin` (identity, one level deeper and one level
- * earlier); the third keeps a short-lived credential out of a public tree, which
- * is not a judgement call to waive. A gate that protects the measurement must
- * not have a side door - the failure it prevents is invisible in the artefact.
+ * `aor model`, `frozen pin` and the secret gate joined it later. The first two
+ * are the same class as `ocr pin` (identity, one level deeper and one level
+ * earlier); the gate keeps credentials out of a public tree and now also keeps
+ * the three exempt zones traceable, neither of which is a judgement call to
+ * waive. A gate that protects the measurement must not have a side door - the
+ * failure it prevents is invisible in the artefact.
  *
  * `ocr updater` is the same argument taken one step further: `ocr pin` observes
  * whether the binary moved, this one removes the thing that moves it. A check
@@ -2323,6 +2284,8 @@ export const NON_DEGRADABLE_GATES = [
   "frozen pin",
   "crg budget",
   "secret not tracked",
+  "secret outside exempt zones",
+  "secret in exempt zones",
 ] as const;
 
 export function parseDegradedGates(argv: readonly string[], known: readonly string[]): string[] {

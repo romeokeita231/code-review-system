@@ -61,6 +61,21 @@ run 目录 `runs/live/eval-ds-2.0.0-20261114T132232` 不在版本库内。报告
 1. 本 run 的行**没有** `aor_invoked` 字段（该字段本提交才落地）。line4 的 0 由 `tier: 0` + `tier_source: "triage"` 推导：`src/l2/orchestrator.ts` 在 tier 0 时把 AOR 移出 runnable 集合，没有任何代码路径能在 tier 0 发起 AOR 调用。报告把它与 raw `na` 并列打印，并逐对记录 `basis`。
 2. 设计方裁定原文（`2/5`）保留在 `original-2of5/`，引用规则：原始数字可原样引用，但每句须自带总体与分母，且不得作为质量结论。
 
+## 免检区的密钥形状串：来源登记
+
+`datasets/`、`research/`、`artifacts/acceptance/` 已按 `.github/secret_scanning.yml` 免检。免检的对价是来源登记：凡含密钥形状串的文件，本表必须给出**来源仓库 + commit**；`scripts/secret-gate.ts` 的第二层闸门按本表判定，缺行即失败。
+`commit` 一列的约定：普通 16 进制是上游提交；`self@` 前缀表示「字节写在本仓，这是引入它的提交」。
+
+| 文件 | provider | 来源仓库 | commit | 说明 |
+| --- | --- | --- | --- | --- |
+| datasets/aacr/samples/aacr-ts-0003.json | AIza | cline/cline | 190d3bd2dc7279aa577c745b005ff778d49a7653 | 经 alibaba/aacr-bench `dataset/v1` 分发（`import-report.json` 记 PR #4786、`src/services/auth/AuthService.ts:33`）；`after` 字段与上游该 commit 的文件逐字节相同（11379 B），3 个 key 的集合摘要 `be40e418fa1d754e` |
+| datasets/self-built/samples/ts-cwe798-0001.json | PRIVATE KEY | romeokeita231/code-review-system | self@8a62a25b878aca79944a51842c372beb789c2040 | 自建 CWE-798 夹具；PEM 私钥头后面接的是生成的测试材料，不对应任何真实密钥 |
+| research/dataset-candidates/inventory.json | PRIVATE KEY | juice-shop/juice-shop | 266448a | `sink` 字段的摘引（以 `...` 截断），checkout pin 见 `inventory.md`（2026-11-08） |
+| research/semgrep-bench/_raw_core_py.json | AKIA | romeokeita231/code-review-system | self@01787a316a6dfbe0c95b62ba7ea2094b337a06c9 | 原始 semgrep `--json` 输出；`AKIA…EXAMPLE` 是 AWS 文档里的示例键（公开示例，非真实凭据），出现在临时夹具 `fixtures/_run_931071/target.py` 的匹配片段里，该夹具未入库 |
+| artifacts/acceptance/rows.jsonl | PRIVATE KEY | romeokeita231/code-review-system | self@30711d88c59e51616f614f0cc1e63299dab2f32b | 采集行归档副本（哈希见上文）；`evidence` 字段原样复制 ts-cwe798-0001 的正文，即同一条外部字节的第二份拷贝 |
+
+本表共 5 行，对应 `git ls-files` 里全部 5 组（文件 × provider）命中；组数由闸门自己数，不由本表声明。
+
 ## 生成方式
 
 `node .tmp/provenance.mjs`（一次性脚本，读取 `run.json`/`rows.jsonl` 与本目录文件后写出本文件；哈希为文件当时内容）。

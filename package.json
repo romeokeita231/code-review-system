@@ -46,6 +46,7 @@
     "drill": "tsx scripts/live-drill.ts",
     "drill:context": "tsx scripts/upstream-context.ts --dataset datasets/self-built --config configs/b4.json --out artifacts/staged-context.json",
     "wiring:check": "tsx scripts/wiring-check.ts",
+    "check:secrets": "tsx scripts/secret-gate.ts",
     "dataset:check": "tsx scripts/build-ds2.ts --check",
     "record:fit": "tsx scripts/record-dataset.ts --split fit --matrix"
   },
