@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 dist/
 coverage/
 runs/
@@ -11,4 +11,3 @@ __pycache__/
 *.pyc
 .pytest_cache/
 uv.lock.tmp
-artifacts/acceptance/
