@@ -57,7 +57,9 @@ only appear once that class passes 30.
 
 ## self-built (`ds-2`)
 
-The set is generated, never hand-edited: `scripts/build-ds2.ts` reads
+The directory name means a self-built **selection**, not self-written code: all
+35 `after` fields are upstream copies (see `datasets/self-built/README.md` for
+the per-sample `origin` histogram). The set is generated, never hand-edited: `scripts/build-ds2.ts` reads
 `source/rows.json` (mechanical row description + line hunks) and
 `source/provenance.json` (pinned commits, star snapshot, supply records), then derives
 `before`/`after`, `changed_lines`, `risk_level`, `defect_id`, `defect_origin`,
