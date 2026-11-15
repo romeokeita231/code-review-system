@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkAnchor,
   evaluateSecretGate,
   EXEMPT_ZONES,
   isExempt,
   parseProvenance,
   scanFiles,
   scanText,
+  type FileFacts,
   type Hit,
 } from "../../scripts/secret-gate.js";
 
@@ -25,16 +27,55 @@ const SAMPLES = {
   "PRIVATE KEY": join("-----BE", "GIN ", "RSA PRIVATE KEY-----"),
 } as const;
 
-const HEADER = "| file | provider | repo | commit | note |";
-const SEPARATOR = "| --- | --- | --- | --- | --- |";
+const SHA = "0".repeat(64);
+const OTHER_SHA = "1".repeat(64);
+const SAMPLE_HIT_PATH = "datasets/aacr/samples/x.json";
+const FACTS: ReadonlyMap<string, FileFacts> = new Map([[SAMPLE_HIT_PATH, { sha256: SHA, bytes: 26_261 }]]);
 
-const registryRow = (file: string, provider: string, repo = "cline/cline", commit = "190d3bd") =>
-  `| ${file} | ${provider} | ${repo} | ${commit} | why the bytes are there |`;
+const HEADER = "| file | provider | repo | introduced-by | byte-origin | anchor | note |";
+const SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- |";
+
+const registryRow = (
+  file: string,
+  provider: string,
+  overrides: {
+    repo?: string;
+    introducedBy?: string;
+    byteOrigin?: string;
+    anchor?: string;
+    note?: string;
+  } = {},
+): string =>
+  [
+    "",
+    file,
+    provider,
+    overrides.repo ?? "cline/cline",
+    overrides.introducedBy ?? "self@190d3bd",
+    overrides.byteOrigin ?? "upstream:cline/cline@190d3bd:src/services/auth/AuthService.ts",
+    overrides.anchor ?? `sha256:${SHA}`,
+    overrides.note ?? "why the bytes are there",
+    "",
+  ].join(" | ");
+
+const hit = (path: string, provider: keyof typeof SAMPLES, count = 1, distinct = 1): Hit => ({
+  path,
+  provider,
+  count,
+  distinct,
+});
+
+const gateOk = (checks: ReturnType<typeof evaluateSecretGate>, name: string): boolean =>
+  checks.find((check) => check.name === name)?.ok ?? false;
+
+const detailOf = (checks: ReturnType<typeof evaluateSecretGate>, name: string): string =>
+  checks.find((check) => check.name === name)?.detail ?? "";
 
 describe("scanText", () => {
   it("counts every provider shape, not just the one the first scan looked for", () => {
     const text = Object.values(SAMPLES).join("\n");
-    expect(Object.fromEntries(scanText(text))).toEqual({
+    const counted = Object.fromEntries([...scanText(text)].map(([provider, found]) => [provider, found.count]));
+    expect(counted).toEqual({
       sk: 1,
       AIza: 1,
       ghp: 1,
@@ -45,15 +86,18 @@ describe("scanText", () => {
     });
   });
 
-  it("counts occurrences, so three keys on one line are three", () => {
+  it("separates occurrences from distinct values, because they are different denominators", () => {
     const text = `${SAMPLES.AIza} ${SAMPLES.AIza} ${SAMPLES.AIza}`;
-    expect(scanText(text).get("AIza")).toBe(3);
+    expect(scanText(text).get("AIza")).toEqual({ count: 3, distinct: 1 });
+
+    const twoValues = `${SAMPLES.AIza} ${join("AI", "za", "Z".repeat(35))}`;
+    expect(scanText(twoValues).get("AIza")).toEqual({ count: 2, distinct: 2 });
   });
 
   it("does not carry a match from one file into the next", () => {
-    expect(scanText(SAMPLES.AKIA).get("AKIA")).toBe(1);
+    expect(scanText(SAMPLES.AKIA).get("AKIA")?.count).toBe(1);
     expect(scanText("nothing here").size).toBe(0);
-    expect(scanText(SAMPLES.AKIA).get("AKIA")).toBe(1);
+    expect(scanText(SAMPLES.AKIA).get("AKIA")?.count).toBe(1);
   });
 });
 
@@ -70,7 +114,7 @@ describe("isExempt", () => {
 });
 
 describe("parseProvenance", () => {
-  it("reads the five-cell rows and ignores the hash tables", () => {
+  it("reads the seven-cell rows and ignores the hash tables", () => {
     const markdown = [
       "# heading",
       "| file | SHA256 | bytes |",
@@ -78,32 +122,53 @@ describe("parseProvenance", () => {
       "| report.md | abc | 12 |",
       HEADER,
       SEPARATOR,
-      registryRow("datasets/aacr/samples/x.json", "AIza"),
-      registryRow("artifacts/acceptance/rows.jsonl", "PRIVATE KEY", "romeokeita231/code-review-system", "self@30711d8"),
+      registryRow(SAMPLE_HIT_PATH, "AIza"),
+      registryRow("artifacts/acceptance/rows.jsonl", "PRIVATE KEY", {
+        repo: "romeokeita231/code-review-system",
+        introducedBy: "self@30711d8",
+        byteOrigin: "derived:runs/live/x/rows.jsonl",
+        anchor: `sha256:${OTHER_SHA}`,
+      }),
     ].join("\n");
     const { entries, problems } = parseProvenance(markdown);
     expect(problems).toEqual([]);
     expect(entries).toHaveLength(2);
-    expect(entries[0]).toMatchObject({ path: "datasets/aacr/samples/x.json", providers: ["AIza"], commit: "190d3bd" });
-    expect(entries[1]!.commit).toBe("self@30711d8");
+    expect(entries[0]).toMatchObject({
+      path: SAMPLE_HIT_PATH,
+      providers: ["AIza"],
+      repo: "cline/cline",
+      introducedBy: "self@190d3bd",
+      byteOrigin: "upstream:cline/cline@190d3bd:src/services/auth/AuthService.ts",
+      anchor: `sha256:${SHA}`,
+    });
+    expect(entries[1]!.byteOrigin).toBe("derived:runs/live/x/rows.jsonl");
   });
 
   it("treats a broken row as a problem instead of silently dropping it", () => {
     const markdown = [
       HEADER,
       SEPARATOR,
-      registryRow("research/x.json", "AKIA", "cline/cline", "not-a-commit"),
-      registryRow("research/y.json", "nonsense", "cline/cline", "190d3bd"),
-      registryRow("research/z.json", "AKIA", "not a repo", "190d3bd"),
-      registryRow("research/w.json", "AKIA", "cline/cline", "190d3bd").replace("why the bytes are there", ""),
+      registryRow("research/a.json", "AKIA", { introducedBy: "190d3bd" }),
+      registryRow("research/b.json", "nonsense"),
+      registryRow("research/c.json", "AKIA", { repo: "not a repo" }),
+      registryRow("research/d.json", "AKIA", { byteOrigin: "somewhere" }),
+      registryRow("research/e.json", "AKIA", { byteOrigin: "upstream:cline/cline" }),
+      registryRow("research/f.json", "AKIA", { anchor: "sha256:abc" }),
+      registryRow("research/g.json", "AKIA", { note: "" }),
+      registryRow("research/h.json", "AKIA", { anchor: "trust me" }),
     ].join("\n");
     const { entries, problems } = parseProvenance(markdown);
     expect(entries).toHaveLength(0);
-    expect(problems).toHaveLength(4);
-    expect(problems.join(" ")).toContain("no commit");
-    expect(problems.join(" ")).toContain("no known provider");
-    expect(problems.join(" ")).toContain("no source repository");
-    expect(problems.join(" ")).toContain("no note");
+    expect(problems).toHaveLength(8);
+    const joined = problems.join(" ");
+    expect(joined).toContain("does not say which commit introduced it");
+    expect(joined).toContain("no known provider");
+    expect(joined).toContain("no source repository");
+    expect(joined).toContain("does not say where its bytes came from");
+    expect(joined).toContain("says upstream but not repo@commit:path");
+    expect(joined).toContain("no recomputable anchor");
+    expect(joined).toContain("no note");
+    expect(joined).toContain("has no recomputable anchor");
   });
 
   it("rejects a path that is absolute or climbs out of the repository", () => {
@@ -119,10 +184,39 @@ describe("parseProvenance", () => {
   });
 });
 
-const hit = (path: string, provider: keyof typeof SAMPLES, count = 1): Hit => ({ path, provider, count });
+describe("checkAnchor", () => {
+  const entry = (anchor: string) => ({
+    path: SAMPLE_HIT_PATH,
+    providers: ["AIza"],
+    repo: "cline/cline",
+    introducedBy: "self@190d3bd",
+    byteOrigin: "upstream:cline/cline@190d3bd:x.ts",
+    anchor,
+    note: "n",
+  });
 
-const gateOk = (checks: ReturnType<typeof evaluateSecretGate>, name: string): boolean =>
-  checks.find((check) => check.name === name)?.ok ?? false;
+  it("recomputes a sha256 anchor and reports a mismatch as a failure", () => {
+    expect(checkAnchor(entry(`sha256:${SHA}`), { sha256: SHA, bytes: 1 })).toMatchObject({ ok: true, verified: true });
+    const mismatch = checkAnchor(entry(`sha256:${OTHER_SHA}`), { sha256: SHA, bytes: 1 });
+    expect(mismatch.ok).toBe(false);
+    expect(mismatch.detail).toContain("table says");
+  });
+
+  it("recomputes a size anchor", () => {
+    expect(checkAnchor(entry("bytes:26261"), { sha256: SHA, bytes: 26_261 })).toMatchObject({ ok: true, verified: true });
+    expect(checkAnchor(entry("bytes:1"), { sha256: SHA, bytes: 26_261 }).ok).toBe(false);
+  });
+
+  it("refuses to call an upstream claim verified, and fails when there are no facts", () => {
+    expect(checkAnchor(entry("upstream:cline/cline@190d3bd:x.ts"), undefined)).toMatchObject({
+      ok: true,
+      verified: false,
+    });
+    const noFacts = checkAnchor(entry(`sha256:${SHA}`), undefined);
+    expect(noFacts.ok).toBe(false);
+    expect(noFacts.detail).toContain("cannot be recomputed");
+  });
+});
 
 describe("evaluateSecretGate", () => {
   it("fails layer 1 on a provider shape outside the exempt zones", () => {
@@ -132,59 +226,86 @@ describe("evaluateSecretGate", () => {
       trackedCount: 10,
     });
     expect(gateOk(checks, "secret outside exempt zones")).toBe(false);
-    expect(checks.find((check) => check.name === "secret outside exempt zones")?.detail).toContain(
-      "src/l2/orchestrator.ts",
-    );
+    expect(detailOf(checks, "secret outside exempt zones")).toContain("src/l2/orchestrator.ts");
     // Nothing was found inside the zones, so layer 2 has nothing to answer for.
     expect(gateOk(checks, "secret in exempt zones")).toBe(true);
   });
 
-  it("passes layer 2 when the exempt-zone hit is registered, and prints the hit anyway", () => {
-    const file = "datasets/aacr/samples/aacr-ts-0003.json";
-    const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(file, "AIza")].join("\n"));
+  it("passes layer 2 when the hit is registered with a recomputable anchor, and prints both units", () => {
+    const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(SAMPLE_HIT_PATH, "AIza")].join("\n"));
     const checks = evaluateSecretGate({
-      hits: [hit(file, "AIza", 3)],
+      hits: [hit(SAMPLE_HIT_PATH, "AIza", 8, 3)],
       entries,
       trackedCount: 10,
+      fileFacts: FACTS,
     });
     expect(gateOk(checks, "secret outside exempt zones")).toBe(true);
     expect(gateOk(checks, "secret in exempt zones")).toBe(true);
-    const detail = checks.find((check) => check.name === "secret in exempt zones")?.detail ?? "";
-    expect(detail).toContain(`AIza ${file} ×3`);
+    const detail = detailOf(checks, "secret in exempt zones");
+    expect(detail).toContain(`AIza ${SAMPLE_HIT_PATH} ×8 occurrences / 3 distinct`);
+    expect(detail).toContain("1/1 anchor(s) recomputed here");
   });
 
-  it("fails layer 2 when the exempt-zone hit is not in the registry", () => {
+  it("fails layer 2 when the hit is not in the registry", () => {
     const file = "research/semgrep-bench/_raw_core_py.json";
-    const checks = evaluateSecretGate({
-      hits: [hit(file, "AKIA")],
-      entries: [],
-      trackedCount: 10,
-    });
+    const checks = evaluateSecretGate({ hits: [hit(file, "AKIA")], entries: [], trackedCount: 10 });
     expect(gateOk(checks, "secret in exempt zones")).toBe(false);
-    const detail = checks.find((check) => check.name === "secret in exempt zones")?.detail ?? "";
+    const detail = detailOf(checks, "secret in exempt zones");
     expect(detail).toContain("unregistered");
     expect(detail).toContain(file);
     expect(detail).toContain("artifacts/acceptance/PROVENANCE.md");
   });
 
+  it("fails layer 2 when the registered anchor does not recompute", () => {
+    const { entries } = parseProvenance([
+      HEADER,
+      SEPARATOR,
+      registryRow(SAMPLE_HIT_PATH, "AIza", { anchor: `sha256:${OTHER_SHA}` }),
+    ].join("\n"));
+    const checks = evaluateSecretGate({
+      hits: [hit(SAMPLE_HIT_PATH, "AIza")],
+      entries,
+      trackedCount: 10,
+      fileFacts: FACTS,
+    });
+    expect(gateOk(checks, "secret in exempt zones")).toBe(false);
+    expect(detailOf(checks, "secret in exempt zones")).toContain("anchors that do not recompute");
+  });
+
+  it("fails layer 2 when the file whose anchor must be checked was not read", () => {
+    const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(SAMPLE_HIT_PATH, "AIza")].join("\n"));
+    const checks = evaluateSecretGate({
+      hits: [hit(SAMPLE_HIT_PATH, "AIza")],
+      entries,
+      trackedCount: 10,
+      fileFacts: new Map(),
+    });
+    expect(gateOk(checks, "secret in exempt zones")).toBe(false);
+  });
+
   it("fails layer 2 when a row is registered for a different provider", () => {
     const file = "datasets/self-built/samples/ts-cwe798-0001.json";
     const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(file, "AIza")].join("\n"));
-    const checks = evaluateSecretGate({ hits: [hit(file, "PRIVATE KEY")], entries, trackedCount: 10 });
+    const checks = evaluateSecretGate({
+      hits: [hit(file, "PRIVATE KEY")],
+      entries,
+      trackedCount: 10,
+      fileFacts: FACTS,
+    });
     expect(gateOk(checks, "secret in exempt zones")).toBe(false);
   });
 
   it("fails layer 2 on a registry problem even when every hit has a row", () => {
-    const file = "research/x.json";
-    const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(file, "AKIA")].join("\n"));
+    const { entries } = parseProvenance([HEADER, SEPARATOR, registryRow(SAMPLE_HIT_PATH, "AIza")].join("\n"));
     const checks = evaluateSecretGate({
-      hits: [hit(file, "AKIA")],
+      hits: [hit(SAMPLE_HIT_PATH, "AIza")],
       entries,
       problems: ["line 9: research/x.json has no commit"],
       trackedCount: 10,
+      fileFacts: FACTS,
     });
     expect(gateOk(checks, "secret in exempt zones")).toBe(false);
-    expect(checks.find((check) => check.name === "secret in exempt zones")?.detail).toContain("registry problems");
+    expect(detailOf(checks, "secret in exempt zones")).toContain("registry problems");
   });
 
   it("keeps the literal-value check, and omits it when the key is not in the environment", () => {
