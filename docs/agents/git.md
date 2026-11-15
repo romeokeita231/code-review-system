@@ -43,6 +43,30 @@ The ways this breaks silently, in order of likelihood: a rebuilt remote drops th
 
 `git push origin <branch>` authenticates from the Windows credential store; there is no `gh-proxy.com` entry there, so there was nothing to rotate. A push can still fail with `Connection was reset`: retry, the connection is what is intermittent, not the credentials.
 
+### When the port form cannot authenticate (observed 2026-11-16)
+
+The `:443` spelling keeps the rewrite away but it also changes the credential-store lookup, and on this machine that lookup came back empty:
+
+```
+fatal: unable to access 'https://github.com:443/...': schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS
+fatal: could not read Username for 'https://github.com:443': No such file or directory
+```
+
+`git credential fill` returns an entry for `host=github.com` and none for `host=github.com:443`, which is the whole failure. The port is not a credential problem and not a connectivity problem (`Test-NetConnection github.com -Port 443` was true throughout).
+
+Working recipe, used once and repeatable - it never edits the user's `~/.gitconfig`, it points git at a copy with only the mirror rule removed:
+
+```powershell
+$cfg = "$PWD/.tmp/gitconfig-direct"
+(Get-Content $HOME/.gitconfig) | Where-Object { $_ -notmatch 'insteadOf|gh-proxy' } | Set-Content $cfg
+$env:GIT_CONFIG_GLOBAL = (Resolve-Path $cfg).Path
+git push https://github.com/romeokeita231/code-review-system.git feat/v1-spec
+```
+
+With the rewrite gone, the plain `github.com` URL is dialled as written, and the credential helper finds the `github.com` entry. Verify the result with `git ls-remote` under the same `GIT_CONFIG_GLOBAL`, not with `git log` on the local branch: a local commit says nothing about the remote.
+
+The `:443` pushurl stays as the default attempt because it is still the only spelling that survives the rewrite; when it fails with the two messages above, switch to the recipe rather than rotating a token that is present and valid.
+
 ## The three exempt zones
 
 `datasets/`, `research/` and `artifacts/acceptance/` are exempt from secret scanning (`.github/secret_scanning.yml`) because they hold external bytes verbatim - rewriting them would change `content_sha256` and break every archived run that cites the hash.
