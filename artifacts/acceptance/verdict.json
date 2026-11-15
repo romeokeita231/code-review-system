@@ -1,9 +1,8 @@
 [
   {
     "name": "line1: block precision/recall on the covered, scannable eval positives",
-    "state": "na",
+    "state": "fail",
     "pass": false,
-    "na_reason": "no certified TS rule (blockRules is empty for this language in the pinned config)",
     "metrics": {
       "n": 10,
       "k": 0,
@@ -11,10 +10,10 @@
       "recall": 0,
       "wilson_low": 0,
       "wilson_high": 0.2775401687666165,
-      "recall_status": "na",
+      "recall_status": "unblockable",
       "certified": 0,
       "uncertified": 10,
-      "block_face": "na",
+      "block_face": "empty",
       "available": 11,
       "staged": 10,
       "not_staged": 1,

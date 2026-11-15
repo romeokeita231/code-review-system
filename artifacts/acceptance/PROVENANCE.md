@@ -44,9 +44,9 @@ run 目录 `runs/live/eval-ds-2.0.0-20261114T132232` 不在版本库内。报告
 
 | 文件 | SHA256 | 字节 |
 | --- | --- | --- |
-| report.md | `b907ec8d4af4dc3878102928eee538a6ed313f807651b107fc786d6c417fa14d` | 3742 |
-| verdict.md | `447e0cb7127a9f1901269e1c92c5691ee500722002b91b3b1d214b3da2323ce9` | 2018 |
-| verdict.json | `36db1a333784b62e99dcd54adc82e6f79da58c8ef3290242d52ce468e587afb3` | 2179 |
+| report.md | `8b1b7e404bf806604bb585cb2719b31565ad4b49cae8ed44c09ce8491d060de9` | 3823 |
+| verdict.md | `ec9ccf9963937c161b8ca5956ce86db663d42daf23fc10dea920bba1df01aefe` | 1818 |
+| verdict.json | `fde7387b07cfcbbd23d109623c60e2f912492c0838fbfa3beb5258df5dcfba95` | 2091 |
 
 原始 `2/5` 表示的三份原件，逐字节副本（复制前后 SHA256 相同）：
 
@@ -68,18 +68,33 @@ run 目录 `runs/live/eval-ds-2.0.0-20261114T132232` 不在版本库内。报告
 列约定：
 
 - **引入提交**：`self@<sha>`，本仓引入该文件的提交。它回答"谁放进来的"，**不回答**"字节来自何处"。
-- **字节来源**：`upstream:<repo>@<sha>:<path>`（上游逐字节或截断摘引）、`url:<url>`（文档/发布页里的原样值）、`synthetic:<生成方式>`（本仓生成的材料）、`derived:<本仓路径或步骤>`（由本仓内容派生）。`upstream:` 必须带 `repo@commit:path`，否则判失败。
+- **字节来源**：`upstream:<repo>@<sha>:<path>`（上游逐字节或截断摘引）、`url:<url>`（文档/发布页里的原样值）、`synthetic:<生成方式>`（本仓生成的材料）、`derived:<本仓已登记行的路径>`（密钥字节来自本表另一行，如归档副本）。`upstream:` 必须带 `repo@commit:path`，否则判失败；`derived:` 的目标必须是本表已登记的行，闸门沿链解析（深度上限 4 跳、成环失败、目标未登记失败），链的终点须是 `upstream:`/`url:`/`synthetic:` 之一。
 - **可复算锚**：`sha256:<64 hex>`（闸门当场重算文件哈希后比对）、`bytes:<n>`（重算大小）、`upstream:<repo>@<sha>[:<path>]`（本机无法离线复核，闸门会明说"未复核"）。**无锚的登记行视为失败**——本表位于免检区内、又是闸门 2 的判据来源，没有可复算锚就是自证。
 
 | 文件 | provider | 来源仓库 | 引入提交 | 字节来源 | 可复算锚 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
 | datasets/aacr/samples/aacr-ts-0003.json | AIza | cline/cline | self@dc354d0761a0f11b56905480a8fa591aee2d78cc | upstream:cline/cline@190d3bd2dc7279aa577c745b005ff778d49a7653:src/services/auth/AuthService.ts | sha256:cf4994d069871f7a20c95297c475ab00bc04b8ca4f9f46b4efa40638624baaf3 | 经 alibaba/aacr-bench `dataset/v1` 分发（`import-report.json` 记 PR #4786、`src/services/auth/AuthService.ts:33`）；`after` 字段与上游该 commit 逐字节相同（11,379 B），3 个键的集合摘要 `be40e418fa1d754e`；本样本文件 26,261 B |
-| datasets/self-built/samples/ts-cwe798-0001.json | PRIVATE KEY | juice-shop/juice-shop | self@8a62a25b878aca79944a51842c372beb789c2040 | upstream:juice-shop/juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:lib/insecurity.ts | sha256:deb89c2d64c8aaad520e6d76c290430f315118c0e677b02f7a9ab858c801adda | 整文件逐字节相同（7,906 B，blob `b6039a86c17b02cdf026a6d3353765be9beb801c`），PEM 段 881 B 摘要 `7a6e3a61ba22dde4`；样本自带 `origin.kind=public_repo`、`origin.ref` 即上列 ref。**不是自建夹具**：上一版此格写"synthetic"，未核对就下了结论 |
+| datasets/self-built/samples/ts-cwe798-0001.json | PRIVATE KEY | juice-shop/juice-shop | self@8a62a25b878aca79944a51842c372beb789c2040 | upstream:juice-shop/juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:lib/insecurity.ts | sha256:deb89c2d64c8aaad520e6d76c290430f315118c0e677b02f7a9ab858c801adda | `after` 字段与上游整文件逐字节相同（7,906 B，blob `b6039a86c17b02cdf026a6d3353765be9beb801c`）；PEM 段（`BEGIN`→`END`，同一行内转义写法）880 B，段摘要 `252770604bb12a29`。样本自带 `origin.kind=public_repo`、`origin.ref` 即上列 ref。**不是自建夹具**：上一版此格写"synthetic"，未核对就下了结论 |
 | research/dataset-candidates/inventory.json | PRIVATE KEY | juice-shop/juice-shop | self@9ebdc46ffc929ccd2332e7e02758021ab9e21836 | upstream:juice-shop/juice-shop@266448aba68cd8ba5915f526a128da4fa7bc3f9f:lib/insecurity.ts | sha256:4416c6517bd3793775aa54d10018f25fd73753d21005510f5bc1c66f1cdb4af8 | `sink` 为 59 字符的截断摘引：上游 `lib/insecurity.ts:21` 的 `const privateKey = '` + PEM 头，之后即以 `...` 截断；checkout pin 见 `inventory.md`（2026-11-08） |
 | research/semgrep-bench/_raw_core_py.json | AKIA | romeokeita231/code-review-system | self@01787a316a6dfbe0c95b62ba7ea2094b337a06c9 | url:https://docs.aws.amazon.com/ja_jp/sdkref/latest/guide/aws-sdk-ref.pdf | sha256:49fe37043d9bdac4d2bf48785e7d677cfd0ba372a025a2d39aa3b90ea2f18df6 | 本文件是 `semgrep 1.184.0 --json` 的原样输出（15,425 B），匹配片段来自临时夹具 `fixtures/_run_931071/target.py`（未入库）；`AKIA…EXAMPLE` 是 AWS 文档里的示例值，非真实凭据 |
-| artifacts/acceptance/rows.jsonl | PRIVATE KEY | romeokeita231/code-review-system | self@30711d88c59e51616f614f0cc1e63299dab2f32b | derived:runs/live/eval-ds-2.0.0-20261114T132232/rows.jsonl 的逐字节副本；其 `evidence` 字段原样复制 datasets/self-built/samples/ts-cwe798-0001.json 的正文 | sha256:4e55f3c47d464a12a421de325c22e4d0d3800b140d70742a6cf1a505d21cce80 | 归档副本，哈希与 run 目录原件相同（见上文哈希表）；同一条上游字节的第二份拷贝 |
+| artifacts/acceptance/rows.jsonl | PRIVATE KEY | romeokeita231/code-review-system | self@30711d88c59e51616f614f0cc1e63299dab2f32b | derived:datasets/self-built/samples/ts-cwe798-0001.json | sha256:4e55f3c47d464a12a421de325c22e4d0d3800b140d70742a6cf1a505d21cce80 | run 目录 `rows.jsonl` 的逐字节副本，sha256 同上（见上文哈希表，`4e55f3c4…`）；其 `evidence` 字段是目标行第 21 行的前 **200 字符**（起 `const privateKey = '-----BEGIN…`，到 `…exou/F`），不是完整 PEM 段：目标整段 880 B，本文件只带其前 200 字符 |
 
 本表共 5 行，对应 `git ls-files` 里全部 5 组（文件 × provider）命中；组数由闸门自己数，不由本表声明。表内文字自身不得写出完整的 provider 形状串——`AKIA…EXAMPLE` 这种省略写法是必须的，否则本表会被闸门 2 判为"未登记的命中"，自己需要登记自己。
+
+两条边界，读表前先读：
+
+- 锚证明的是「该文件自本表写下这一行以来未变」：`sha256:` 由闸门当场对磁盘字节重算，改字节或改表都会失败。它不追溯历史，也不校验 `upstream:` 指称的仓库确有那个 commit。
+- **来源列是主张**，不是机器验证的结果：每行由人工核验过一次（方法与日期见下表），闸门只做格式检查、对 `upstream:` 明说"未复核"、对 `derived:` 做链解析。因此 `5/5 anchor(s) recomputed here` 只读作「5 个文件的字节与表中哈希一致」，不读作「5 条来源均经机器验证」。
+
+### 核验记录（人工，一次）
+
+| 行 | 日期 | 方法 | 结果 |
+| --- | --- | --- | --- |
+| aacr-ts-0003 | 2026-11-15 | 取 `cline/cline@190d3bd` 的 `src/services/auth/AuthService.ts` 原始字节，与样本 `after` 比较；另比对 3 个键的集合摘要 | 相同（11,379 B），摘要 `be40e418fa1d754e` 两侧一致 |
+| ts-cwe798-0001 | 2026-11-15 | 取 `juice-shop@266448a` 的 `lib/insecurity.ts`，与样本 `after` 比较并重算 git blob id | 相同（7,906 B），blob id `b6039a86…` 一致 |
+| inventory.json | 2026-11-15 | 读 `sink` 值，与上游同一文件第 21 行比较 | 前 59 字符的截断摘引（`...` 收尾），非整段 |
+| _raw_core_py.json | 2026-11-15 | 抓取 `url:` 所指文档页，确认页面含该示例串；本文件字节是 semgrep 输出，与页面无字节关系 | 页面含 `AKIA…EXAMPLE`（示例值，非凭据） |
+| rows.jsonl | 2026-11-15 | 本地比较：`evidence` 是否为目标行前缀；文件级 sha256 与 run 原件比较 | 是前 200 字符；文件级哈希与原件相同 |
 
 ## 生成方式
 

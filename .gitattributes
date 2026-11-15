@@ -3,3 +3,10 @@
 # pins its upstream blob. CRLF conversion on checkout would break both, so the
 # dataset keeps the exact bytes git stores.
 datasets/self-built/** -text
+
+# The provenance registry's anchors are sha256 of the file on disk, so the bytes
+# under `artifacts/acceptance/` are part of the contract too: on a machine with
+# `core.autocrlf=true`, a fresh checkout would turn them CRLF and every
+# `sha256:` row would stop recomputing. The gate would go red rather than pass
+# silently, but a registry that only verifies on one machine is not a registry.
+artifacts/acceptance/** -text
