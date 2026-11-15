@@ -21,7 +21,9 @@ Direct-connection measurements, both labelled with their route because the route
 | 2026-11-15 00:30-00:45 | `github.com:443`, no global config | 1 of 3 `git ls-remote` connected (1.3 s); the other two timed out after 21 s. The archive-branch push loop in the same window needed 19 probe rounds before one connection landed |
 | 2026-11-15 15:34-15:40 | `github.com:443`, no global config | 6 of 6 connected, 0.9-1.1 s each, 8 branch refs returned |
 
-So the honest summary is jitter, not "unavailable": at 15:34 direct was fine six times in a row, at 00:30 it failed twenty times in a row. The mirror stays on the fetch path and the push stays direct, because a push that needs 19 retries at the wrong hour is not a route to depend on, and neither measurement on its own settles availability.
+So there are two observations of the same route two hours apart, pointing opposite ways: at 15:34 direct was fine six times in a row, at 00:30 it failed twenty times in a row. That is jitter observed - it is not an availability figure, and neither window says what the next hour does. The mirror stays on the fetch path and the push stays direct, because a push that needs 19 retries at the wrong hour is not a route to depend on.
+
+Budget the push retry loop at **20 probe rounds**. The archive-branch push at 00:30 needed 19 before one connection landed; a loop capped lower would have reported a network outage that was not there.
 
 Push must not go through the mirror - an unauthenticated third-party write is refused, and a host that serves the fetch is a host that can serve a different tree. `remote.origin.pushurl` therefore names the direct host with an explicit `:443`:
 
