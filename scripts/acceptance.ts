@@ -130,8 +130,15 @@ export function tier0Counterfactual(path: string): Tier0Counterfactual {
  * `semgrep.ts:493` marks a finding `certified` only when its id is in
  * `blockRules`, and `orchestrator.ts:385` drops every finding that is not
  * certified, so a language whose subsets list no rule has no reachable `deny`.
- * That is why line 1 has to say `na` there instead of "missed every sample": the
- * number 0 would be a fact about the config wearing the detector's clothes.
+ * That is why line 1 prints the certification face next to recall instead of
+ * letting the number 0 pass as "missed every sample": the 0 is a fact about the
+ * config wearing the detector's clothes.
+ *
+ * An empty block face is nevertheless a **failed line**, not `na` (D13: "`block`
+ * 档为空则本线不通过", with the pre-registered conclusion sentence). `na` leaves
+ * the gate denominator; that would turn "this dataset has no blocking capability
+ * at the required precision" into "this line was never measured", which is a
+ * different claim and a softer one.
  *
  * Read from the pinned file rather than from the run: `blockRules` is wiring, not
  * a goalpost, and the run records only the config hash.
@@ -438,10 +445,11 @@ function median(values: number[]): number | null {
 export interface LineResult {
   name: string;
   /**
-   * Three states, because "not measured" is not "failed". `na` is a fact about
-   * the instrument (the pinned config certifies no block rule for the rows'
-   * language), not about the detector, and it leaves the gate denominator
-   * instead of counting as a failure.
+   * Three states, because "not measured" is not "failed". `na` is for a line the
+   * instrument cannot reach at all (a pair whose ratio is undetermined, a row
+   * that was never scanned), and it stays in the gate denominator: it is a label,
+   * not an exemption. The gate is five lines that must hold simultaneously, so a
+   * `na` line can only make it harder.
    */
   state: "pass" | "fail" | "na";
   pass: boolean;
@@ -597,17 +605,27 @@ export function evaluateAcceptance(
     return normalized.toUpperCase();
   };
   const languageLabel = [...new Set(positiveLanguages.map(shortLanguage))].join("/") || "?";
-  // Only a *complete* absence is `na`: if some positives have a certified rule the
-  // face is measurable, and the mixed case is printed rather than silently split.
-  const blockMeasurable = options.subsets === undefined || n === 0 || certifiedSamples.length > 0;
+  // An empty block face fails the line (D13: "`block` 档为空则本线不通过") and the
+  // detail carries the pre-registered conclusion verbatim. It is not `na`: `na`
+  // would leave the gate denominator, and the claim being made here is stronger
+  // than "not measured" - at the required precision the dataset has no blocking
+  // capability, because the pinned config offers no rule this language may deny
+  // on. `subsets === undefined` stays `unknown` rather than `empty`: nothing was
+  // looked at, so nothing can be said about the config.
+  const blockFaceEmpty = options.subsets !== undefined && n > 0 && certifiedSamples.length === 0;
   // Without the config the certification face is unknown, not empty: printing
   // "0/10 certified" would claim that no rule can block when nobody looked.
   const certifiedText =
     options.subsets === undefined ? "certified=na (config not supplied)" : `certified=${certifiedSamples.length}/${n}`;
-  const naReason = blockMeasurable
-    ? null
-    : `no certified ${languageLabel} rule (blockRules is empty for this language in the pinned config)`;
-  const recallStatus = naReason !== null ? "na" : recallGated ? "gated" : "insufficient_n";
+  // D13 requires the `n < 15` qualifier in words, not as an implication: a
+  // 0/10 with no interval is a descriptive count, and quoting it as a rate would
+  // read a small sample as a measured capability.
+  const blockConclusion = blockFaceEmpty
+    ? `block_face=empty (blockRules is empty for ${languageLabel} in the pinned config) ` +
+      `conclusion=在所要求精度下该数据集不具备阻断能力` +
+      (n < 15 ? `; n=${n}<15 不具统计意义` : "")
+    : "";
+  const recallStatus = blockFaceEmpty ? "unblockable" : recallGated ? "gated" : "insufficient_n";
   const inCoverageLanguage = (sample: SampleTruth): boolean =>
     coverage === undefined || semgrepLanguage(sample.language) === coverage.language;
   const evalTruth = [...truth.values()].filter(
@@ -679,17 +697,17 @@ export function evaluateAcceptance(
   const excludedClasses = [...new Set(excluded.map((row) => cweKey(truth.get(row.sample)?.sample_cwe ?? null) ?? "none"))];
   const line1: LineResult = {
     name: "line1: block precision/recall on the covered, scannable eval positives",
-    state: stateOf(naReason, line1Pass),
+    // An empty block face is a failure, not `na` (see `blockFaceEmpty`).
+    state: blockFaceEmpty || !line1Pass ? "fail" : "pass",
     pass: line1Pass,
-    ...(naReason === null ? {} : { na_reason: naReason }),
     detail:
       `mode=${mode} recall n=${n} samples (${positives.length} pre rows) ` +
       `(available=${availableN} staged=${stagedN}) hits=${hits} ` +
       `recall=${recall.toFixed(3)} wilson=[${interval === null ? "na" : `${interval.low.toFixed(3)},${interval.high.toFixed(3)}`}] ` +
       `recall_gate=${recallStatus}` +
-      `${recallGated || naReason !== null ? "" : " (descriptive, not gated)"} ` +
+      `${recallGated || blockFaceEmpty ? "" : " (descriptive, not gated)"} ` +
       `${certifiedText}` +
-      `${naReason === null ? "" : ` block_face=na (${naReason})`} ` +
+      `${blockConclusion.length === 0 ? "" : ` ${blockConclusion}`} ` +
       `precision findings=${findingN} tp=${findingTp} precision=${precision === null ? "na" : precision.toFixed(3)} ` +
       `without_class=${findingWithoutClass} ` +
       `precision_gate=${precisionStatus} negatives=${negatives.length} ` +
@@ -711,7 +729,7 @@ export function evaluateAcceptance(
       recall_status: recallStatus,
       certified: options.subsets === undefined ? null : certifiedSamples.length,
       uncertified: options.subsets === undefined ? null : uncertifiedSamples,
-      block_face: naReason === null ? "measurable" : "na",
+      block_face: blockFaceEmpty ? "empty" : "measurable",
       available: availableN,
       staged: stagedN,
       not_staged: availableN - stagedN,
@@ -1099,8 +1117,8 @@ export function evaluateAcceptance(
           `>= ${minSamples}`,
           recallStatus === "gated"
             ? `gated (${certifiedText})`
-            : recallStatus === "na"
-              ? `na (${naReason})`
+            : recallStatus === "unblockable"
+              ? `unblockable (${certifiedText}; 结论：在所要求精度下该数据集不具备阻断能力)`
               : `insufficient_n (descriptive, not gated; ${certifiedText})`,
         ],
         [
@@ -1161,14 +1179,16 @@ export function evaluateAcceptance(
   ].join("\n");
 
   const lineEntries = [line1, line2, line3, line4, line5];
-  const gatedLines = lineEntries.filter((line) => line.state !== "na");
+  // Five lines, all of them in the denominator: the acceptance criterion is that
+  // the five hold simultaneously (D13), so `na` is a label and not an exemption.
+  // It is listed next to the count, never subtracted from it.
   const naLines = lineEntries.filter((line) => line.state === "na");
-  const passedLines = gatedLines.filter((line) => line.state === "pass");
+  const passedLines = lineEntries.filter((line) => line.state === "pass");
   const verdict = [
     `# 验收结论（${mode}）`,
     "",
-    `闸门 ${passedLines.length}/${gatedLines.length} 通过（${mode}）` +
-      `${naLines.length === 0 ? "。" : `；另有 ${naLines.length} 条 na，单列、不进闸门分母。`}`,
+    `闸门 ${passedLines.length}/${lineEntries.length}` +
+      `${naLines.length === 0 ? "" : `（na ${naLines.length}）`} 通过（${mode}）`,
     "",
     instruments === null
       ? "量具身份：未核对（未提供冻结值）。"
@@ -1182,7 +1202,16 @@ export function evaluateAcceptance(
     "line1 的分母按单位分开：召回以样本计（每个漏洞样本是否被抓到），" +
       `精度以 finding 计（每条 finding 是否落在真值行上）。召回 ${n} / 门槛 ${minSamples}（${recallStatus}，` +
       `available ${availableN} staged ${stagedN}）；精度 ${findingN} / 门槛 ${minFindings}（${precisionStatus}）。`,
-    ...(recallGated || naReason !== null
+    ...(blockFaceEmpty
+      ? [
+          "",
+          "line1 结论（预注册句，D13）：在所要求精度下该数据集不具备阻断能力。" +
+            `依据：钉定配置对 ${languageLabel} 的 \`blockRules\` 为空，certified 0/${n} ⇒ 没有任何 finding 能被认证、` +
+            `\`deny\` 不可达。n=${n}${n < 15 ? " < 15，不具统计意义" : ""}。` +
+            "该结论不读作「检测器漏检」：0 是配置面的事实，不是检测能力的度量。",
+        ]
+      : []),
+    ...(recallGated || blockFaceEmpty
       ? []
       : [
           "",
@@ -1203,13 +1232,12 @@ export function evaluateAcceptance(
       ? []
       : [
           "",
-          "na（不可测，不进闸门分母）：" +
+          "na（不可测，单列）：" +
             naLines
               .map((line) => `${line.name.split(":")[0]} — ${line.na_reason ?? ""}`)
               .join("；") +
-            "。“测不了”既不等于“没通过”，也不等于“通过”。后果按线分：line1 不在闸门分母内，G 不变；" +
-            "line2–5 是闸线，任一为 na 都会使 G 减 1，而 na 永不记为通过，故闸线上一旦出现 na，" +
-            "通过数最多 G−1，闸门必然失败 —— 闸线上的 na 劣于 FAIL，这是反空转设计，不因读数难看而豁免。",
+            "。`na` 不是豁免：它不记为通过，闸门分母恒为 5 条（五条须同时成立），" +
+            "故任一条 na 都会使通过数至多 4，闸门必然失败 —— 闸线上的 na 劣于 FAIL，这是反空转设计，不因读数难看而豁免。",
         ]),
     ...(availableN === stagedN
       ? []

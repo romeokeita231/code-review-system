@@ -1999,14 +1999,17 @@ export async function evaluate(
     /**
      * The config's block-certification face. Absent means "the caller did not
      * say"; line 1 is then gated the way it always was. When given and no
-     * positive's language has a certified rule, line 1 reports `na` instead of a
-     * recall of 0 (`certifiedSubsets`).
+     * positive's language has a certified rule, line 1 **fails** with the
+     * pre-registered conclusion ("在所要求精度下该数据集不具备阻断能力"),
+     * because an empty block face is a result about the dataset, not a missing
+     * measurement (`certifiedSubsets`).
      */
     certifiedRules?: ReadonlyArray<{ langs: readonly string[]; blockRules: readonly string[] }>;
   } = {},
 ): Promise<{
   pass: number;
-  gated: number;
+  /** The gate denominator: every line, `na` included. */
+  total: number;
   na: number;
   lines: Array<{ name: string; state: "pass" | "fail" | "na"; pass: boolean; detail: string }>;
 }> {
@@ -2242,11 +2245,11 @@ export async function evaluate(
     )}\n`,
     "utf8",
   );
-  const gated = report.lines.filter((line) => line.state !== "na").length;
+  const total = report.lines.length;
   return {
     pass: report.lines.filter((line) => line.state === "pass").length,
-    gated,
-    na: report.lines.length - gated,
+    total,
+    na: report.lines.filter((line) => line.state === "na").length,
     lines: report.lines.map(({ name, state, pass, detail }) => ({ name, state, pass, detail })),
   };
 }
@@ -2620,17 +2623,19 @@ async function main(): Promise<void> {
       // `--stage evaluate` only ever reads a directory `run` produced here; a
       // synthetic report is built by `wiring:check`, which declares its own.
       // The certified block face is read from the config the run was staged
-      // with, so line 1 can say `na` instead of a recall of 0.
+      // with, so an empty face is a stated conclusion rather than an inferred 0.
       { rowsSource: "live", certifiedRules: certifiedSubsets(baseConfig) },
     );
     process.stdout.write(
       `${result.lines.map((line) => `${line.state.toUpperCase()} ${line.name} :: ${line.detail}`).join("\n")}\n`,
     );
     process.stdout.write(
-      `闸门 ${result.pass}/${result.gated}` +
-        `${result.na === 0 ? "" : `（另有 ${result.na} 条 na，不计入闸门）`}\n`,
+      `闸门 ${result.pass}/${result.total}` +
+        `${result.na === 0 ? "" : `（na ${result.na}）`}\n`,
     );
-    if (result.pass < result.gated || result.pass + result.na < 5) process.exitCode = 3;
+    // Five lines, all in the denominator: `na` is not a pass and not an
+    // exemption, so anything short of 5/5 fails the gate (D13).
+    if (result.pass < result.total) process.exitCode = 3;
   }
 }
 

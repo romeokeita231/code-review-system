@@ -759,7 +759,7 @@ describe("event kinds in the false-positive denominator", () => {
     expect(report.verdict).toContain("不支撑任何精度主张");
   });
 
-  it("reports line1 as na when the config certifies no block rule for the language", () => {
+  it("fails line1 with the pre-registered sentence when the config certifies no block rule", () => {
     const truth = new Map<string, SampleTruth>();
     const rows: AcceptanceRowLike[] = [];
     for (let index = 0; index < 3; index += 1) {
@@ -770,22 +770,28 @@ describe("event kinds in the false-positive denominator", () => {
     const report = evaluateAcceptance(rows, truth, gaps, {
       subsets: [{ langs: ["typescript"], blockRules: [] }],
     });
-    // `blockRules: []` means a finding can never be certified, and an
-    // uncertified finding never reaches `triggering`, so `deny` is unreachable:
-    // the number 0 would describe the config, not the detector.
-    expect(report.lines[0]!.state).toBe("na");
-    expect(report.lines[0]!.na_reason).toMatch(/no certified TS rule/);
+    // `blockRules: []` means a finding can never be certified, so `deny` is
+    // unreachable. D13 makes that a failed line with the pre-registered
+    // conclusion, not `na`: `na` would leave the gate denominator and soften
+    // "the dataset has no blocking capability" into "never measured".
+    expect(report.lines[0]!.state).toBe("fail");
     expect(report.lines[0]!.pass).toBe(false);
+    expect(report.lines[0]!.na_reason).toBeUndefined();
+    expect(report.lines[0]!.detail).toContain("在所要求精度下该数据集不具备阻断能力");
+    expect(report.lines[0]!.detail).toContain("n=3<15 不具统计意义");
     expect(report.lines[0]!.metrics).toMatchObject({
       n: 3,
       k: 0,
-      recall_status: "na",
-      block_face: "na",
+      recall_status: "unblockable",
+      block_face: "empty",
       certified: 0,
       uncertified: 3,
     });
-    expect(report.resultsTable).toContain("NA");
-    expect(report.verdict).toContain("no certified TS rule");
+    expect(report.resultsTable).toContain("FAIL");
+    expect(report.verdict).toContain("在所要求精度下该数据集不具备阻断能力");
+    // Five lines, all in the denominator: one failed line is 0/5 here because
+    // every other line lacks the input it needs, and the header says so.
+    expect(report.verdict).toMatch(/闸门 \d\/5/);
   });
 
   it("keeps line1 gated when the config certifies a rule for the language", () => {
@@ -956,8 +962,10 @@ describe("event kinds in the false-positive denominator", () => {
     expect(report.lines[3]!.pass).toBe(false);
     expect(report.lines[3]!.metrics).toMatchObject({ pairs: 8, undetermined_pairs: 7 });
     // The consequence is stated where a reader meets it: `na` on a gate line is
-    // worse than `fail`, because it shrinks the gate denominator as well.
+    // worse than `fail`, because the gate is five lines that must hold and `na`
+    // never counts as one of them.
     expect(report.verdict).toContain("闸线上的 na 劣于 FAIL");
+    expect(report.verdict).toMatch(/闸门 \d\/5（na 1）/);
   });
   it("refuses an empty denominator instead of reporting it as insufficient_n", () => {
     // The wiring bug this guards: truth and rows disagree about which samples
