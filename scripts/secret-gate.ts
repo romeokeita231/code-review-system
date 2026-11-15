@@ -28,6 +28,14 @@
  * the weaker version of the same idea, and `upstream:` records a claim this gate
  * cannot check offline but a reader can.
  *
+ * `derived:<path>` is the fourth route and the only one that points at another
+ * registry row: a copy of key bytes that has no external home. It is not a free
+ * pass - the gate follows the chain to its terminal row (at most
+ * `MAX_DERIVED_DEPTH` hops), and fails on an unregistered target, a cycle, or a
+ * chain that never ends. What a chain proves is narrow and is stated as such in
+ * the registry: these bytes are the bytes of that anchored file; whether that
+ * file is what its own `upstream:` row claims is a human check.
+ *
  * The pattern set is deliberately the union of the shapes that appear in this
  * repository's own history plus the shapes a reviewer would expect: a single
  * provider's shape cannot stand in for a scan (the first version of this gate
@@ -92,6 +100,8 @@ export interface ProvenanceEntry {
   readonly introducedBy: string;
   /** `upstream:` | `url:` | `synthetic:` | `derived:` and the route itself. */
   readonly byteOrigin: string;
+  /** For `derived:` rows: the repository-relative path of the row it copies. */
+  readonly derivedFrom?: string;
   /** `sha256:<hex>` | `bytes:<n>` | `upstream:<repo>@<sha>[:<path>]`. */
   readonly anchor: string;
   readonly note: string;
@@ -149,8 +159,25 @@ const INTRODUCED_BY = /^self@[0-9a-f]{7,40}$/i;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const UPSTREAM = /^upstream:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)@([0-9a-f]{7,40})(?::(\S+))?$/i;
 const BYTE_ORIGIN = /^(upstream|url|synthetic|derived):(\S.*)$/i;
+const DERIVED = /^derived:(\S+)$/i;
 const SHA256_ANCHOR = /^sha256:([0-9a-f]{64})$/i;
 const BYTES_ANCHOR = /^bytes:(\d+)$/i;
+
+/**
+ * How many `derived:` rows the gate follows before it stops and calls the chain
+ * unproven. Four is not a round number: a registry row derived from a row derived
+ * from a row derived from a row is already the longest useful statement ("this
+ * copy came from that copy, which came from upstream"), and anything longer
+ * describes a build pipeline rather than a provenance.
+ */
+export const MAX_DERIVED_DEPTH = 4;
+
+/** Repository-relative path, the only form a registry row may name. */
+function repoRelative(raw: string): string | null {
+  const relative = raw.replaceAll("\\", "/").replace(/^\.\//, "");
+  if (relative.length === 0 || posix.isAbsolute(relative) || relative.split("/").includes("..")) return null;
+  return relative;
+}
 
 function cellsOf(line: string): string[] | null {
   if (!line.trimStart().startsWith("|")) return null;
@@ -201,8 +228,8 @@ export function parseProvenance(markdown: string): {
       string,
       string,
     ];
-    const relative = path.replaceAll("\\", "/").replace(/^\.\//, "");
-    if (relative.length === 0 || posix.isAbsolute(relative) || relative.split("/").includes("..")) {
+    const relative = repoRelative(path);
+    if (relative === null) {
       problems.push(`${where}: "${path}" is not a repository-relative path`);
       continue;
     }
@@ -234,13 +261,25 @@ export function parseProvenance(markdown: string): {
     if (origin === null) {
       problems.push(
         `${where}: ${relative} does not say where its bytes came from (got "${byteOrigin}"; ` +
-          `want upstream:<repo>@<sha>:<path>, url:<url>, synthetic:<how> or derived:<how>)`,
+          `want upstream:<repo>@<sha>:<path>, url:<url>, synthetic:<how> or derived:<path to another row>)`,
       );
       continue;
     }
     if (origin[1]!.toLowerCase() === "upstream" && UPSTREAM.exec(byteOrigin) === null) {
       problems.push(`${where}: ${relative} says upstream but not repo@commit:path (got "${byteOrigin}")`);
       continue;
+    }
+    if (origin[1]!.toLowerCase() === "derived") {
+      // `derived:` names a row, not a recipe: the chain is resolved after every
+      // row is read, so a target may be listed below this one.
+      const target = DERIVED.exec(byteOrigin);
+      if (target === null || repoRelative(target[1]!) === null) {
+        problems.push(
+          `${where}: ${relative} derives from "${byteOrigin}" but names no repository-relative path ` +
+            `(want derived:<path to another row>)`,
+        );
+        continue;
+      }
     }
     if (!hasRecomputableAnchor(anchor)) {
       problems.push(
@@ -253,13 +292,90 @@ export function parseProvenance(markdown: string): {
       problems.push(`${where}: ${relative} has no note saying what the bytes are`);
       continue;
     }
-    entries.push({ path: relative, providers, repo, introducedBy, byteOrigin, anchor, note });
+    entries.push({
+      path: relative,
+      providers,
+      repo,
+      introducedBy,
+      byteOrigin,
+      anchor,
+      note,
+      ...(origin[1]!.toLowerCase() === "derived"
+        ? { derivedFrom: repoRelative(DERIVED.exec(byteOrigin)![1]!)! }
+        : {}),
+    });
   }
   return { entries, problems };
 }
 
 function hasRecomputableAnchor(anchor: string): boolean {
   return SHA256_ANCHOR.test(anchor) || BYTES_ANCHOR.test(anchor) || UPSTREAM.test(anchor);
+}
+
+/**
+ * Follows every `derived:` row to the row it names, so a chain cannot be a
+ * restatement in disguise.
+ *
+ * `derived:<path>` means "the key bytes came from that file", and the target
+ * must itself be a registered row whose bytes the gate can anchor. Three ways a
+ * chain breaks, all of them failures rather than silent stops: the target is not
+ * registered (the claim points at nothing), the chain revisits a row (a cycle
+ * explains no bytes), or it runs past `MAX_DERIVED_DEPTH` (a pipeline, not a
+ * provenance). A chain that resolves ends at a non-`derived` route, which the
+ * caller can read back with `derivedChains`.
+ */
+export function resolveDerivedChains(entries: readonly ProvenanceEntry[]): string[] {
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+  const problems: string[] = [];
+  for (const entry of entries) {
+    if (!DERIVED.test(entry.byteOrigin)) continue;
+    const seen = new Set<string>([entry.path]);
+    let current = entry;
+    for (;;) {
+      const target = DERIVED.exec(current.byteOrigin);
+      if (target === null) break; // Terminal row: upstream, url or synthetic.
+      if (seen.size > MAX_DERIVED_DEPTH) {
+        problems.push(
+          `${entry.path}: derived chain exceeds ${MAX_DERIVED_DEPTH} hops (still at ${current.byteOrigin})`,
+        );
+        break;
+      }
+      const next = repoRelative(target[1]!)!;
+      if (seen.has(next)) {
+        problems.push(`${entry.path}: derived chain cycles through ${next}`);
+        break;
+      }
+      const targetEntry = byPath.get(next);
+      if (targetEntry === undefined) {
+        problems.push(`${entry.path}: derived from ${next}, which is not a registered row`);
+        break;
+      }
+      seen.add(next);
+      current = targetEntry;
+    }
+  }
+  return problems;
+}
+
+/** One readable line per resolved chain, for the gate's detail. */
+export function derivedChains(entries: readonly ProvenanceEntry[]): string[] {
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+  const lines: string[] = [];
+  for (const entry of entries) {
+    if (!DERIVED.test(entry.byteOrigin)) continue;
+    const path = [entry.path];
+    let current = entry;
+    for (let hop = 0; hop < MAX_DERIVED_DEPTH; hop += 1) {
+      const target = DERIVED.exec(current.byteOrigin);
+      if (target === null) break;
+      const next = byPath.get(repoRelative(target[1]!) ?? "");
+      if (next === undefined) break;
+      path.push(next.path);
+      current = next;
+    }
+    lines.push(`${path.join(" -> ")} [${current.byteOrigin.split(":")[0]}]`);
+  }
+  return lines;
 }
 
 /**
@@ -335,6 +451,8 @@ export function evaluateSecretGate(input: {
   trackedCount: number;
   skipped?: readonly string[];
   fileFacts?: ReadonlyMap<string, FileFacts>;
+  /** Resolved `derived:` chains, already followed to their terminal route. */
+  derived?: readonly string[];
 }): GateCheck[] {
   const checks: GateCheck[] = [];
   const skipped = input.skipped ?? [];
@@ -391,7 +509,10 @@ export function evaluateSecretGate(input: {
       (inside.length === 0
         ? `no provider-shaped string inside the exempt zones (${input.trackedCount} tracked files)`
         : `${inside.length} file/provider pair(s) recorded and registered: ${inside.map(describe).join("; ")}` +
-          ` | ${verified}/${input.entries.length} anchor(s) recomputed here, the rest are upstream claims`) +
+          ` | ${verified}/${input.entries.length} anchor(s) recomputed here, the rest are upstream claims` +
+          (input.derived === undefined || input.derived.length === 0
+            ? ""
+            : ` | derived: ${input.derived.join("; ")}`)) +
       (problems.length === 0 ? "" : ` | registry problems: ${problems.slice(0, 5).join("; ")}`) +
       (anchorFailures.length === 0 ? "" : ` | anchors that do not recompute: ${anchorFailures.join("; ")}`) +
       (unregistered.length === 0
@@ -449,6 +570,9 @@ export async function runSecretGate(
     registryProblem = [`${REGISTRY_PATH} is missing, so nothing in the exempt zones is traceable`];
   }
   const parsed = markdown.length === 0 ? { entries: [], problems: [] } : parseProvenance(markdown);
+  // Chains are resolved after the whole table is read: a `derived:` row may name
+  // a row listed below it, and a chain is only meaningful against the full set.
+  const derivedProblems = resolveDerivedChains(parsed.entries);
 
   // Anchors are recomputed from the file itself, so facts are collected for every
   // path the registry talks about - not only for the paths that hit. A file that
@@ -468,11 +592,12 @@ export async function runSecretGate(
   return evaluateSecretGate({
     hits,
     entries: parsed.entries,
-    problems: [...registryProblem, ...parsed.problems],
+    problems: [...registryProblem, ...parsed.problems, ...derivedProblems],
     envKeyMatches: envKey === null ? null : envKeyMatches,
     trackedCount: paths.length,
     skipped,
     fileFacts: facts,
+    derived: derivedChains(parsed.entries),
   });
 }
 

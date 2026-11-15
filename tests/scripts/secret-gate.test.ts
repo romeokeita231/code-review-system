@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   checkAnchor,
+  derivedChains,
   evaluateSecretGate,
   EXEMPT_ZONES,
   isExempt,
+  MAX_DERIVED_DEPTH,
   parseProvenance,
+  resolveDerivedChains,
   scanFiles,
   scanText,
   type FileFacts,
@@ -332,5 +336,103 @@ describe("evaluateSecretGate", () => {
     ]);
     expect(hits.map((entry) => entry.path)).toEqual(["src/a.ts", "datasets/x.json"]);
     expect(skipped).toEqual(["research/huge.json"]);
+  });
+});
+
+describe("derived chains", () => {
+  const COPY = "artifacts/acceptance/rows.jsonl";
+  const SOURCE = "datasets/self-built/samples/ts-cwe798-0001.json";
+
+  const parse = (rows: string[]) => parseProvenance([HEADER, SEPARATOR, ...rows].join("\n"));
+
+  const copyRow = (file: string, target: string, anchor = `sha256:${SHA}`): string =>
+    registryRow(file, "PRIVATE KEY", {
+      repo: "romeokeita231/code-review-system",
+      introducedBy: "self@30711d8",
+      byteOrigin: `derived:${target}`,
+      anchor,
+    });
+
+  it("follows a copy to its terminal route instead of restating a claim", () => {
+    const { entries, problems } = parse([
+      copyRow(COPY, SOURCE),
+      registryRow(SOURCE, "PRIVATE KEY", {
+        repo: "juice-shop/juice-shop",
+        introducedBy: "self@8a62a25b",
+        anchor: `sha256:${OTHER_SHA}`,
+      }),
+    ]);
+    expect(problems).toEqual([]);
+    expect(resolveDerivedChains(entries)).toEqual([]);
+    expect(derivedChains(entries)).toEqual([`${COPY} -> ${SOURCE} [upstream]`]);
+
+    const checks = evaluateSecretGate({
+      hits: [hit(COPY, "PRIVATE KEY")],
+      entries,
+      trackedCount: 10,
+      fileFacts: new Map([
+        [COPY, { sha256: SHA, bytes: 205_100 }],
+        [SOURCE, { sha256: OTHER_SHA, bytes: 16_487 }],
+      ]),
+      derived: derivedChains(entries),
+    });
+    expect(gateOk(checks, "secret in exempt zones")).toBe(true);
+    expect(detailOf(checks, "secret in exempt zones")).toContain(`derived: ${COPY} -> ${SOURCE}`);
+  });
+
+  it("fails a copy whose target is not a registered row", () => {
+    const { entries } = parse([copyRow(COPY, SOURCE)]);
+    expect(resolveDerivedChains(entries)).toEqual([
+      `${COPY}: derived from ${SOURCE}, which is not a registered row`,
+    ]);
+  });
+
+  it("fails a cycle, because a circle explains no bytes", () => {
+    const { entries } = parse([copyRow(COPY, SOURCE), copyRow(SOURCE, COPY)]);
+    const problems = resolveDerivedChains(entries);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain("cycles through");
+    expect(problems.join(" ")).toContain(SOURCE);
+  });
+
+  it("fails a chain longer than the depth limit", () => {
+    const chainOf = (count: number): string[] => {
+      const rows: string[] = [];
+      for (let index = 1; index <= count; index += 1) {
+        const file = `research/copy-${index}.json`;
+        rows.push(
+          index === count
+            ? registryRow(file, "AKIA", { byteOrigin: "synthetic:built by the test" })
+            : copyRow(file, `research/copy-${index + 1}.json`),
+        );
+      }
+      return rows;
+    };
+    // Five copies is four hops - allowed, and it resolves.
+    expect(resolveDerivedChains(parse(chainOf(5)).entries)).toEqual([]);
+    // Six copies is five hops from the first row, which is past the limit.
+    const problems = resolveDerivedChains(parse(chainOf(6)).entries);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(`exceeds ${MAX_DERIVED_DEPTH} hops`);
+  });
+
+  it("rejects a copy target that is absolute or climbs out, at parse time", () => {
+    const { entries, problems } = parse([copyRow(COPY, "/etc/passwd"), copyRow(COPY, "../outside.json")]);
+    expect(entries).toHaveLength(0);
+    expect(problems).toHaveLength(2);
+    expect(problems.join(" ")).toContain("names no repository-relative path");
+  });
+
+  it("points a real derived row at a real registered row", () => {
+    // The registry's own shape: a copy is a copy, and the file it names has a
+    // row. This is the assertion that would have caught `derived:` being written
+    // as a free-text explanation.
+    const markdown = readFileSync("artifacts/acceptance/PROVENANCE.md", "utf8");
+    const { entries, problems } = parseProvenance(markdown);
+    expect(problems).toEqual([]);
+    expect(resolveDerivedChains(entries)).toEqual([]);
+    const copy = entries.find((entry) => entry.path === COPY);
+    expect(copy?.byteOrigin).toBe(`derived:${SOURCE}`);
+    expect(copy?.derivedFrom).toBe(SOURCE);
   });
 });
