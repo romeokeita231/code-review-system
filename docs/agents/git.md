@@ -12,7 +12,16 @@ None of the archives is a default branch, and none takes new commits: they recor
 
 ## Remote
 
-`origin`'s fetch URL is the read-only mirror `https://gh-proxy.com/https://github.com/...`, applied by a global `url.<mirror>.insteadOf` rule rather than by the clone's own config. The reason is measured, not assumed: direct HTTPS to `github.com` from here is intermittent (2026-11-15, 3 × `git ls-remote`: 1 connected in 1.3 s, 2 timed out after 21 s).
+`origin`'s fetch URL is the read-only mirror `https://gh-proxy.com/https://github.com/...`, applied by a global `url.<mirror>.insteadOf` rule rather than by the clone's own config.
+
+Direct-connection measurements, both labelled with their route because the route is the thing that gets miscounted: a `git ls-remote https://github.com/...` run with the global config still loaded is a measurement of *the mirror*, since `insteadOf` rewrites the URL before git dials. The numbers below were taken with `GIT_CONFIG_GLOBAL` pointed at an absolute path that does not exist, which is the only way to dial `github.com` itself:
+
+| when (+08) | route | result |
+| --- | --- | --- |
+| 2026-11-15 00:30-00:45 | `github.com:443`, no global config | 1 of 3 `git ls-remote` connected (1.3 s); the other two timed out after 21 s. The archive-branch push loop in the same window needed 19 probe rounds before one connection landed |
+| 2026-11-15 15:34-15:40 | `github.com:443`, no global config | 6 of 6 connected, 0.9-1.1 s each, 8 branch refs returned |
+
+So the honest summary is jitter, not "unavailable": at 15:34 direct was fine six times in a row, at 00:30 it failed twenty times in a row. The mirror stays on the fetch path and the push stays direct, because a push that needs 19 retries at the wrong hour is not a route to depend on, and neither measurement on its own settles availability.
 
 Push must not go through the mirror - an unauthenticated third-party write is refused, and a host that serves the fetch is a host that can serve a different tree. `remote.origin.pushurl` therefore names the direct host with an explicit `:443`:
 
@@ -22,13 +31,22 @@ git remote get-url --push origin   # https://github.com:443/romeokeita231/code-r
 
 The port spelling is what keeps the global `insteadOf` from rewriting the push URL: the rule matches the literal prefix `https://github.com/`, which `https://github.com:443/` is not. A `pushInsteadOf` rule does not help here - it is matched against the original URL, which is already `github.com`, so a mirror-to-direct mapping never fires.
 
+**Self-check, run it after any remote surgery** (rebuilding the remote, switching machines, upgrading git):
+
+```
+git remote get-url --push origin | Select-String gh-proxy   # must print nothing
+```
+
+The ways this breaks silently, in order of likelihood: a rebuilt remote drops the `:443` and the push falls back through the mirror; a git version normalises the URL before matching and the port stops shielding anything; a new `insteadOf`/`pushInsteadOf` rule starts matching the port form. In every case the symptom is the same `Authentication failed ... gh-proxy.com`, which reads like a credential problem and is not one.
+
 `git push origin <branch>` authenticates from the Windows credential store; there is no `gh-proxy.com` entry there, so there was nothing to rotate. A push can still fail with `Connection was reset`: retry, the connection is what is intermittent, not the credentials.
 
 ## The three exempt zones
 
 `datasets/`, `research/` and `artifacts/acceptance/` are exempt from secret scanning (`.github/secret_scanning.yml`) because they hold external bytes verbatim - rewriting them would change `content_sha256` and break every archived run that cites the hash.
 
-Two rules keep the exemption from becoming a hole:
+Three rules keep the exemption from becoming a hole:
 
-- `npm run check:secrets` (also a preflight gate, so a drill cannot start without it): any provider shape *outside* the zones fails; a shape *inside* them must be registered in `artifacts/acceptance/PROVENANCE.md` with a source repository and a commit, or the gate fails.
+- `npm run check:secrets` (also a preflight gate, so a drill cannot start without it): any provider shape *outside* the zones fails; a shape *inside* them must be registered in `artifacts/acceptance/PROVENANCE.md` with who introduced it, where its bytes came from, and an anchor the gate recomputes, or the gate fails.
+- The registry is inside an exempt zone and is the gate's own input, so it must not contain a shape itself. Writing the complete AWS example key in a note made the registry a hit that needed registering; the fix is to write `AKIA...EXAMPLE`. The `sha256:` anchor is the second half of the same defence: it is recomputed against the file, so the table cannot clear itself by being edited.
 - `research/` stays external-bytes-only. A note of our own belongs in `docs/` - the exemption is for copies, not for anything we write.
