@@ -31,6 +31,27 @@ Renaming it would change every sample's `path`, every `content_sha256` in
 twentieth is the dependency probe). A more accurate name is not worth
 invalidating the archived evidence, so this file is the correction instead.
 
+## Population history: `version` did not track the population
+
+Three populations shipped under the **same** manifest `version` (`ds-2.0.0`,
+which is also the run-directory prefix `eval-ds-2.0.0-…`). The version therefore
+does not identify the population on its own; `content_sha256_root` does:
+
+| commit | samples | pos | neg | `version` | `content_sha256_root` |
+| --- | --- | --- | --- | --- | --- |
+| `8a62a25` | 33 | 26 | 7 | `ds-2.0.0` | `aee6e0f2caffe243563d158ebfe399681e3e4ac2c89f67cb983c35acc4fca0dd` |
+| `5212f9c` | 34 | 26 | 8 | `ds-2.0.0` | `0b1ec9edafd0246a7289b48d1782bf496d27a9cd3d26b0ba472b6daa066a88ad` |
+| `e9b63c2` … HEAD | 35 | 26 | 9 | `ds-2.0.0` | `88660232a43cb6d9c8ddc8598fd4a7ff79ec5221afdda886d9254477e9023e8a` |
+
+34 → 35 added one negative (the `create` row `ts-cwe022-9010`); 33 → 34 added
+one negative as well. Neither added a positive, so `26/9` versus `26/8` is a
+population change, not a measurement change.
+
+`scripts/build-ds2.ts` now refuses to emit a changed root under an unchanged
+version, so the next population change fails the build until the version is
+bumped. Reading a number off this dataset therefore requires **version + root**,
+never the version alone.
+
 ## Known limits
 
 The three parents are deliberately vulnerable teaching applications: source and

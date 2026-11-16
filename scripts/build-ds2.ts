@@ -419,11 +419,49 @@ export async function build(root: string, datasetDir: string): Promise<Emitted> 
   return { files, manifest };
 }
 
+/**
+ * A population change must carry a version change. `version` is the only handle
+ * a run directory (`eval-<version>-<ts>`) and an archived report have on the
+ * sample set, so a new `content_sha256_root` under the same version makes two
+ * different populations answer to one name - which is how 33, 34 and 35 samples
+ * all ended up as `ds-2.0.0`.
+ */
+export function assertVersionTracksPopulation(
+  previous: { version: string; content_sha256_root: string } | null,
+  next: { version: string; content_sha256_root: string },
+): void {
+  if (previous === null) return;
+  if (previous.version !== next.version) return;
+  if (previous.content_sha256_root === next.content_sha256_root) return;
+  throw new Error(
+    `population changed under an unchanged manifest version (${next.version}): ` +
+      `content_sha256_root ${previous.content_sha256_root} -> ${next.content_sha256_root}. ` +
+      "Bump `version` in scripts/build-ds2.ts; the run directory name and every archived " +
+      "report carry the version, so the population must move with it.",
+  );
+}
+
+async function previousManifest(
+  datasetDir: string,
+): Promise<{ version: string; content_sha256_root: string } | null> {
+  try {
+    const raw = JSON.parse(await readFile(join(datasetDir, "manifest.json"), "utf8")) as Record<string, unknown>;
+    if (typeof raw["version"] !== "string" || typeof raw["content_sha256_root"] !== "string") return null;
+    return { version: raw["version"], content_sha256_root: raw["content_sha256_root"] };
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const datasetDir = resolve(fileURLToPath(new URL("../datasets/self-built", import.meta.url)));
   const root = resolve(argv.includes("--root") ? argv[argv.indexOf("--root") + 1]! : ".tmp");
   const emitted = await build(root, datasetDir);
+  assertVersionTracksPopulation(await previousManifest(datasetDir), {
+    version: emitted.manifest.version,
+    content_sha256_root: emitted.manifest.content_sha256_root,
+  });
 
   if (argv.includes("--emit")) {
     for (const [relative, text] of emitted.files) {

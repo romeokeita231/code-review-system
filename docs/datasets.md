@@ -11,6 +11,8 @@ actually passed a gate.
 | SecurityEval | — | fit only (class priors) | not imported |
 | CWE-Bench-Java | — | external sanity only | not imported |
 
+The `ds-2` row above is three populations, not one: 33, 34 and 35 samples all shipped as `version: ds-2.0.0`, so the version alone does not identify the set under a number. `content_sha256_root` does; the table is in `datasets/self-built/README.md`. `scripts/build-ds2.ts` now refuses to emit a changed root under an unchanged version, so a population change fails the build until the version moves with it.
+
 ## #7 errata: D1 (negatives) and D2 (calibration)
 
 Two rules the spec stated loosely enough that the old set satisfied them by

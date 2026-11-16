@@ -1,12 +1,22 @@
-# The dataset tree is a build artefact whose bytes are part of the contract:
-# `build-ds2.ts --check` re-emits it and compares byte for byte, and each sample
-# pins its upstream blob. CRLF conversion on checkout would break both, so the
-# dataset keeps the exact bytes git stores.
-datasets/self-built/** -text
+# Every path whose bytes are hashed is pinned to the bytes git stores. On a
+# machine with `core.autocrlf=true` a fresh checkout would otherwise write these
+# files back as CRLF and the recorded `content_sha256` / `sha256:` anchors would
+# stop recomputing. The gate goes red rather than passing silently - but a
+# registry that only verifies on one machine is not a registry.
 
-# The provenance registry's anchors are sha256 of the file on disk, so the bytes
-# under `artifacts/acceptance/` are part of the contract too: on a machine with
-# `core.autocrlf=true`, a fresh checkout would turn them CRLF and every
-# `sha256:` row would stop recomputing. The gate would go red rather than pass
-# silently, but a registry that only verifies on one machine is not a registry.
+# Dataset tree. `content_sha256` itself is sha256(`before` + NUL + `after`) over
+# the parsed fields (scripts/build-ds2.ts:304, scripts/verify-dataset.ts:780), so
+# it does not move with line endings; what does move is `build-ds2.ts --check`,
+# which re-emits the tree and compares it byte for byte.
+datasets/** -text
+
+# Acceptance evidence: the provenance anchors are sha256 of the file on disk.
 artifacts/acceptance/** -text
+
+# Run artefacts that carry their own hash (preregistration, staged-context,
+# block-gaps, calibration): same rule, same reason.
+artifacts/*.json -text
+
+# Generated contracts: `npm run check:schema` re-emits them and fails on any
+# byte difference, so a CRLF checkout would read as a schema drift.
+schemas/** -text
