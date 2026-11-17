@@ -81,7 +81,7 @@ npx tsx scripts/live-drill.ts --stage evaluate --allow-eval=eval-ds-2.0.0-202611
 
 line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 B4 行全部记录 `tier: 0`、`tier_source: "triage"`、`tokens: null`，且 `sources` 里没有 `aor` 条目（8/8）；`src/l2/orchestrator.ts:414` 在 tier 0 把 AOR 移出 runnable 集合，`aorInvoked` 因此为 false——**没有任何代码路径能在 tier 0 发起 AOR 调用**。旧 `tokensOf()`（`scripts/acceptance.ts:432-436`）只读 `tokens` 字段，把「没发起调用」读成「没测到」，8/8 对因此得 `na`；新 `tokenCost()`（`:897-906`）读同一行已记录的 tier 决策得 0，并把 raw `na` 与 derived `0.000` 并列打印、逐对记 `basis`。同一提交还把 `undetermined>0` 定为 `na`（更严），两个方向相反。判据 `median <= 1` 未改。
 
-**阈值、口径、通过域都没有变**，唯一变化是把一行本来就可读的事实（AOR 未发起 ⇒ 成本 0）从「缺失」改为「读到」。
+**阈值、口径、通过域都没有变**，唯一变化是把一行本来就可读的事实（AOR 未发起 ⇒ 成本 0）从「缺失」改为「读到」。此前收尾句「若设计方判定这仍是口径变化，则 line 4 回到 FAIL、总分为 2/5，规格按 2/5 落笔——判定权在规格，证据在此」已由 2026-11-17 的裁定回答；判定权在规格评审这一点未变，裁定与签署见下。
 
 ## line 4 的签署（设计方，2026-11-17）
 
