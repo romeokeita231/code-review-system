@@ -458,9 +458,18 @@ async function main(): Promise<void> {
   const datasetDir = resolve(fileURLToPath(new URL("../datasets/self-built", import.meta.url)));
   const root = resolve(argv.includes("--root") ? argv[argv.indexOf("--root") + 1]! : ".tmp");
   const emitted = await build(root, datasetDir);
+  // `manifest` is written as a plain record; the version guard reads two fields
+  // out of it, so narrow them here rather than casting. A manifest without them
+  // is a builder bug, and failing loudly beats comparing `undefined` to a
+  // string (which would silently pass the guard).
+  const version = emitted.manifest["version"];
+  const contentRoot = emitted.manifest["content_sha256_root"];
+  if (typeof version !== "string" || typeof contentRoot !== "string") {
+    throw new Error("build() produced a manifest without string version/content_sha256_root");
+  }
   assertVersionTracksPopulation(await previousManifest(datasetDir), {
-    version: emitted.manifest.version,
-    content_sha256_root: emitted.manifest.content_sha256_root,
+    version,
+    content_sha256_root: contentRoot,
   });
 
   if (argv.includes("--emit")) {

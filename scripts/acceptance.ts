@@ -885,6 +885,14 @@ export function evaluateAcceptance(
    * (and the orchestrator filters AOR out of the runnable set for exactly that
    * tier). A null token count is never, on its own, read as 0 (ADR-0008); a null
    * on a row that *did* invoke AOR stays `na`.
+   *
+   * The legacy read is a conjunction of three facts, not one: tier 0, triage,
+   * and no `aor` entry in `sources`. Each fact alone describes a different row -
+   * a static-fallback tier 0 skipped AOR for a different reason, and a row that
+   * says tier 0 while carrying an `aor` source is self-contradictory. The honest
+   * read of a contradiction is `na`, never 0. This derivation is a compatibility
+   * read of a field the orchestrator has stopped relying on; once every row
+   * records `aor_invoked`, delete it rather than keep two ways to say one thing.
    */
   const tokenCost = (
     row: AcceptanceRowLike,
@@ -893,7 +901,8 @@ export function evaluateAcceptance(
     if (measured !== null) return { value: measured, derived: false, basis: "measured" };
     if (row.aor_invoked === true) return null;
     if (row.aor_invoked === false) return { value: 0, derived: true, basis: "aor_invoked" };
-    const legacyTier0 = row.tier === 0 && row.tier_source === "triage";
+    const aorInSources = row.sources.some((source) => source.source === "aor");
+    const legacyTier0 = row.tier === 0 && row.tier_source === "triage" && !aorInSources;
     return legacyTier0 ? { value: 0, derived: true, basis: "tier" } : null;
   };
   const pairs: Array<{

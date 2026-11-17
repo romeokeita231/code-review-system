@@ -931,6 +931,55 @@ describe("event kinds in the false-positive denominator", () => {
     });
   });
 
+  it("refuses to derive 0 for a tier-0 row that contradicts itself", () => {
+    // The legacy read is a conjunction: tier 0, triage, and no `aor` source.
+    // Two counter-examples, one per conjunct that can be faked: an explicit
+    // `aor_invoked: true`, and a row that still says tier 0 while carrying an
+    // `aor` entry. Either one must yield `na`, never a derived 0 - a 0 here
+    // would be "AOR was asked and cost nothing", which is not a fact tier 0 can
+    // establish.
+    for (const contradiction of [
+      { aor_invoked: true as const, sources: [] as AcceptanceRowLike["sources"] },
+      {
+        aor_invoked: undefined,
+        sources: [{ source: "aor", status: "timeout", findings: [] }] as AcceptanceRowLike["sources"],
+      },
+    ]) {
+      const truth = new Map<string, SampleTruth>();
+      const rows: AcceptanceRowLike[] = [];
+      truth.set("pos-1", truthOf("pos-1", "high", ["semgrep"]));
+      rows.push(row({ sample: "pos-1", baseline: "B4", ts: 1 }));
+      for (let index = 0; index < 8; index += 1) {
+        const sample = `low-${index}`;
+        truth.set(sample, truthOf(sample, "low", []));
+        rows.push({
+          ...row({ sample, baseline: "B4", ts: 500 + index, latency_ms: 400 }),
+          tokens: null,
+          tier: 0,
+          tier_source: "triage",
+          sources: contradiction.sources,
+          ...(contradiction.aor_invoked === undefined ? {} : { aor_invoked: contradiction.aor_invoked }),
+        });
+        rows.push({
+          ...row({ sample, baseline: "B4g", ts: 600 + index, latency_ms: 400 }),
+          tokens: 10000,
+          tier: 2,
+          tier_source: "none",
+        });
+      }
+      const report = evaluateAcceptance(rows, truth, gaps, { rowsSource: "live" });
+      expect(report.lines[3]!.state).toBe("na");
+      expect(report.lines[3]!.pass).toBe(false);
+      expect(report.lines[3]!.metrics).toMatchObject({
+        pairs: 8,
+        median_token_ratio: null,
+        median_token_ratio_derived: null,
+        tokens_derived_pairs: 0,
+        undetermined_pairs: 8,
+      });
+    }
+  });
+
   it("refuses to pass line4 on one computable pair out of eight", () => {
     const truth = new Map<string, SampleTruth>();
     const rows: AcceptanceRowLike[] = [];

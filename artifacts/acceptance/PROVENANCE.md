@@ -58,7 +58,7 @@ run 目录 `runs/live/eval-ds-2.0.0-20261114T132232` 不在版本库内。报告
 
 ## 两条与读数有关的说明
 
-1. 本 run 的行**没有** `aor_invoked` 字段（该字段本提交才落地）。line4 的 0 由 `tier: 0` + `tier_source: "triage"` 推导：`src/l2/orchestrator.ts` 在 tier 0 时把 AOR 移出 runnable 集合，没有任何代码路径能在 tier 0 发起 AOR 调用。报告把它与 raw `na` 并列打印，并逐对记录 `basis`。
+1. 本 run 的行**没有** `aor_invoked` 字段（该字段在后续提交落地，未写进本 run 的行）。line4 的 0 由 `tier: 0` + `tier_source: "triage"` 推导：`src/l2/orchestrator.ts` 在 tier 0 时把 AOR 移出 runnable 集合，没有任何代码路径能在 tier 0 发起 AOR 调用。报告把它与 raw `na` 并列打印，并逐对记录 `basis`。
 2. 设计方裁定原文（`2/5`）保留在 `original-2of5/`，引用规则：原始数字可原样引用，但每句须自带总体与分母，且不得作为质量结论。
 
 ## 同一 run 的两个成绩：原始 2/5 与重算 3/5
@@ -79,9 +79,56 @@ npx tsx scripts/live-drill.ts --stage evaluate --allow-eval=eval-ds-2.0.0-202611
 | 4 | FAIL：`pairs=8`、`median_token_ratio=null`（8/8 对不可判定） | PASS：raw `na`、`median_token_ratio_derived=0.000`、`tokens_derived_pairs=8`、`undetermined=0` | **FAIL→PASS（+1）** | 见下段 |
 | 5 | PASS：`warned=53 anchored=53` | PASS：`warned=53 anchored=53` | 不变 | 同函数同字段（`scripts/acceptance.ts:1020-1033`） |
 
-line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 B4 行全部记录 `tier: 0`、`tier_source: "triage"`、`tokens: null`，且 `sources` 里没有 `aor` 条目（8/8）；`src/l2/orchestrator.ts:414` 在 tier 0 把 AOR 移出 runnable 集合，`aorInvoked` 因此为 false——**没有任何代码路径能在 tier 0 发起 AOR 调用**。旧 `tokensOf()`（`scripts/acceptance.ts:432-436`）只读 `tokens` 字段，把「没发起调用」读成「没测到」，8/8 对因此得 `na`；新 `tokenCost()`（`:889-898`）读同一行已记录的 tier 决策得 0，并把 raw `na` 与 derived `0.000` 并列打印、逐对记 `basis`。同一提交还把 `undetermined>0` 定为 `na`（更严），两个方向相反。判据 `median <= 1` 未改。
+line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 B4 行全部记录 `tier: 0`、`tier_source: "triage"`、`tokens: null`，且 `sources` 里没有 `aor` 条目（8/8）；`src/l2/orchestrator.ts:414` 在 tier 0 把 AOR 移出 runnable 集合，`aorInvoked` 因此为 false——**没有任何代码路径能在 tier 0 发起 AOR 调用**。旧 `tokensOf()`（`scripts/acceptance.ts:432-436`）只读 `tokens` 字段，把「没发起调用」读成「没测到」，8/8 对因此得 `na`；新 `tokenCost()`（`:897-906`）读同一行已记录的 tier 决策得 0，并把 raw `na` 与 derived `0.000` 并列打印、逐对记 `basis`。同一提交还把 `undetermined>0` 定为 `na`（更严），两个方向相反。判据 `median <= 1` 未改。
 
-**阈值、口径、通过域都没有变**，唯一变化是把一行本来就可读的事实（AOR 未发起 ⇒ 成本 0）从「缺失」改为「读到」。若设计方判定这仍是口径变化，则 line 4 回到 FAIL、总分为 2/5，规格按 2/5 落笔——判定权在规格，证据在此。
+**阈值、口径、通过域都没有变**，唯一变化是把一行本来就可读的事实（AOR 未发起 ⇒ 成本 0）从「缺失」改为「读到」。
+
+## line 4 的签署（设计方，2026-11-17）
+
+**裁定原文：**
+
+> 判准非「结论变好或变坏」，而是**真相变了，还是读取能力变了**：
+>
+> - 8 对行记录 `tier: 0`、`tier_source: "triage"`、`sources` 无 `aor`；`orchestrator.ts:414` 于 tier 0 将 AOR 移出可运行集合 ⇒ **真实花费一直为 0，非「未知」**。
+> - 旧 `tokensOf()` 仅读 `tokens` 字段，将「未发起调用」读作「未测到」；行内已有三处独立痕迹可区分二者。
+> - 通过域 `pairs===8 && undetermined===0 && median<=1` 未改；`undetermined>0 ⇒ na` 系同批提交新增（更严）。**变更仅在「何为已判定」，不在「何为通过」。**
+>
+> 结论：本条为**读取缺陷**，非口径变化。
+
+**签署方**：设计方。**签署依据**：上述三处代码位置与 8 对行内事实。**签署效力**：3/5 可引用。**作废条件**：下列三项缺一即作废；作废后 line 4 回 FAIL、总分回 2/5，规格按 2/5 落笔。
+
+1. **tier 0 全链路确无 LLM 调用**，含**分档判断本身**。须以代码位置证明，不得以「显然」代替。若 triage 分类器或 CRG 索引构建调用模型，则 0 为低报，性质变为口径变化。
+   - 证据：`src/l2/triage.ts:35-39`（`staticTier`）与 `:47-68`（`computeTier`）是纯算术，输入只有文件数/节点数与截断标志，`risk_level` 不在其中；`src/l2/orchestrator.ts:109-173`（`decideTier`）只调用 `CrgTriage.analyze` 或 `staticTier`。
+   - 证据：`src/l3/crg.ts:86-117`（`CrgTriage.analyze`）是子进程调用——`config.sources.crg.command`（`code-review-graph`）+ `["impact","--repo",root,"--files",…]`——只读本地图库，无 HTTP。
+   - 证据：该工具 `cli.py:618-626` 把 `impact` 交给 `tools.get_impact_radius`（`tools/query.py:204` → `store.get_impact_radius`，SQLite 遍历）；`cli.py:477-497` 与 `tools/build.py:55-73` 规定嵌入刷新必须显式给 `--embedding-provider` + `--embedding-model`；`scripts/live-drill.ts:796`（`buildIndex`）只传 `["build","--repo",root,"-q","--skip-flows"]`，两者都没给 ⇒ 不建嵌入、不调模型；`impact` 子命令没有嵌入参数（`cli.py:1446-1462`）。
+   - 证据：本系统内唯一发起模型调用的源是 AOR（`src/l3/aor.ts:166-187` 的 `scan … --max-tokens-budget`）；`src/l2/orchestrator.ts:414` 在 tier 0 把它移出 `runnable`，`aorInvoked` 因此为 false（`:418`）。registry 的 npm/PyPI 请求（`src/l3/registry.ts:201-202`）是网络调用，不调模型、不产 token。
+2. **8/8 派生值逐对等于 0**，不得仅报 `median 0.000`。8 值中位数为第 4、5 位均值，三位小数可容纳 0.0004；本线结论实为「不花钱」而非「花得少」，故须报全 8 对。
+   - 8 对全表见下，逐对列出分母（该行 B4g 自报 tokens）与分子（B4 派生 tokens）。
+3. **派生须为三事实之合取**（`tier=0` ∧ `tier_source=triage` ∧ `sources` 无 `aor`），并须含**反例测试**：构造 `tier=0` 且 `aor_invoked=true`（或 `sources` 含 `aor`）之行，断言其**不得**派生为 0，只能为 `na` 或 FAIL。`aor_invoked` 落地后，此 legacy 推导**必须退役**。
+   - 实现：`scripts/acceptance.ts` 的 `tokenCost()` 读取 `row.sources.some((source) => source.source === "aor")`，三事实全部成立才派生 0。
+   - 反例测试：`tests/acceptance/acceptance.test.ts`「refuses to derive 0 for a tier-0 row that contradicts itself」构造两类行——`tier: 0` ∧ `aor_invoked: true`，以及 `tier: 0` ∧ `sources` 含 `aor`——断言整线为 `na`、`tokens_derived_pairs=0`、`undetermined_pairs=8`，不得为 PASS。
+   - 退役：代码注释写明「once every row records `aor_invoked`, delete it rather than keep two ways to say one thing」；本 run 的 171 行没有该字段（见上文第 1 条说明），故本文件仍用 legacy 推导。
+
+**8 对派生值全表（line 4 的证据；分子 = B4 派生 tokens，分母 = 该行 B4g 自报 tokens；数值由 `rows.jsonl` 复算，不手工填）**
+
+| 样本 | B4g tokens | B4 派生 tokens | 比值 |
+| --- | --- | --- | --- |
+| ts-cwe022-9001 | 9438 | 0 | 0.000000 |
+| ts-cwe022-9002 | 10980 | 0 | 0.000000 |
+| ts-cwe022-9003 | 9763 | 0 | 0.000000 |
+| ts-cwe022-9008 | 30275 | 0 | 0.000000 |
+| ts-cwe079-9005 | 17974 | 0 | 0.000000 |
+| ts-cwe094-9004 | 23485 | 0 | 0.000000 |
+| ts-cwe601-0001 | 27182 | 0 | 0.000000 |
+| ts-cwe918-9007 | 39037 | 0 | 0.000000 |
+
+8 对全部为 `0.000000`，中位数因此也是 0；「不花钱」的证据是 8/8 的 AOR 调用数为 0（`tier: 0` + `tier_source: "triage"` + `sources` 无 `aor`），不是中位数的小数位。
+
+**算术闭合**（两口径各自闭合，不互相换算）：行级 `26 + 14 = 40`（corrected 26 + repeats 14 = classed 40；另有 unfixed 10 行，三态 26/4/10）；样本级 `recurred 1 + unfixed 9 = 10`（corrected 0）。
+
+## 单位敏感性（为何不是换算法凑结果）
+
+warn 是样本级事件：同一 warn 辖 4 行，改好 3 行、未改 1 行，该 warn 未算处理完毕；行级计数会把「处理一半」记成 3 次正确 + 1 次失败，属把「处理一半」记为「处理过」，故样本级最坏优先是预注册中文的忠实读法，不是新判据。其余四条对单位不敏感：line 1 两单位下 `certified` 均为 0（FAIL 真因是 `blockRules: []`）、line 2 无单位（`registry_hits`）、line 4 两侧均 8 对、line 5 两侧均 53/53——**仅 line 3 敏感，且偏向更严**。
 
 ## 免检区的密钥形状串：来源登记
 
@@ -121,4 +168,4 @@ line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 
 
 ## 生成方式
 
-`node .tmp/provenance.mjs`（一次性脚本，读取 `run.json`/`rows.jsonl` 与本目录文件后写出本文件；哈希为文件当时内容）。
+`node .tmp/provenance.mjs`（一次性脚本，读取 `run.json`/`rows.jsonl` 与本目录文件后写出本文件；哈希为文件当时内容）。此后新增的「line 4 的签署」「单位敏感性」两节与「8 对派生值全表」为手工写入；表中的 artifact 哈希仍由文件当时内容得出，未改动。
