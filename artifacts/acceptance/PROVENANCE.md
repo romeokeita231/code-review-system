@@ -75,7 +75,7 @@ npx tsx scripts/live-drill.ts --stage evaluate --allow-eval=eval-ds-2.0.0-202611
 | --- | --- | --- | --- | --- |
 | 1 | FAIL：`n=50` 行、`hits=0`、`recall_status=gated`、`missed=50` | FAIL：`n=10` 样本（`rows=50`）、`certified=0/10`、`block_face=empty`、`recall_status=unblockable`、`missed=10` | 不变 | 单位由行改样本（`scripts/acceptance.ts:720-723`）、`certifiedSubsets()` 读钉定配置（`:595-615`）：TS 子集 `blockRules: []` ⇒ `semgrep.ts:493` 的 `certified` 全 false ⇒ `orchestrator.ts:390` 丢掉 ⇒ `deny` 不可达；空阻断面按 D13 记 FAIL 而非 `na`（`:700-701`，`fdf4cdc`）。两处都更严 |
 | 2 | PASS：`registry_hits=2` | PASS：`registry_hits=2` | 不变 | 同函数同字段（`scripts/acceptance.ts:756-770`），同一批 `sources[].findings[].evidence` |
-| 3 | FAIL：`classed=40` 行、`corrected=26`、`repeats=14` | FAIL：`classed=10` 样本、`corrected=0`、`recurred=1`、`unfixed=9`（行级 26/4/10 作辅助） | 不变 | 三态互斥 + 样本级最坏优先（`scripts/acceptance.ts:775-841`）：40 是行、10 是样本；26 是行级、0 是样本级。换单位后闭合数下降，方向更严 |
+| 3 | FAIL：`classed=40` 行、`corrected=26`、`repeats=14` | FAIL：`classed_rows=40`、`corrected` 26、`recurred` 4、`unfixed` 10（样本级附注 0/1/9） | 不变 | 三态互斥；D13 的分母是「被 warn 注入且带 GT 类别的**行数**」，行级为忠实读法（`scripts/acceptance.ts:789-841`），样本级最坏聚合作附注。40 行、corrected 26 两侧相同，结论同为 FAIL |
 | 4 | FAIL：`pairs=8`、`median_token_ratio=null`（8/8 对不可判定） | PASS：raw `na`、`median_token_ratio_derived=0.000`、`tokens_derived_pairs=8`、`undetermined=0` | **FAIL→PASS（+1）** | 见下段 |
 | 5 | PASS：`warned=53 anchored=53` | PASS：`warned=53 anchored=53` | 不变 | 同函数同字段（`scripts/acceptance.ts:1020-1033`） |
 
@@ -125,11 +125,11 @@ line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 
 
 8 对全部为 `0.000000`，中位数因此也是 0；「不花钱」的证据是 8/8 的 AOR 调用数为 0（`tier: 0` + `tier_source: "triage"` + `sources` 无 `aor`），不是中位数的小数位。
 
-**算术闭合**（两口径各自闭合，不互相换算）：行级 `26 + 14 = 40`（corrected 26 + repeats 14 = classed 40；另有 unfixed 10 行，三态 26/4/10）；样本级 `recurred 1 + unfixed 9 = 10`（corrected 0）。
+**算术闭合**（两口径各自闭合，不互相换算）：行级 `26 + 4 + 10 = 40`（corrected 26 / recurred 4 / unfixed 10；即旧读数的 `26 + 14 = 40`，其中 repeats 14 = 4 + 10）；样本级 `0 + 1 + 9 = 10`。
 
 ## 单位敏感性（为何不是换算法凑结果）
 
-warn 是样本级事件：同一 warn 辖 4 行，改好 3 行、未改 1 行，该 warn 未算处理完毕；行级计数会把「处理一半」记成 3 次正确 + 1 次失败，属把「处理一半」记为「处理过」，故样本级最坏优先是预注册中文的忠实读法，不是新判据。其余四条对单位不敏感：line 1 两单位下 `certified` 均为 0（FAIL 真因是 `blockRules: []`）、line 2 无单位（`registry_hits`）、line 4 两侧均 8 对、line 5 两侧均 53/53——**仅 line 3 敏感，且偏向更严**。
+`[CRS-WARN]` 的发射粒度是**按事件注入、按 Finding 入文**：`src/l2/orchestrator.ts:490` 每次 post 审查生成一条 `disposition.text`，text 内每个 eligible finding 占一行（本 run 的 warn 行 text 含 1–3 行 `[CRS-WARN]`；53 条 warn 行分布在 20 个样本上，单样本最多 5 行）。计数因此有两级：`warned_rows`（`scripts/acceptance.ts` 的 `metrics.warned_rows`，按行）与 `warned_samples`（`metrics.warned_samples`，按样本去重）。D13 line 3 的分母写的是「被 warn 注入、且该样本 ground truth 至少有一个 CWE 类别的**行数**」，故**行级为忠实读法**；样本级「最坏优先」（`:816-827`）是最坏情况聚合，不是预注册单位。两者在本 run 结论一致：行级 corrected 26/40、样本级 corrected 0/10，均 FAIL；闸门 3/5 不变。其余四条对单位不敏感：line 1 两单位下 `certified` 均为 0（FAIL 真因 `blockRules: []`）、line 2 无单位、line 4 两侧 8 对、line 5 两侧 53/53——仅 line 3 敏感。
 
 ## 免检区的密钥形状串：来源登记
 

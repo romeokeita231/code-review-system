@@ -834,11 +834,18 @@ export function evaluateAcceptance(
   const classedSamples = sampleStates.size;
   const rowsIn = (state: Line3State): number =>
     rowStates.filter((entry) => entry.state === state).length;
+  // D13's denominator is the number of warned *rows* whose sample has a ground
+  // truth class, so the gate is read off rows: every such warn row must be
+  // corrected, none may recur, none may go unanswered. The per-sample states
+  // below are the worst-case aggregate of those rows (a sample with three
+  // corrected writes and one unfixed write is `unfixed`), which is what makes a
+  // "half-handled" warning visible in the sample-level numbers; the two agree
+  // by construction because a sample is `corrected` only when all its rows are.
   const line3Pass =
-    classedSamples > 0 &&
-    correctedSamples.length === classedSamples &&
-    recurredSamples.length === 0 &&
-    unfixedSamples.length === 0;
+    rowStates.length > 0 &&
+    rowsIn("corrected") === rowStates.length &&
+    rowsIn("recurred") === 0 &&
+    rowsIn("unfixed") === 0;
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
     state: stateOf(null, line3Pass),
