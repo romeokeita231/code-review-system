@@ -3,20 +3,25 @@
 # files back as CRLF and the recorded `content_sha256` / `sha256:` anchors would
 # stop recomputing. The gate goes red rather than passing silently - but a
 # registry that only verifies on one machine is not a registry.
+#
+# Four roots, no gaps. `artifacts/*.json` was one line away from missing
+# `artifacts/report/`, and the secret gate recomputes `sha256:` anchors on two
+# files under `research/` as well. A new tree that gets hashed adds its root
+# here; the list is closed, not illustrative.
 
-# Dataset tree. `content_sha256` itself is sha256(`before` + NUL + `after`) over
-# the parsed fields (scripts/build-ds2.ts:304, scripts/verify-dataset.ts:780), so
-# it does not move with line endings; what does move is `build-ds2.ts --check`,
-# which re-emits the tree and compares it byte for byte.
+artifacts/** -text
 datasets/** -text
-
-# Acceptance evidence: the provenance anchors are sha256 of the file on disk.
-artifacts/acceptance/** -text
-
-# Run artefacts that carry their own hash (preregistration, staged-context,
-# block-gaps, calibration): same rule, same reason.
-artifacts/*.json -text
-
-# Generated contracts: `npm run check:schema` re-emits them and fails on any
-# byte difference, so a CRLF checkout would read as a schema drift.
+research/** -text
 schemas/** -text
+
+# Why `datasets/**`: `content_sha256` itself is sha256(`before` + NUL + `after`)
+# over the parsed fields (scripts/build-ds2.ts:304, scripts/verify-dataset.ts:780),
+# so it does not move with line endings; what does move is `build-ds2.ts --check`,
+# which re-emits the tree and compares it byte for byte.
+#
+# Why `research/**`: `.github/secret_scanning.yml` exempts it from the provider
+# shapes, and PROVENANCE.md answers with `sha256:` anchors the gate recomputes -
+# a CRLF checkout would break those anchors, not just the exit code.
+#
+# Why `schemas/**`: `npm run check:schema` re-emits them and fails on any byte
+# difference, so a CRLF checkout would read as a schema drift.

@@ -61,6 +61,28 @@ run 目录 `runs/live/eval-ds-2.0.0-20261114T132232` 不在版本库内。报告
 1. 本 run 的行**没有** `aor_invoked` 字段（该字段本提交才落地）。line4 的 0 由 `tier: 0` + `tier_source: "triage"` 推导：`src/l2/orchestrator.ts` 在 tier 0 时把 AOR 移出 runnable 集合，没有任何代码路径能在 tier 0 发起 AOR 调用。报告把它与 raw `na` 并列打印，并逐对记录 `basis`。
 2. 设计方裁定原文（`2/5`）保留在 `original-2of5/`，引用规则：原始数字可原样引用，但每句须自带总体与分母，且不得作为质量结论。
 
+## 同一 run 的两个成绩：原始 2/5 与重算 3/5
+
+`original-2of5/` 与 `artifacts/acceptance/*` 是**同一 run**（`runs/live/eval-ds-2.0.0-20261114T132232`）、**同一份 171 行 `rows.jsonl`**（哈希 `4e55f3c4…`，见上表）在两个版本的评估器下的两次读数：行数据未动，判定代码只动了 `scripts/acceptance.ts`（`335635c`、`4e09756`、`8defdde`、`fdf4cdc`；`30711d8` 只改输出与闸门计数的表示）。重算命令：
+
+```
+npx tsx scripts/live-drill.ts --stage evaluate --allow-eval=eval-ds-2.0.0-20261114T132232
+```
+
+产物与入库的 `report.md`/`verdict.md`/`verdict.json` 逐字节相同（`git status --porcelain artifacts/acceptance` 为空）。
+
+| line | 原始 2/5 | 重算 3/5 | 状态 | 原因（判定代码/字段） |
+| --- | --- | --- | --- | --- |
+| 1 | FAIL：`n=50` 行、`hits=0`、`recall_status=gated`、`missed=50` | FAIL：`n=10` 样本（`rows=50`）、`certified=0/10`、`block_face=empty`、`recall_status=unblockable`、`missed=10` | 不变 | 单位由行改样本（`scripts/acceptance.ts:720-723`）、`certifiedSubsets()` 读钉定配置（`:595-615`）：TS 子集 `blockRules: []` ⇒ `semgrep.ts:493` 的 `certified` 全 false ⇒ `orchestrator.ts:390` 丢掉 ⇒ `deny` 不可达；空阻断面按 D13 记 FAIL 而非 `na`（`:700-701`，`fdf4cdc`）。两处都更严 |
+| 2 | PASS：`registry_hits=2` | PASS：`registry_hits=2` | 不变 | 同函数同字段（`scripts/acceptance.ts:756-770`），同一批 `sources[].findings[].evidence` |
+| 3 | FAIL：`classed=40` 行、`corrected=26`、`repeats=14` | FAIL：`classed=10` 样本、`corrected=0`、`recurred=1`、`unfixed=9`（行级 26/4/10 作辅助） | 不变 | 三态互斥 + 样本级最坏优先（`scripts/acceptance.ts:775-841`）：40 是行、10 是样本；26 是行级、0 是样本级。换单位后闭合数下降，方向更严 |
+| 4 | FAIL：`pairs=8`、`median_token_ratio=null`（8/8 对不可判定） | PASS：raw `na`、`median_token_ratio_derived=0.000`、`tokens_derived_pairs=8`、`undetermined=0` | **FAIL→PASS（+1）** | 见下段 |
+| 5 | PASS：`warned=53 anchored=53` | PASS：`warned=53 anchored=53` | 不变 | 同函数同字段（`scripts/acceptance.ts:1020-1033`） |
+
+line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 B4 行全部记录 `tier: 0`、`tier_source: "triage"`、`tokens: null`，且 `sources` 里没有 `aor` 条目（8/8）；`src/l2/orchestrator.ts:414` 在 tier 0 把 AOR 移出 runnable 集合，`aorInvoked` 因此为 false——**没有任何代码路径能在 tier 0 发起 AOR 调用**。旧 `tokensOf()`（`scripts/acceptance.ts:432-436`）只读 `tokens` 字段，把「没发起调用」读成「没测到」，8/8 对因此得 `na`；新 `tokenCost()`（`:889-898`）读同一行已记录的 tier 决策得 0，并把 raw `na` 与 derived `0.000` 并列打印、逐对记 `basis`。同一提交还把 `undetermined>0` 定为 `na`（更严），两个方向相反。判据 `median <= 1` 未改。
+
+**阈值、口径、通过域都没有变**，唯一变化是把一行本来就可读的事实（AOR 未发起 ⇒ 成本 0）从「缺失」改为「读到」。若设计方判定这仍是口径变化，则 line 4 回到 FAIL、总分为 2/5，规格按 2/5 落笔——判定权在规格，证据在此。
+
 ## 免检区的密钥形状串：来源登记
 
 `datasets/`、`research/`、`artifacts/acceptance/` 已按 `.github/secret_scanning.yml` 免检。免检的对价是来源登记：凡含密钥形状串的文件，本表必须回答三件事——**谁放进来的**（引入提交）、**字节来自何处**（字节来源）、**凭什么可复核**（可复算锚）。`scripts/secret-gate.ts` 的第二层闸门按本表判定：缺行、行不可解析、或无锚，均失败。

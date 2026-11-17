@@ -65,13 +65,15 @@ Both direct transports need facilities the confined sandbox denies:
 | SSH | `ssh (…): fatal error - couldn't create signal pipe, Win32 error 5` | Git for Windows' MSYS ssh needs a named pipe |
 | HTTPS | `failed to execute prompt script (exit code 66)` | the credential helper shells out for a prompt |
 
-So `git push` has to run with full sandbox access here; the error text above is how you tell a sandbox denial from a network failure. `Test-NetConnection github.com -Port 443` was true throughout, which rules out connectivity.
+So `git push` has to run with full sandbox access here; the error text above is how you tell a sandbox denial from a network failure. `Test-NetConnection github.com -Port 443` is true throughout, which rules out connectivity.
+
+**This is an environment conclusion, not a network or credential one.** Both direct transports fail in the sandbox with the errors above, while the same commands succeed outside it with the same host, the same key and the same credential store; nothing in DNS, the firewall, the key or the helper changes between the two runs. A push that fails here is a sandbox denial until the identical command succeeds with full access — checking DNS, the firewall or the SSH key first is looking in the wrong place.
 
 `git push origin <branch>` authenticates from the SSH key, so there is no credential to rotate. A push can still fail with `Connection was reset` or a 21 s timeout: retry, the connection is what is intermittent, not the credentials.
 
 ## The three exempt zones
 
-`datasets/`, `research/` and `artifacts/acceptance/` are exempt from secret scanning (`.github/secret_scanning.yml`) because they hold external bytes verbatim - rewriting them would change `content_sha256` and break every archived run that cites the hash. Every path whose bytes are hashed is also pinned `-text` in `.gitattributes` (`datasets/**`, `artifacts/acceptance/**`, `artifacts/*.json`): with `core.autocrlf=true`, a fresh checkout would rewrite them as CRLF and the anchors would stop recomputing.
+`datasets/`, `research/` and `artifacts/acceptance/` are exempt from secret scanning (`.github/secret_scanning.yml`) because they hold external bytes verbatim - rewriting them would change `content_sha256` and break every archived run that cites the hash. Every path whose bytes are hashed is also pinned `-text` in `.gitattributes` (`datasets/**`, `artifacts/**`, `research/**`, `schemas/**`): with `core.autocrlf=true`, a fresh checkout would rewrite them as CRLF and the anchors would stop recomputing.
 
 Three rules keep the exemption from becoming a hole:
 

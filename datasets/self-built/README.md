@@ -47,6 +47,18 @@ does not identify the population on its own; `content_sha256_root` does:
 one negative as well. Neither added a positive, so `26/9` versus `26/8` is a
 population change, not a measurement change.
 
+**Population identity is the `rows.jsonl` `sample_id` set, not `version`.** The
+archived conclusions are keyed by the 20 sample ids the run's 171 rows carry
+(`runs/live/eval-ds-2.0.0-20261114T132232`); they do not depend on the version
+string, which is a label here. That is the premise that makes the deviation
+above acceptable: if the archive carried only a version and no sample ids, the
+version would have to identify the population, and this table would not be
+enough.
+
+**A builder fix that changes the root also requires a version bump.** That is
+the first case the guard meets, and the one it most needs to stop: two different
+contents under one name are worse than no version number at all.
+
 `scripts/build-ds2.ts` now refuses to emit a changed root under an unchanged
 version, so the next population change fails the build until the version is
 bumped. Reading a number off this dataset therefore requires **version + root**,
