@@ -102,6 +102,7 @@ line 4 是唯一变好的格，也是唯一需要论证的格。归档 8 对的 
    - 证据：`src/l3/crg.ts:86-117`（`CrgTriage.analyze`）是子进程调用——`config.sources.crg.command`（`code-review-graph`）+ `["impact","--repo",root,"--files",…]`——只读本地图库，无 HTTP。
    - 证据：该工具 `cli.py:618-626` 把 `impact` 交给 `tools.get_impact_radius`（`tools/query.py:204` → `store.get_impact_radius`，SQLite 遍历）；`cli.py:477-497` 与 `tools/build.py:55-73` 规定嵌入刷新必须显式给 `--embedding-provider` + `--embedding-model`；`scripts/live-drill.ts:796`（`buildIndex`）只传 `["build","--repo",root,"-q","--skip-flows"]`，两者都没给 ⇒ 不建嵌入、不调模型；`impact` 子命令没有嵌入参数（`cli.py:1446-1462`）。
    - 证据：本系统内唯一发起模型调用的源是 AOR（`src/l3/aor.ts:166-187` 的 `scan … --max-tokens-budget`）；`src/l2/orchestrator.ts:414` 在 tier 0 把它移出 `runnable`，`aorInvoked` 因此为 false（`:418`）。registry 的 npm/PyPI 请求（`src/l3/registry.ts:201-202`）是网络调用，不调模型、不产 token。
+   - 证据边界（版本）：CRG 的代码位置来自本机安装的 `code-review-graph` **2.3.9**（`%APPDATA%\uv\tools\code-review-graph\Lib\site-packages\code_review_graph\`），其 `cli.py` 修改时间 **2026-11-12**，早于本 run 起点 `2026-11-14T05:22:51.946Z`，期间未重装。`run.json` 的 `frozen_instruments` 只钉了 semgrep/ocr/aor_model，**没有 CRG 版本**——这是 spec「CRG 版本待钉」的已知缺口，本条证据对该安装成立。
 2. **8/8 派生值逐对等于 0**，不得仅报 `median 0.000`。8 值中位数为第 4、5 位均值，三位小数可容纳 0.0004；本线结论实为「不花钱」而非「花得少」，故须报全 8 对。
    - 8 对全表见下，逐对列出分母（该行 B4g 自报 tokens）与分子（B4 派生 tokens）。
 3. **派生须为三事实之合取**（`tier=0` ∧ `tier_source=triage` ∧ `sources` 无 `aor`），并须含**反例测试**：构造 `tier=0` 且 `aor_invoked=true`（或 `sources` 含 `aor`）之行，断言其**不得**派生为 0，只能为 `na` 或 FAIL。`aor_invoked` 落地后，此 legacy 推导**必须退役**。
