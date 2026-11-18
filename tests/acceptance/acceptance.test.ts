@@ -719,6 +719,20 @@ describe("instrument identity", () => {
     );
   });
 
+  it("refuses a CRG version that no longer matches the installed binary", () => {
+    const pinned = { ...FROZEN, crg: { version: "2.3.9" } };
+    expect(() => assertInstrumentIdentity([oneRow()], pinned, { version: "2.4.0" })).toThrow(
+      /crg version 2.3.9 != current 2.4.0/,
+    );
+  });
+
+  it("keeps a run staged before CRG was pinned readable", () => {
+    // Missing is not drifted: the old run is marked incomplete by `evaluate`,
+    // and re-reading it must not fail on a field it never had.
+    expect(() => assertInstrumentIdentity([oneRow()], FROZEN)).not.toThrow();
+    expect(() => assertInstrumentIdentity([oneRow()], FROZEN, { version: "2.4.0" })).not.toThrow();
+  });
+
   it("prints the observed identity when it matches the pin", () => {
     const truth = new Map([["a", truthOf("a", "high", ["semgrep"])]]);
     const report = evaluateAcceptance([oneRow()], truth, gaps, { frozenInstruments: FROZEN });
@@ -892,6 +906,42 @@ describe("event kinds in the false-positive denominator", () => {
     });
     expect(report.lines[3]!.detail).toContain("median_token_ratio=na");
     expect(report.lines[3]!.detail).toContain("median_token_ratio_derived=0.000");
+  });
+
+  it("derives 0 from the recorded decision, not from the tier, when the row says so", () => {
+    // Same shape as the legacy test above, but every B4 row carries
+    // `aor_invoked: false`. The basis counter must attribute all eight to the
+    // field; a single `tier 0 via triage` here would mean the new column is
+    // being ignored in favour of the old inference.
+    const truth = new Map<string, SampleTruth>();
+    const rows: AcceptanceRowLike[] = [];
+    truth.set("pos-1", truthOf("pos-1", "high", ["semgrep"]));
+    rows.push(row({ sample: "pos-1", baseline: "B4", ts: 1 }));
+    for (let index = 0; index < 8; index += 1) {
+      const sample = `low-${index}`;
+      truth.set(sample, truthOf(sample, "low", []));
+      rows.push({
+        ...row({ sample, baseline: "B4", ts: 500 + index, latency_ms: 400 }),
+        tokens: null,
+        tier: 0,
+        tier_source: "triage",
+        aor_invoked: false,
+      });
+      rows.push({
+        ...row({ sample, baseline: "B4g", ts: 600 + index, latency_ms: 400 }),
+        tokens: 10000,
+        tier: 2,
+        tier_source: "none",
+        aor_invoked: true,
+      });
+    }
+    const report = evaluateAcceptance(rows, truth, gaps, { rowsSource: "live" });
+    expect(report.lines[3]!.state).toBe("pass");
+    expect(report.lines[3]!.detail).toContain("aor_invoked:false 8, tier 0 via triage 0");
+    expect(report.lines[3]!.metrics).toMatchObject({
+      median_token_ratio_derived: 0,
+      tokens_derived_pairs: 8,
+    });
   });
 
   it("refuses to derive 0 for a row that did ask AOR and lost the token count", () => {

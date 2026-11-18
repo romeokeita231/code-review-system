@@ -7,8 +7,10 @@ import type { ReviewRow } from "../../src/contracts/index.js";
 import {
   allSamples,
   assertCostCeiling,
+  assertNoOrphanWriter,
   assertOneShot,
   assertRunDir,
+  assertRunDuration,
   assertStrata,
   attachUpstreamContext,
   baselineConfigPath,
@@ -23,12 +25,14 @@ import {
   loadStagedContext,
   newRunDir,
   NON_DEGRADABLE_GATES,
+  observeOrphanWriter,
   ocrDrifted,
   parseDegradedGates,
   POSITIVE_CAP_PER_CLASS,
   planDrill,
   projectStrata,
   readRunManifest,
+  runDurationMs,
   stageDrill,
   toAcceptanceRows,
   writePrompt,
@@ -405,6 +409,9 @@ describe("run identity", () => {
       plan,
       degradedGates: ["dsh profile"],
       frozen: loadFrozenPin(),
+      // Injected so the test does not depend on the graph CLI being installed;
+      // the CLI path queries `code-review-graph --version` instead.
+      crg: { version: "2.3.9", at: "2026-11-13T04:00:00.000Z" },
       evidence: {
         bundle: {
           check: "mtime",
@@ -440,7 +447,10 @@ describe("run identity", () => {
 
     const manifest = readRunManifest(outDir, DATASET);
     expect(manifest.dataset_version).toBe("ds-2.0.0");
-    expect(manifest.frozen_instruments).toEqual(loadFrozenPin());
+    expect(manifest.frozen_instruments).toEqual({
+      ...loadFrozenPin(),
+      crg: { version: "2.3.9", at: "2026-11-13T04:00:00.000Z" },
+    });
     expect(manifest.frozen_instruments.aor_model.id).toBe("deepseek-flash");
     expect(manifest.degraded_gates).toEqual(["dsh profile"]);
     // The manifest says the bundle judgement was a proxy, and what it saw.
@@ -847,6 +857,98 @@ describe("evaluate refuses a drifted measurement", () => {
     const text = formatStrata([], { B4: 1009, B4g: "not_applicable" });
     expect(text).toContain("index build: B4 1009ms, B4g not_applicable");
     expect(text).not.toContain("B4g 0ms");
+  });
+
+  it("refuses to print N/5 for a run that hit the wall-clock cap", async () => {
+    const { root, outDir } = await collectedRun(false);
+    const manifest = JSON.parse(readSync(join(outDir, "run.json"), "utf8")) as Record<string, unknown>;
+    await writeFile(
+      join(outDir, "run.json"),
+      `${JSON.stringify(
+        {
+          ...manifest,
+          truncated: true,
+          duration_ms: 45 * 60_000,
+          ocr_identity: {
+            before: { version: "v1.13.6", binary: "ocr", sha256: "abc", at: "2026-11-13T04:30:05Z" },
+            after: { version: "v1.13.6", binary: "ocr", sha256: "abc", at: "2026-11-13T05:15:05Z" },
+            drifted: false,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const report = await evaluate(outDir, DATASET, "artifacts/block-gaps.json", join(root, "out"), {
+      language: "typescript",
+      perCwe: { "079": 1 },
+    });
+    expect(report.truncated).toBe(true);
+    expect(report.gate).toBeNull();
+    const written = readSync(join(root, "out", "report.md"), "utf8");
+    expect(written).toContain("TRUNCATED");
+  });
+});
+
+describe("a capped pass is a prefix, not a result", () => {
+  const identity = { version: "v1.13.6", binary: "ocr", sha256: "abc", at: "2026-11-13T04:30:05Z" };
+
+  it("takes the duration from the ocr identity window, never from created_at", () => {
+    const manifest = {
+      created_at: "2026-11-13T04:30:05Z",
+      ocr_identity: {
+        before: identity,
+        after: { ...identity, at: "2026-11-13T05:15:05Z" },
+        drifted: false,
+      },
+      duration_ms: 45 * 60_000,
+    };
+    expect(runDurationMs(manifest)).toBe(45 * 60_000);
+    expect(assertRunDuration(manifest as never)).toBe(45 * 60_000);
+    // A closed window is required: staging time is not a substitute.
+    expect(() => assertRunDuration({ created_at: "2026-11-13T04:30:05Z", duration_ms: 1000 } as never)).toThrow(
+      /no closed ocr_identity window/,
+    );
+    expect(() =>
+      assertRunDuration({ ...manifest, duration_ms: 45 * 60_000 + 61_000 } as never),
+    ).toThrow(/differs from the ocr_identity span/);
+  });
+
+  it("reports a writer that kept growing, and refuses the collect", async () => {
+    const root = await mkdtemp(join(tmpdir(), "crs-orphan-"));
+    tempDirs.push(root);
+    const jsonl = join(root, "review.jsonl");
+    await writeFile(jsonl, "{}\n", "utf8");
+    const growing = observeOrphanWriter(jsonl, 4242, 80);
+    setTimeout(() => {
+      void writeFile(jsonl, "{}\n{}\n", "utf8");
+    }, 20);
+    const observed = await growing;
+    expect(observed.growing).toBe(true);
+    expect(observed.pid).toBe(4242);
+    expect(() =>
+      assertNoOrphanWriter({
+        passes: [
+          {
+            baseline: "B4",
+            pass: "write",
+            timed_out: true,
+            elapsed_ms: 45 * 60_000,
+            orphan_writer: observed.growing,
+            pid: observed.pid,
+            jsonl_bytes_at_timeout: observed.bytesAtTimeout,
+            jsonl_bytes_after_wait: observed.bytesAfterWait,
+          },
+        ],
+      }),
+    ).toThrow(/refusing to collect/);
+
+    await writeFile(join(root, "stopped.jsonl"), "{}\n", "utf8");
+    const stopped = await observeOrphanWriter(join(root, "stopped.jsonl"), 4242, 50);
+    expect(stopped.growing).toBe(false);
+    expect(stopped.pid).toBeNull();
+    expect(() => assertNoOrphanWriter({ passes: [] })).not.toThrow();
   });
 });
 

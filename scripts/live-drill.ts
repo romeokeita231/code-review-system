@@ -17,7 +17,7 @@ import { computeTier, configuredModelOf, parseAorProbe } from "../src/l2/index.j
 import { createCrgTriage } from "../src/l3/index.js";
 import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { certifiedSubsets, evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
+import { assertInstrumentIdentity, certifiedSubsets, evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { runSecretGate } from "./secret-gate.js";
 import { arg } from "./shared.js";
 import type { StagedContext } from "./upstream-context.js";
@@ -353,6 +353,11 @@ export interface StageOptions {
   degradedGates?: string[];
   /** The pin this run must be reproducible against, frozen before it started. */
   frozen: FrozenInstruments;
+  /**
+   * The graph CLI observed at staging time. Injected only by tests; the CLI path
+   * queries the installed binary so a config cannot name its own version.
+   */
+  crg?: CrgIdentity;
   /** What the probes saw; `null` fields mean "not probed", never "fine". */
   evidence: RunEvidence;
   /** The one-shot token: the run name, and any run it archived to get here. */
@@ -514,6 +519,24 @@ export interface OcrIdentityRecord {
   drifted: boolean;
 }
 
+/**
+ * One pass of one baseline, recorded so a timeout is a fact rather than a
+ * guess. `orphan_writer` is only meaningful after `timed_out`: it says a
+ * process was still appending to `review.jsonl` 30 s after the cap, so the
+ * tree cannot be shown to have stopped growing.
+ */
+export interface RunPassRecord {
+  baseline: "B4" | "B4g";
+  pass: "write" | "correction";
+  timed_out: boolean;
+  elapsed_ms: number;
+  orphan_writer: boolean;
+  /** PID of the dsh process when the writer could not be shown to have stopped. */
+  pid: number | null;
+  jsonl_bytes_at_timeout: number | null;
+  jsonl_bytes_after_wait: number | null;
+}
+
 export interface RunManifest {
   dataset_version: string;
   dataset_dir: string;
@@ -521,6 +544,18 @@ export interface RunManifest {
   /** The pin the numbers must be reproduced against, frozen before the run. */
   frozen_instruments: FrozenInstruments;
   created_at: string;
+  /**
+   * True when any pass hit its wall-clock cap. The rows are a prefix of the
+   * run, so `evaluate` must not print a gate score for it. Absent on old runs.
+   */
+  truncated?: boolean;
+  /** Per-pass timing and writer liveness; absent on old runs. */
+  passes?: RunPassRecord[];
+  /**
+   * Wall-clock span from `ocr_identity.before.at` to `after.at`. Never derived
+   * from `created_at` or the run directory name, both of which predate the run.
+   */
+  duration_ms?: number | null;
   plan: { positives: number; low_risk: number; controls: number; probe: number; negatives_create: number };
   degraded_gates: string[];
   /** A proxy, and the manifest says so: the bundle is compared by mtime. */
@@ -627,6 +662,31 @@ export function ocrDrifted(before: OcrIdentity, after: OcrIdentity): boolean {
   return before.version !== after.version;
 }
 
+export interface CrgIdentity {
+  version: string;
+  at: string;
+}
+
+/**
+ * The installed graph CLI, queried where it runs.
+ *
+ * Tier is assigned by this binary, so a run without its version cannot say which
+ * ruler drew the tier boundary. The value is taken from `--version` at staging
+ * time and stored in the run's frozen pin: a config edit cannot move it, and a
+ * pin file cannot claim it.
+ */
+export async function crgIdentity(): Promise<CrgIdentity> {
+  const output = await firstLineOf("code-review-graph", ["--version"]);
+  const version = /\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/.exec(output)?.[0] ?? null;
+  if (version === null) {
+    throw new Error(
+      `refusing to stage: \`code-review-graph --version\` returned ${JSON.stringify(output)}; ` +
+        `the graph CLI's identity has to be observed, not configured`,
+    );
+  }
+  return { version, at: new Date().toISOString() };
+}
+
 /**
  * Where the self-updater lives, and whether it is still there.
  *
@@ -665,12 +725,122 @@ export async function recordOcrIdentity(
   return record;
 }
 
-async function writeRunManifest(options: StageOptions): Promise<RunManifest> {  const manifest: RunManifest = {
+async function jsonlBytes(path: string): Promise<number | null> {
+  try {
+    return (await stat(path)).size;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Did something keep writing after the cap?
+ *
+ * `execa` can only say it signalled the process it spawned. A detached child,
+ * or a grandchild that inherited the handle, keeps appending to `review.jsonl`;
+ * a tree that grew in the following 30 s is not a completed run, whatever the
+ * row count says. The check is deliberately slow and deliberately recorded:
+ * "we did not look" and "it stopped" are different facts.
+ */
+export async function observeOrphanWriter(
+  jsonl: string,
+  pid: number | null,
+  waitMs = 30_000,
+): Promise<{ growing: boolean; bytesAtTimeout: number | null; bytesAfterWait: number | null; pid: number | null }> {
+  const bytesAtTimeout = await jsonlBytes(jsonl);
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  const bytesAfterWait = await jsonlBytes(jsonl);
+  const grew =
+    bytesAtTimeout !== null &&
+    bytesAfterWait !== null &&
+    bytesAfterWait > bytesAtTimeout;
+  const appeared = bytesAtTimeout === null && bytesAfterWait !== null;
+  const growing = grew || appeared;
+  return { growing, bytesAtTimeout, bytesAfterWait, pid: growing ? pid : null };
+}
+
+/**
+ * The run duration, from the only two clocks that bracket the run.
+ *
+ * `created_at` and the directory name are written at staging time, about an
+ * hour before the first row; using either makes the report claim a duration
+ * the run never had. Returning `null` means the window is not closed, which is
+ * not the same as a zero-length run.
+ */
+export function runDurationMs(manifest: Pick<RunManifest, "ocr_identity">): number | null {
+  const before = manifest.ocr_identity?.before?.at ?? null;
+  const after = manifest.ocr_identity?.after?.at ?? null;
+  if (before === null || after === null) return null;
+  const start = Date.parse(before);
+  const end = Date.parse(after);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return end - start;
+}
+
+/** Prove the recorded duration and the identity window describe the same span. */
+export function assertRunDuration(manifest: RunManifest): number | null {
+  const computed = runDurationMs(manifest);
+  const recorded = manifest.duration_ms ?? null;
+  if (recorded === null) return computed;
+  if (computed === null) {
+    throw new Error(
+      `refusing to report: ${recorded} ms was recorded as the run duration, but run.json has no ` +
+        `closed ocr_identity window to check it against (created_at does not bracket the run)`,
+    );
+  }
+  if (Math.abs(recorded - computed) > 60_000) {
+    throw new Error(
+      `refusing to report: recorded run duration ${recorded} ms differs from the ocr_identity span ` +
+        `${computed} ms by more than 60 s - the duration was not derived from run.json's two observations`,
+    );
+  }
+  return computed;
+}
+
+/** A run whose writer could not be shown to have stopped is not collectable. */
+export function assertNoOrphanWriter(manifest: Pick<RunManifest, "passes">): void {
+  const orphans = (manifest.passes ?? []).filter((entry) => entry.orphan_writer);
+  if (orphans.length === 0) return;
+  throw new Error(
+    `refusing to collect: ${orphans.length} pass(es) kept writing after the timeout ` +
+      `(${orphans
+        .map(
+          (entry) =>
+            `${entry.baseline}/${entry.pass} pid ${entry.pid ?? "unknown"} ` +
+            `${entry.jsonl_bytes_at_timeout ?? "?"} -> ${entry.jsonl_bytes_after_wait ?? "?"} bytes`,
+        )
+        .join(", ")}). ` +
+      `The tree is still moving; its rows are not a finished measurement.`,
+  );
+}
+
+/** Persist the per-pass records, the truncation flag and the measured span. */
+export async function recordRunOutcome(
+  outDir: string,
+  outcome: { truncated: boolean; passes: RunPassRecord[] },
+): Promise<RunManifest> {
+  const manifestPath = join(outDir, "run.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as RunManifest;
+  manifest.truncated = outcome.truncated;
+  manifest.passes = outcome.passes;
+  manifest.duration_ms = runDurationMs(manifest);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return manifest;
+}
+
+async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
+  const crg = options.crg ?? (await crgIdentity());
+  const manifest: RunManifest = {
     dataset_version: options.plan.datasetVersion,
     dataset_dir: resolve(options.datasetDir),
     config_hash: sha256(await readFile(options.baseConfig, "utf8")),
-    frozen_instruments: options.frozen,
+    frozen_instruments: { ...options.frozen, crg },
     created_at: new Date().toISOString(),
+    truncated: false,
+    passes: [],
+    // Filled by the run stage from the ocr identity window; a staged run has no
+    // window yet, and 0 would read as "measured and instant".
+    duration_ms: null,
     plan: {
       positives: options.plan.positives.length,
       low_risk: options.plan.lowRisk.length,
@@ -1651,27 +1821,47 @@ export async function preflight(profile: string, options: PreflightOptions = {})
   return { ok: checks.every((check) => check.ok), checks, evidence };
 }
 
-export async function runTask(options: RunOptions, prompt: string): Promise<{ stdout: string; sessionId: string | null }> {
+export interface TaskResult {
+  stdout: string;
+  sessionId: string | null;
+  /** `true` when execa stopped the process at the wall-clock cap. */
+  timedOut: boolean;
+  elapsedMs: number;
+  /** The dsh pid, kept so a still-growing writer can be named. */
+  pid: number | null;
+}
+
+export async function runTask(options: RunOptions, prompt: string): Promise<TaskResult> {
   const scratch = join(options.outDir, "scratch", options.baseline);
   const overlay = join(options.outDir, options.baseline, "overlay.yml");
   const args = ["--profile", options.profile, "--patch", overlay];
   if (options.sessionId) args.push("--session-id", options.sessionId);
   args.push(prompt);
-  const result = await execa(process.execPath, [dshBinPath(), ...args], {
+  const started = Date.now();
+  const subprocess = execa(process.execPath, [dshBinPath(), ...args], {
     cwd: scratch,
     reject: false,
     timeout: options.timeoutMs ?? 45 * 60_000,
+    // A timeout that only signals the direct child leaves the agent's own
+    // children writing; the hard kill is what makes "the cap" mean the cap.
+    killSignal: "SIGTERM",
+    forceKillAfterTimeout: 5_000,
     env: { ...process.env, PATH: toolPath(), ...TOOL_ENV },
     stdio: "pipe",
   });
+  const pid = subprocess.pid ?? null;
+  const result = await subprocess;
   const stdout = `${result.stdout ?? ""}`;
   return {
     stdout,
     sessionId: firstSessionId(join(options.outDir, options.baseline, "review.jsonl"), stdout),
+    timedOut: result.timedOut === true,
+    elapsedMs: Date.now() - started,
+    pid,
   };
 }
 
-export async function runDsh(options: RunOptions): Promise<{ stdout: string; sessionId: string | null }> {
+export async function runDsh(options: RunOptions): Promise<TaskResult> {
   const scratch = join(options.outDir, "scratch", options.baseline);
   const prompt = options.correction ? CORRECTION_PROMPT : writePrompt(planCount(scratch));
   return runTask(options, prompt);
@@ -1955,7 +2145,10 @@ export function toAcceptanceRows(
 }
 
 export async function collect(plan: DrillPlan, outDir: string, datasetDir: string): Promise<void> {
-  readRunManifest(outDir, datasetDir);
+  const manifest = readRunManifest(outDir, datasetDir);
+  // A truncated run may still be collected when its writer demonstrably
+  // stopped; a run whose tree was still growing 30 s after the cap may not.
+  assertNoOrphanWriter(manifest);
   const pathToSample = new Map<string, string>();
   for (const sample of allSamples(plan)) pathToSample.set(sample.path, sample.sampleId);
   const all: AcceptanceRowLike[] = [];
@@ -1968,6 +2161,17 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
       rows.push(JSON.parse(line) as ReviewRow);
     }
     all.push(...toAcceptanceRows(rows, pathToSample, baseline));
+  }
+  // Every row a new run writes carries the field, so every new `rows.jsonl` has
+  // it on every line. The count is asserted here rather than assumed, because a
+  // missing field silently falls into the legacy tier read and turns "not
+  // measured" into 0.
+  const without = all.filter((row) => typeof row.aor_invoked !== "boolean").length;
+  if (without > 0) {
+    throw new Error(
+      `refusing to collect: ${without}/${all.length} row(s) carry no aor_invoked; ` +
+        `the ladder stopped writing rows without it, so this tree is from an older plugin or a partial write`,
+    );
   }
   await writeFile(join(outDir, "rows.jsonl"), all.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
 }
@@ -2012,10 +2216,23 @@ export async function evaluate(
   total: number;
   na: number;
   lines: Array<{ name: string; state: "pass" | "fail" | "na"; pass: boolean; detail: string }>;
+  /** A pass hit the wall-clock cap: the rows are a prefix, not the run. */
+  truncated: boolean;
+  /** Seconds the run actually took, from the ocr identity window only. */
+  duration_ms: number | null;
+  /**
+   * The score line, or `null` when the run may not be scored at all. A truncated
+   * run is refused rather than scored: an N/5 would present a prefix as a result.
+   */
+  gate: string | null;
 }> {
   // The run directory names its dataset and its pin; both are checked before any
   // number is printed, and `evaluateAcceptance` refuses a drifted instrument.
   const run = readRunManifest(outDir, datasetDir);
+  // A duration that disagrees with the identity window is a report bug, not a
+  // rounding difference: the two numbers claim to describe the same span.
+  const durationMs = assertRunDuration(run);
+  const truncated = run.truncated === true;
   // The binary is the instrument underneath the instrument. A run whose `ocr`
   // changed between the first and the last row has numbers from two rulers and
   // no way to say which row came from which; a run with no closing observation
@@ -2040,13 +2257,23 @@ export async function evaluate(
   // A pin edited after the run was staged is the same failure as a pin that was
   // never frozen: the goalposts moved between the measurement and the report.
   // The run carries its own copy, so this compares two records, not a record
-  // with a memory.
+  // with a memory. CRG is checked against the installed binary instead: it is
+  // observed at staging, not copied from the preregistration.
   const now = loadFrozenPin();
-  if (JSON.stringify(run.frozen_instruments) !== JSON.stringify(now)) {
+  const samePin = (pin: FrozenInstruments): string =>
+    JSON.stringify({ semgrep: pin.semgrep, ocr: pin.ocr, aor_model: pin.aor_model });
+  if (samePin(run.frozen_instruments) !== samePin(now)) {
     throw new Error(
       `refusing to evaluate: ${PREREGISTRATION} changed after ${outDir} was staged\n` +
         `  run:  ${JSON.stringify(run.frozen_instruments)}\n` +
         `  now:  ${JSON.stringify(now)}`,
+    );
+  }
+  const recordedCrg = run.frozen_instruments.crg ?? null;
+  if (recordedCrg === null) {
+    process.stdout.write(
+      `WARN 量具身份不完整 (instrument identity incomplete): ${outDir} was staged before CRG was pinned; ` +
+        `its tier boundary cannot be attributed to an installed graph CLI version\n`,
     );
   }
   // Only the collected acceptance rows. `B4/review.jsonl` is the plugin's own
@@ -2060,6 +2287,9 @@ export async function evaluate(
   for (const line of (await readFile(rowsPath, "utf8")).split("\n")) {
     if (line.trim().length === 0) continue;
     rows.push(JSON.parse(line) as AcceptanceRowLike);
+  }
+  if (recordedCrg !== null) {
+    assertInstrumentIdentity(rows, run.frozen_instruments, await crgIdentity());
   }
   const gaps = existsSync(gapsPath) ? JSON.parse(await readFile(gapsPath, "utf8")) : null;
   // The staging projection promised A: tier 0 and B: tier >= 1. If a row lands
@@ -2228,8 +2458,21 @@ export async function evaluate(
     ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
   });
   await mkdir(acceptanceOut, { recursive: true });
-  await writeFile(join(acceptanceOut, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");
-  await writeFile(join(acceptanceOut, "verdict.md"), report.verdict, "utf8");
+  const truncationNote = truncated
+    ? "\n> TRUNCATED: a pass hit its wall-clock cap. These rows are a prefix of the run; the gate is not reported.\n"
+    : "";
+  await writeFile(
+    join(acceptanceOut, "report.md"),
+    `# 验收结果表（${report.mode}）\n${truncationNote}\n${report.resultsTable}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(acceptanceOut, "verdict.md"),
+    truncated
+      ? `${report.verdict}\n\nTRUNCATED：本次 run 在某 pass 触发墙钟上限，行数据只是前缀；不发布 N/5。\n`
+      : report.verdict,
+    "utf8",
+  );
   await writeFile(
     join(acceptanceOut, "verdict.json"),
     `${JSON.stringify(
@@ -2251,6 +2494,9 @@ export async function evaluate(
     total,
     na: report.lines.filter((line) => line.state === "na").length,
     lines: report.lines.map(({ name, state, pass, detail }) => ({ name, state, pass, detail })),
+    truncated,
+    duration_ms: durationMs,
+    gate: truncated ? null : `${report.lines.filter((line) => line.state === "pass").length}/${report.lines.length}`,
   };
 }
 
@@ -2583,10 +2829,44 @@ async function main(): Promise<void> {
     // detached child: a single check before the run cannot see a swap that lands
     // during it, and a single check after cannot say when it happened.
     const before = await recordOcrIdentity(outDir, "before");
+    const passes: RunPassRecord[] = [];
+    let truncated = false;
     for (const baseline of ["B4", "B4g"] as const) {
       process.stdout.write(`running ${baseline}...\n`);
       const write = await runDsh({ outDir, profile, baseline, timeoutMs: 45 * 60_000 });
       process.stdout.write(`${baseline} write pass: ${write.stdout.trim().slice(-200)}\n`);
+      if (write.timedOut) {
+        truncated = true;
+        const orphan = await observeOrphanWriter(join(outDir, baseline, "review.jsonl"), write.pid);
+        passes.push({
+          baseline,
+          pass: "write",
+          timed_out: true,
+          elapsed_ms: write.elapsedMs,
+          orphan_writer: orphan.growing,
+          pid: orphan.pid,
+          jsonl_bytes_at_timeout: orphan.bytesAtTimeout,
+          jsonl_bytes_after_wait: orphan.bytesAfterWait,
+        });
+        process.stdout.write(
+          `TRUNCATED ${baseline} write pass at ${write.elapsedMs} ms` +
+            `${orphan.growing ? ` - writer still growing (pid ${write.pid ?? "unknown"})` : " - writer stopped"}\n`,
+        );
+        // Correction replays the same session and would only spend the rest of
+        // the window on a run whose rows are a prefix. B4g is skipped for the
+        // same reason: no gate can be printed for a truncated run.
+        break;
+      }
+      passes.push({
+        baseline,
+        pass: "write",
+        timed_out: false,
+        elapsed_ms: write.elapsedMs,
+        orphan_writer: false,
+        pid: null,
+        jsonl_bytes_at_timeout: null,
+        jsonl_bytes_after_wait: null,
+      });
       if (write.sessionId) {
         const fix = await runDsh({
           outDir,
@@ -2597,6 +2877,26 @@ async function main(): Promise<void> {
           timeoutMs: 20 * 60_000,
         });
         process.stdout.write(`${baseline} correction pass: ${fix.stdout.trim().slice(-200)}\n`);
+        let orphan = { growing: false, pid: null as number | null, bytesAtTimeout: null as number | null, bytesAfterWait: null as number | null };
+        if (fix.timedOut) {
+          truncated = true;
+          orphan = await observeOrphanWriter(join(outDir, baseline, "review.jsonl"), fix.pid);
+          process.stdout.write(
+            `TRUNCATED ${baseline} correction pass at ${fix.elapsedMs} ms` +
+              `${orphan.growing ? ` - writer still growing (pid ${fix.pid ?? "unknown"})` : " - writer stopped"}\n`,
+          );
+        }
+        passes.push({
+          baseline,
+          pass: "correction",
+          timed_out: fix.timedOut,
+          elapsed_ms: fix.elapsedMs,
+          orphan_writer: orphan.growing,
+          pid: orphan.pid,
+          jsonl_bytes_at_timeout: orphan.bytesAtTimeout,
+          jsonl_bytes_after_wait: orphan.bytesAfterWait,
+        });
+        if (truncated) break;
       }
     }
     // Recorded, never enforced here: aborting mid-run would leave a half
@@ -2607,6 +2907,14 @@ async function main(): Promise<void> {
       `ocr before: ${before.before?.version ?? "?"} sha256 ${before.before?.sha256?.slice(0, 12) ?? "unresolved"}\n` +
         `ocr after:  ${after.after?.version ?? "?"} sha256 ${after.after?.sha256?.slice(0, 12) ?? "unresolved"}` +
         `${after.drifted ? " - INSTRUMENT DRIFTED" : ""}\n`,
+    );
+    const outcome = await recordRunOutcome(outDir, { truncated, passes });
+    const measuredMs = outcome.duration_ms ?? null;
+    // The only duration the report may quote, and the span the identity check
+    // already brackets. `created_at` is staging time and is deliberately not
+    // consulted.
+    process.stdout.write(
+      `run duration: ${measuredMs === null ? "unmeasured (no closed ocr window)" : `${(measuredMs / 60_000).toFixed(1)} min (ocr_identity before -> after)`}\n`,
     );
     await recordActualCost(outDir);
   }
@@ -2629,13 +2937,25 @@ async function main(): Promise<void> {
     process.stdout.write(
       `${result.lines.map((line) => `${line.state.toUpperCase()} ${line.name} :: ${line.detail}`).join("\n")}\n`,
     );
-    process.stdout.write(
-      `闸门 ${result.pass}/${result.total}` +
-        `${result.na === 0 ? "" : `（na ${result.na}）`}\n`,
-    );
-    // Five lines, all in the denominator: `na` is not a pass and not an
-    // exemption, so anything short of 5/5 fails the gate (D13).
-    if (result.pass < result.total) process.exitCode = 3;
+    if (result.truncated) {
+      // A prefix is not a result. Printing "N/5" here would be the exact
+      // sentence the run cannot support.
+      process.stdout.write(
+        `TRUNCATED：run 在墙钟上限处结束，行数据只是前缀，不发布 N/5（见 ${
+          result.duration_ms === null ? "未测得时长" : `${(result.duration_ms / 60_000).toFixed(1)} min`
+        }）\n`,
+      );
+      process.exitCode = 3;
+    } else {
+      process.stdout.write(
+        `闸门 ${result.gate}` +
+          `${result.na === 0 ? "" : `（na ${result.na}）`}` +
+          `${result.duration_ms === null ? "" : `（时长 ${(result.duration_ms / 60_000).toFixed(1)} min，取 ocr_identity）`}\n`,
+      );
+      // Five lines, all in the denominator: `na` is not a pass and not an
+      // exemption, so anything short of 5/5 fails the gate (D13).
+      if (result.pass < result.total) process.exitCode = 3;
+    }
   }
 }
 

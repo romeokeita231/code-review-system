@@ -293,9 +293,19 @@ function sameCommit(a: string, b: string): boolean {
 export function assertInstrumentIdentity(
   rows: readonly AcceptanceRowLike[],
   frozen: FrozenInstruments,
+  /** The graph CLI as it runs now; omitted by callers that cannot observe it. */
+  currentCrg?: { version: string },
 ): Instruments {
   const problems: string[] = [];
   if (rows.length === 0) problems.push("no rows to evaluate");
+  // CRG draws the tier boundary but does not stamp rows, so its drift is a
+  // run-level fact: compare the pin with the installed binary, not with a row.
+  // A pin without `crg` is an old run - incomplete, not drifted.
+  if (frozen.crg !== undefined && currentCrg !== undefined && frozen.crg.version !== currentCrg.version) {
+    problems.push(
+      `crg version ${frozen.crg.version} != current ${currentCrg.version} - tier was drawn by a different graph CLI than the pin names`,
+    );
+  }
   const missing = rows.filter((row) => row.instrument === undefined).length;
   if (missing > 0) problems.push(`${missing} row(s) carry no instrument identity`);
 
@@ -887,19 +897,21 @@ export function evaluateAcceptance(
   const lowRisk = pairedCandidates.slice(0, 8);
   /**
    * A tier-0 row never asks AOR anything, so its token cost is 0 by
-   * construction. That 0 has to be read off a recorded decision: newer rows say
-   * `aor_invoked: false`, older rows say `tier: 0` + `tier_source: "triage"`
-   * (and the orchestrator filters AOR out of the runnable set for exactly that
-   * tier). A null token count is never, on its own, read as 0 (ADR-0008); a null
-   * on a row that *did* invoke AOR stays `na`.
+   * construction. That 0 has to be read off a recorded decision: every row the
+   * current orchestrator writes says `aor_invoked`, `false` on a tier-0 row.
+   * A null token count is never, on its own, read as 0 (ADR-0008); a null on a
+   * row that *did* invoke AOR stays `na`.
    *
-   * The legacy read is a conjunction of three facts, not one: tier 0, triage,
-   * and no `aor` entry in `sources`. Each fact alone describes a different row -
-   * a static-fallback tier 0 skipped AOR for a different reason, and a row that
-   * says tier 0 while carrying an `aor` source is self-contradictory. The honest
-   * read of a contradiction is `na`, never 0. This derivation is a compatibility
-   * read of a field the orchestrator has stopped relying on; once every row
-   * records `aor_invoked`, delete it rather than keep two ways to say one thing.
+   * `tier: 0` alone is not enough to derive 0: a static-fallback tier 0 skipped
+   * AOR for a different reason, and a row that says tier 0 while carrying an
+   * `aor` source is self-contradictory. The honest read of a contradiction is
+   * `na`, never 0.
+   *
+   * The `tier` branch below exists only for `rows.jsonl` written before the
+   * field was added (the archived ds-2 run is one). New runs are refused by
+   * `collect` when any row lacks the field, so the branch cannot be reached
+   * from a new run. Delete it once every run that still needs re-reading
+   * carries `aor_invoked`; do not keep two ways to say one thing.
    */
   const tokenCost = (
     row: AcceptanceRowLike,

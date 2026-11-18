@@ -526,6 +526,25 @@ dataset: a consumer that cannot check identity will eventually mix two measureme
 ds-1 staging that used to sit in `runs/live` beside the ds-2 run is exactly the entry point
 that rule closes.
 
+### A capped pass is a prefix, not a result (2026-11-18)
+
+`run` records `truncated: true`, the pass name and its elapsed time when DSH hits the
+wall-clock cap. A timed-out write pass skips its correction pass; B4g is skipped as well,
+because no gate may be printed for a prefix. `collect` refuses any pass whose
+`review.jsonl` was still growing 30 s after the cap (`orphan_writer`, with the dsh pid and
+both byte counts), since a tree that is still writing has not been shown to have stopped.
+`evaluate` refuses to print an `N/5` for a truncated run and marks the report `TRUNCATED`.
+
+The run duration is the `ocr_identity.before.at` → `after.at` span, recorded as
+`duration_ms`. `created_at` and the directory timestamp are staging time, about an hour
+before the first row, and are never used; a recorded duration that differs from the
+identity span by more than 60 s is a calculation error and `evaluate` refuses the run.
+
+Agent behaviour is read from the DSH side only. CRS's own `review.jsonl` records what the
+plugin wrote, not what the agent did; its line count carries no timing and may not be used
+to reconstruct "what the agent did in minute N". Any such statement needs a DSH-side
+source, otherwise it is deleted.
+
 `plan.controls` stages the defect-free rows the low-risk pool did not take — on `ds-2` that
 is the single `create` sample, which is 38 lines and therefore `high` risk. Low-risk rows
 that carry a defect are **not** staged (`3` of them on `ds-2`, all fit-split positives):

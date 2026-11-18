@@ -20,6 +20,16 @@ export interface FrozenInstruments {
    * `configured` is what the client asked for, which may be an alias.
    */
   aor_model: { provider: string; id: string; url: string | null; configured: string | null };
+  /**
+   * The graph CLI that decides tier, read from the binary at staging time.
+   *
+   * It is absent from the preregistration on purpose: a version typed into a
+   * config file is a claim, not an observation, and editing it would silently
+   * move the tier boundary. Runs staged before this field existed have no
+   * `crg`; they stay readable, marked as having an incomplete instrument
+   * identity, rather than being re-interpreted with today's binary.
+   */
+  crg?: { version: string };
 }
 
 export function loadFrozenPin(path = PREREGISTRATION): FrozenInstruments {
