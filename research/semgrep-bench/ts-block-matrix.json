@@ -1,0 +1,266 @@
+{
+  "date": "2026-11-18",
+  "engine": "semgrep-core 1.184.0 (pysemgrep wrapper hangs on --version in this environment; semgrep-core run directly)",
+  "ruleset": {
+    "path": "research/semgrep-bench/snapshot/ts_dedup.yaml",
+    "sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b"
+  },
+  "ts_positives": 20,
+  "by_split": {
+    "eval": {
+      "CWE-22": 2,
+      "CWE-79": 5,
+      "CWE-798": 1,
+      "CWE-89": 0,
+      "CWE-918": 1,
+      "CWE-94": 2
+    },
+    "fit": {
+      "CWE-22": 3,
+      "CWE-79": 2,
+      "CWE-798": 0,
+      "CWE-89": 2,
+      "CWE-918": 0,
+      "CWE-94": 2
+    }
+  },
+  "families": {
+    "CWE-22": {
+      "rules": [
+        "express-path-join-resolve-traversal",
+        "detect-non-literal-fs-filename",
+        "path-join-resolve-traversal"
+      ],
+      "positives": 5,
+      "strict_n": 0,
+      "file_level_n": 0,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-78": {
+      "rules": [
+        "detect-child-process.aws-lambda",
+        "deno-dangerous-run",
+        "spawn-git-clone",
+        "dangerous-spawn-shell",
+        "spawn-shell-true",
+        "shelljs-exec-injection",
+        "mcp-command-injection-typescript"
+      ],
+      "positives": 0,
+      "strict_n": 0,
+      "file_level_n": 0,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-79": {
+      "rules": [
+        "detect-angular-element-methods",
+        "detect-angular-element-taint",
+        "detect-angular-open-redirect",
+        "detect-angular-resource-loading",
+        "detect-angular-sce-disabled",
+        "detect-angular-trust-as-css-method",
+        "detect-angular-trust-as-html-method",
+        "detect-angular-trust-as-js-method",
+        "detect-angular-trust-as-method",
+        "detect-angular-trust-as-resourceurl-method",
+        "detect-angular-trust-as-url-method",
+        "detect-replaceall-sanitization",
+        "tainted-html-response.javascript-aws-lambda",
+        "tainted-html-string.javascript-aws-lambda",
+        "dom-based-xss",
+        "insecure-document-method",
+        "insecure-innerhtml",
+        "raw-html-concat",
+        "raw-html-join",
+        "direct-response-write",
+        "escape-function-overwrite",
+        "raw-html-format.express",
+        "insecure-createnodesfrommarkup",
+        "jquery-insecure-method",
+        "jquery-insecure-selector",
+        "prohibit-jquery-html",
+        "unknown-value-with-script-tag",
+        "monaco-hover-htmlsupport",
+        "angular-bypasssecuritytrust",
+        "nestjs-header-xss-disabled",
+        "react-markdown-insecure-html",
+        "react-dangerouslysetinnerhtml",
+        "react-href-var",
+        "react-unsanitized-method",
+        "react-unsanitized-property"
+      ],
+      "positives": 7,
+      "strict_n": 0,
+      "file_level_n": 0,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-798": {
+      "rules": [
+        "express-jwt-hardcoded-secret",
+        "express-session-hardcoded-secret",
+        "hardcoded-jwt-secret.jose",
+        "hardcoded-hmac-key",
+        "hardcoded-passport-secret"
+      ],
+      "positives": 1,
+      "strict_n": 0,
+      "file_level_n": 1,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-89": {
+      "rules": [
+        "knex-sqli",
+        "mysql-sqli.javascript-aws-lambda",
+        "pg-sqli",
+        "sequelize-sqli",
+        "tainted-sql-string.javascript-aws-lambda",
+        "node-knex-sqli",
+        "node-mssql-sqli",
+        "node-mysql-sqli",
+        "express-sequelize-injection",
+        "sequelize-raw-query"
+      ],
+      "positives": 2,
+      "strict_n": 2,
+      "file_level_n": 2,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-918": {
+      "rules": [
+        "chrome-remote-interface-compilescript-injection",
+        "express-phantom-injection",
+        "express-puppeteer-injection",
+        "express-wkhtmltoimage-injection",
+        "express-wkhtmltopdf-injection",
+        "express-ssrf",
+        "phantom-injection",
+        "playwright-addinitscript-code-injection",
+        "playwright-evaluate-arg-injection",
+        "playwright-evaluate-code-injection",
+        "playwright-goto-injection",
+        "playwright-setcontent-injection",
+        "puppeteer-evaluate-arg-injection",
+        "puppeteer-evaluate-code-injection",
+        "puppeteer-goto-injection",
+        "puppeteer-setcontent-injection",
+        "wkhtmltoimage-injection",
+        "wkhtmltopdf-injection",
+        "mcp-ssrf-typescript"
+      ],
+      "positives": 1,
+      "strict_n": 0,
+      "file_level_n": 0,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "CWE-94": {
+      "rules": [
+        "vm-runincontext-injection",
+        "tofastproperties-code-execution",
+        "express-sandbox-code-injection",
+        "express-vm-injection",
+        "express-vm2-injection",
+        "unsafe-dynamic-method",
+        "playwright-exposed-chrome-devtools",
+        "puppeteer-exposed-chrome-devtools",
+        "sandbox-code-injection",
+        "sequelize-tls-disabled-cert-validation",
+        "multiargs-code-execution",
+        "vm2-code-injection",
+        "vm2-context-injection"
+      ],
+      "positives": 4,
+      "strict_n": 0,
+      "file_level_n": 0,
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    }
+  },
+  "candidates": {
+    "express-sequelize-injection": {
+      "cwe": "CWE-89",
+      "strict_n": 2,
+      "positives": {
+        "ts-cwe089-0001": [
+          {
+            "rule": "express-sequelize-injection",
+            "start": 23,
+            "end": 23,
+            "in_defect": true
+          }
+        ],
+        "ts-cwe089-0002": [
+          {
+            "rule": "express-sequelize-injection",
+            "start": 34,
+            "end": 34,
+            "in_defect": true
+          }
+        ]
+      },
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    },
+    "sequelize-raw-query": {
+      "cwe": "CWE-89",
+      "strict_n": 2,
+      "positives": {
+        "ts-cwe089-0001": [
+          {
+            "rule": "sequelize-raw-query",
+            "start": 23,
+            "end": 23,
+            "in_defect": true
+          }
+        ],
+        "ts-cwe089-0002": [
+          {
+            "rule": "sequelize-raw-query",
+            "start": 34,
+            "end": 34,
+            "in_defect": true
+          }
+        ]
+      },
+      "fp_bait": {
+        "ts-cwe022-9001": [],
+        "ts-cwe022-9002": [],
+        "ts-cwe022-9003": []
+      }
+    }
+  },
+  "fixtures": {
+    "logfileServer.ts": "ts-cwe022-9001 before",
+    "quarantineServer.ts": "ts-cwe022-9002 before",
+    "keyServer.ts": "ts-cwe022-9003 before"
+  }
+}
