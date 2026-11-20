@@ -86,7 +86,8 @@ and these gates are not on it:
 | `plugin bundle` | shipped identity: the rows are written by `dist/plugin.js`, so a bundle older than `src/` measures the previous system, and its rows are in a shape `evaluate` refuses — discovered after the eval is spent |
 | `aor model` | the deepest instrument: `ocr`'s commit says which client asked, the served model says what answered, and P2/P4 read AOR's output |
 | `frozen pin` | the pin and the config must agree; otherwise an edit to the config silently moves the goalposts |
-| `crg budget` | `crgQueryMs` decides whether the triage layer answers at all: below the graph CLI's floor the query times out, the tier falls back to the static ladder, and every row is tier 0 without anything reporting a failure. The value is frozen with the latency table that produced it |
+| `crg budget` | `crgQueryMs` decides whether the triage layer answers at all: below the graph CLI's floor the query times out, the tier falls back to the static ladder, and every row is tier 0 without anything reporting a failure. The frozen number is a floor, and the config must be at or above it |
+| `semgrep budget` | `semgrepKillMs` is the one key the scan actually reads: below the warm latency the scan is killed before it answers, and the row reads as "semgrep found nothing here" rather than as a timeout |
 | `secret not tracked` | the repository is public; a key in a tracked file is a leak no `.gitignore` can undo |
 
 The `plugin bundle` check is a **proxy**: it compares mtimes. A checkout or a copy moves a
@@ -346,6 +347,41 @@ earlier, not re-measured for this note: semgrep's cold path 2.8 s against 0.65 s
 same shape. Together the two fixed costs are ~3.4 s of the 8 s `callMs`, before either source
 has read a line. A budget that treats them as marginal times out the way `crgQueryMs = 300`
 did.
+
+### Re-measurement attempt, 2026-11-19: no comparable number
+
+The rule is `budget >= ceil(1.5 x p99)`, an inequality rather than an equality: a value above
+the floor is headroom, a value below it is a source that disappears. Re-running the same 44-call
+method on the same three pinned checkouts, with the same instrument version
+(`code-review-graph` 2.3.9), produced:
+
+| repo | n | archived p50 / p99 | 2026-11-19 p50 / p99 | build_ms archived -> today |
+| --- | --- | --- | --- | --- |
+| goof | 10 | 581 / 662 | 1966 / 2042 | 1510 -> 2351 |
+| dvna | 14 | 528 / 639 | 1922 / 2055 | 1051 -> 2601 |
+| juice-shop | 20 | 598 / 652 | 2063 / 2364 | 27928 -> 48182 |
+
+The tell is `build_ms`: it touches no query path and it also roughly doubles. `impact` latency is
+process start, so a machine-level slowdown moves both numbers together, while nothing in
+`configs/` or in the pinned trees changed between the two measurements. Taken at face value the
+new pooled p99 would be 2364 ms, floor `ceil(1.5 x 2364) = 3546 ms`, and `3546 + 5000 > 8000` —
+on this machine the two pre-path floors no longer fit inside `callMs` at all.
+
+semgrep could not be measured: a single-file TypeScript scan did not return within five minutes,
+`semgrep --version` hangs the same way, and `SEMGREP_SEND_METRICS=off` with
+`SEMGREP_ENABLE_VERSION_CHECK=0` changes neither. A live run in that state would kill every
+semgrep call at 5 s and degrade to a single source without printing anything.
+
+Verdict: **environment not usable, no comparable number**. `frozen.budgets` is unchanged and no
+budget moved. What the attempt does establish is that the floor has to be checkable, because the
+config that passed every gate in November measures 3.4x slower five days later on the same
+commits.
+
+Cold start is recorded but not gated: this pipeline re-materialises files into a fresh temporary
+directory and a fresh rule path on every call, so there is no repository-level rule cache. "Cold"
+is a machine-level page-cache state that cannot be produced on demand, so only the warm p99 can
+be asserted; the once-observed 2.8 s stands as a single observation with its evidence level
+written down.
 
 ### Wiring is checked without degrading a gate
 

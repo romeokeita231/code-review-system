@@ -36,7 +36,6 @@ export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
             blockRules: ["command-injection-os-system"],
           },
         ],
-        timeoutsMs: { callMs: 5000 },
         ...overrides.semgrep,
       },
       aor: {
@@ -79,7 +78,6 @@ export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
       semgrepKillMs: 5000,
       crgQueryMs: 300,
       fusionWriteMs: 500,
-      softCapMs: 6000,
       cacheTtlMs: 300000,
       maxConcurrency: 2,
     },

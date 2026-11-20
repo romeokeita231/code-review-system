@@ -9,6 +9,7 @@ import { calibrationCategories, DatasetManifest } from "../src/contracts/index.j
 import {
   assertBudgetRelations,
   assertCalibrationMatches,
+  killProcessTree,
   loadCalibration,
   sha256,
   TOOL_ENV,
@@ -1540,21 +1541,52 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     wall_clock_estimate: null,
   };
   const env = { ...process.env, PATH: toolPath(), ...TOOL_ENV };
+  // #49: a hung `semgrep` has to fail this gate inside the budget the scan path
+  // gives it, not after the 120s a merely slow tool would need. The python
+  // wrapper retries a denied settings write ~2^31 times, so "slow" never ends.
+  const semgrepKillMs =
+    frozenFromConfig(options.baseConfig ?? resolve("configs/b4.json")).budgets.semgrepKillMs || 5_000;
 
-  const run = async (name: string, file: string, args: string[], cwd = process.cwd()) => {
-    const result = await execa(file, args, { cwd, env, reject: false, timeout: 120_000 });
+  const run = async (
+    name: string,
+    file: string,
+    args: string[],
+    cwd = process.cwd(),
+    timeoutMs = 120_000,
+  ) => {
+    const child = execa(file, args, {
+      cwd,
+      env,
+      reject: false,
+      windowsHide: true,
+      stdin: "ignore",
+      // Killing only the direct child orphans the grandchildren, which then
+      // keep the stdio pipes open and `await` never settles (#49). So execa's
+      // own timeout is disabled and the whole tree is killed below, once.
+      killSignal: "SIGKILL",
+      forceKillAfterDelay: 0,
+      cleanup: true,
+    });
+    let timedOut = false;
+    const treeKill = setTimeout(() => {
+      timedOut = true;
+      killProcessTree(child.pid);
+    }, timeoutMs);
+    const result = await child.finally(() => clearTimeout(treeKill));
     const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+    const detail =
+      result.exitCode === 0 ? (output.split("\n")[0] ?? "").slice(0, 160) : output.slice(-400);
     checks.push({
       name,
-      ok: result.exitCode === 0,
+      ok: result.exitCode === 0 && !timedOut,
       // One line only: `semgrep scan --json` prints its whole envelope on one
       // line, which otherwise buries the rest of the table.
-      detail: result.exitCode === 0 ? (output.split("\n")[0] ?? "").slice(0, 160) : output.slice(-400),
+      detail: timedOut ? `timed out after ${timeoutMs}ms: ${detail}` : detail,
     });
-    return result.exitCode === 0;
+    return result.exitCode === 0 && !timedOut;
   };
 
-  await run("semgrep version", "semgrep", ["--version"]);
+  await run("semgrep version", "semgrep", ["--version"], process.cwd(), semgrepKillMs);
   const probeDir = join(tmpdir(), `crs-semgrep-probe-${Date.now()}`);
   await mkdir(probeDir, { recursive: true });
   const probeFile = join(probeDir, "probe.ts");
@@ -1572,6 +1604,7 @@ export async function preflight(profile: string, options: PreflightOptions = {})
       probeFile,
     ],
     probeDir,
+    semgrepKillMs,
   );
   await run("ocr", "ocr", ["--version"]);
   if (options.aorCommit !== undefined && options.aorCommit.length > 0) {
@@ -1755,27 +1788,55 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     // `crgQueryMs` decides whether the triage layer answers at all, so it is
     // pinned like an instrument rather than left as a tunable: a value below the
     // graph CLI's floor does not slow the tier down, it removes it.
+    //
+    // The frozen number is a floor, not a target (#42, ADR-0009): a config above
+    // it buys headroom, a config below it makes the source disappear silently.
     const frozenBudgets = loadFrozenBudgets();
     const configBudgets = frozenFromConfig(
       options.baseConfig ?? resolve(arg("--config", "configs/b4.json")),
     ).budgets;
     const prePath = configBudgets.semgrepKillMs + configBudgets.crgQueryMs;
     const fits = prePath <= configBudgets.callMs;
-    const matches = frozenBudgets !== null && configBudgets.crgQueryMs === frozenBudgets.crg_query_ms;
+    const crgAboveFloor =
+      frozenBudgets !== null && configBudgets.crgQueryMs >= frozenBudgets.crg_query_ms;
     checks.push({
       name: "crg budget",
-      ok: matches && fits,
+      ok: crgAboveFloor && fits,
       detail: !fits
         ? `semgrepKillMs ${configBudgets.semgrepKillMs} + crgQueryMs ${configBudgets.crgQueryMs} = ` +
           `${prePath}ms exceeds callMs ${configBudgets.callMs}ms`
         : frozenBudgets === null
           ? `${PREREGISTRATION} has no frozen.budgets.crg_query_ms: the value that decides whether ` +
             `the triage layer answers was never frozen, so there is nothing to hold the config to`
-          : matches
-            ? `crgQueryMs ${configBudgets.crgQueryMs} == frozen; pre path ${configBudgets.semgrepKillMs} + ` +
-              `${configBudgets.crgQueryMs} = ${prePath}ms <= callMs ${configBudgets.callMs}ms` +
+          : crgAboveFloor
+            ? `crgQueryMs ${configBudgets.crgQueryMs} >= floor ${frozenBudgets.crg_query_ms}; ` +
+              `pre path ${configBudgets.semgrepKillMs} + ${configBudgets.crgQueryMs} = ${prePath}ms ` +
+              `<= callMs ${configBudgets.callMs}ms` +
               `${frozenBudgets.derivation === null ? "" : `; ${frozenBudgets.derivation}`}`
-            : `config crgQueryMs ${configBudgets.crgQueryMs} != frozen ${frozenBudgets.crg_query_ms}`,
+            : `config crgQueryMs ${configBudgets.crgQueryMs} < floor ${frozenBudgets.crg_query_ms}: ` +
+              `below the graph CLI's own latency the query always times out and the tier silently ` +
+              `falls back to the static ladder`,
+    });
+    // The semgrep kill value has its own floor for the same reason, and only one
+    // reader now: `budgets.semgrepKillMs`. A config below the floor does not run
+    // a faster scan, it kills the scan before it can answer.
+    const semgrepAboveFloor =
+      frozenBudgets !== null &&
+      frozenBudgets.semgrep_kill_ms > 0 &&
+      configBudgets.semgrepKillMs >= frozenBudgets.semgrep_kill_ms;
+    checks.push({
+      name: "semgrep budget",
+      ok: semgrepAboveFloor,
+      detail:
+        frozenBudgets === null || frozenBudgets.semgrep_kill_ms === 0
+          ? `${PREREGISTRATION} has no frozen.budgets.semgrep_kill_ms: the floor behind the scan's ` +
+            `kill budget was never frozen, so there is nothing to hold the config to`
+          : semgrepAboveFloor
+            ? `semgrepKillMs ${configBudgets.semgrepKillMs} >= floor ${frozenBudgets.semgrep_kill_ms}` +
+              `${frozenBudgets.semgrep_derivation === null ? "" : `; ${frozenBudgets.semgrep_derivation}`}`
+            : `config semgrepKillMs ${configBudgets.semgrepKillMs} < floor ${frozenBudgets.semgrep_kill_ms}: ` +
+              `below the warm latency the scan is killed before it can answer and the row looks ` +
+              `like "semgrep found nothing here"`,
     });
   }
   // The repository is public, and three of its zones are exempt from GitHub's
@@ -1819,6 +1880,41 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     });
   }
   return { ok: checks.every((check) => check.ok), checks, evidence };
+}
+
+/**
+ * #49: `--stage run` used to open with nothing but a manifest read, so a
+ * `semgrep` that hung was only discovered row by row - each row a 5s timeout
+ * that looks exactly like "semgrep found nothing here". The gate `prepare`
+ * runs is now run again before the first write, so the failure lands before
+ * the drill instead of inside it.
+ */
+async function gatePreflight(
+  profile: string,
+  options: PreflightOptions,
+): Promise<{ ready: Preflight; waived: string[] }> {
+  const ready = await preflight(profile, options);
+  const allow = parseDegradedGates(
+    process.argv,
+    ready.checks.map((check) => check.name),
+  );
+  const waived = ready.checks.filter((check) => !check.ok && allow.includes(check.name));
+  const blocking = ready.checks.filter((check) => !check.ok && !allow.includes(check.name));
+  if (waived.length > 0) {
+    process.stdout.write(
+      `DEGRADED (waived by name): ${waived.map((check) => check.name).join(", ")}\n`,
+    );
+  }
+  if (blocking.length > 0) {
+    process.stdout.write(
+      `${ready.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
+    );
+    throw new Error(
+      `preflight failed: ${blocking.map((check) => check.name).join(", ")}; ` +
+        `only a non-blocking gate may be waived, and only by name (--allow-degraded=<gate>)`,
+    );
+  }
+  return { ready, waived: waived.map((check) => check.name) };
 }
 
 export interface TaskResult {
@@ -2728,25 +2824,14 @@ async function main(): Promise<void> {
   }
   if (isEvalStage) {
     const frozen = loadFrozenPin();
-    const ready = await preflight(profile, { plan, ruleset, datasetDir, aorCommit, baseConfig, frozen });
-    const known = ready.checks.map((check) => check.name);
-    const allow = parseDegradedGates(process.argv, known);
-    const waived = ready.checks.filter((check) => !check.ok && allow.includes(check.name));
-    const blocking = ready.checks.filter((check) => !check.ok && !allow.includes(check.name));
-    if (waived.length > 0) {
-      process.stdout.write(
-        `DEGRADED (waived by name): ${waived.map((check) => check.name).join(", ")}\n`,
-      );
-    }
-    if (blocking.length > 0) {
-      process.stdout.write(
-        `${ready.checks.map((check) => `${check.ok ? "OK  " : "FAIL"} ${check.name} :: ${check.detail}`).join("\n")}\n`,
-      );
-      throw new Error(
-        `preflight failed: ${blocking.map((check) => check.name).join(", ")}; ` +
-          `only a non-blocking gate may be waived, and only by name (--allow-degraded=<gate>)`,
-      );
-    }
+    const { ready, waived } = await gatePreflight(profile, {
+      plan,
+      ruleset,
+      datasetDir,
+      aorCommit,
+      baseConfig,
+      frozen,
+    });
     // Cost before the one-shot lock: the ceiling check is the last thing that
     // can still refuse without having touched anything, and archiving an old
     // run for a run that then fails its own budget would destroy evidence.
@@ -2809,7 +2894,7 @@ async function main(): Promise<void> {
       baseConfig,
       profile,
       plan,
-      degradedGates: waived.map((check) => check.name),
+      degradedGates: waived,
       frozen,
       evidence: ready.evidence,
       oneShot: {
@@ -2823,6 +2908,16 @@ async function main(): Promise<void> {
   if (stage === "run" || stage === "all") {
     if (!process.env["DEEPSEEK_API_KEY"]) {
       throw new Error("DEEPSEEK_API_KEY is required to run live agent sessions");
+    }
+    if (stage === "run") {
+      await gatePreflight(profile, {
+        plan,
+        ruleset,
+        datasetDir,
+        aorCommit,
+        baseConfig,
+        frozen: loadFrozenPin(),
+      });
     }
     readRunManifest(outDir, datasetDir);
     // Two observations bracket the window, because `ocr` updates itself from a

@@ -62,7 +62,7 @@ async function scan(config: RunConfig, sample: DatasetSample, root: string): Pro
     event: changeEventOf(sample),
     tier: 1,
     config,
-    deadline: Date.now() + config.sources.semgrep.timeoutsMs.callMs * 4,
+    deadline: Date.now() + config.budgets.semgrepKillMs * 4,
     sourceText: { [sample.path]: sample.after },
   });
 }

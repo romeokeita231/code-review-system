@@ -51,9 +51,6 @@
           "nontaint": true
         }
       ],
-      "timeoutsMs": {
-        "callMs": 5000
-      },
       "osemgrepCommand": "osemgrep",
       "fullBlockMaxBytes": 102400
     },
@@ -110,7 +107,6 @@
     "semgrepKillMs": 5000,
     "crgQueryMs": 993,
     "fusionWriteMs": 500,
-    "softCapMs": 6000,
     "cacheTtlMs": 300000,
     "maxConcurrency": 2
   },

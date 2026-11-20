@@ -30,7 +30,6 @@ export const BASE_CONFIG: RunConfig = {
           blockRules: [],
         },
       ],
-      timeoutsMs: { callMs: 5000 },
     },
     aor: {
       enabled: true,
@@ -60,7 +59,6 @@ export const BASE_CONFIG: RunConfig = {
     semgrepKillMs: 5000,
     crgQueryMs: 300,
     fusionWriteMs: 500,
-    softCapMs: 6000,
     cacheTtlMs: 300000,
     maxConcurrency: 2,
   },

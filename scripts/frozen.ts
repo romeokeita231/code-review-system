@@ -87,18 +87,35 @@ export function loadCostCeiling(path = PREREGISTRATION): number {
  */
 export interface FrozenBudgets {
   crg_query_ms: number;
+  /** The floor implied by the warm semgrep latency, not a target value. */
+  semgrep_kill_ms: number;
   derivation: string | null;
+  semgrep_derivation: string | null;
 }
 
 export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null {
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
-    frozen?: { budgets?: { crg_query_ms?: unknown; derivation?: unknown } };
+    frozen?: {
+      budgets?: {
+        crg_query_ms?: unknown;
+        semgrep_kill_ms?: unknown;
+        derivation?: unknown;
+        semgrep_derivation?: unknown;
+      };
+    };
   };
-  const value = raw.frozen?.budgets?.crg_query_ms;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  const crg = raw.frozen?.budgets?.crg_query_ms;
+  if (typeof crg !== "number" || !Number.isFinite(crg) || crg <= 0) return null;
+  const semgrep = raw.frozen?.budgets?.semgrep_kill_ms;
   const derivation = raw.frozen?.budgets?.derivation;
+  const semgrepDerivation = raw.frozen?.budgets?.semgrep_derivation;
   return {
-    crg_query_ms: Math.trunc(value),
+    crg_query_ms: Math.trunc(crg),
+    semgrep_kill_ms:
+      typeof semgrep === "number" && Number.isFinite(semgrep) && semgrep > 0
+        ? Math.trunc(semgrep)
+        : 0,
     derivation: typeof derivation === "string" ? derivation : null,
+    semgrep_derivation: typeof semgrepDerivation === "string" ? semgrepDerivation : null,
   };
 }

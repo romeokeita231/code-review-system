@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { CalibrationArtifact, RunConfig, type Baseline } from "../contracts/index.js";
 
@@ -19,6 +20,32 @@ export class ConfigError extends Error {
  * off for every process this system starts.
  */
 export const TOOL_ENV: Readonly<Record<string, string>> = Object.freeze({ OCR_NO_UPDATE: "1" });
+
+/**
+ * execa's `timeout` signals only the direct child. On Windows the grandchildren
+ * inherit its stdout/stderr handles, so the promise never settles and the
+ * caller waits forever - #49's "processes need manual termination". The chain
+ * is `semgrep.exe -> python -> semgrep-core`, so the whole tree has to go.
+ */
+export function killProcessTree(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } else {
+      process.kill(-pid, "SIGKILL");
+    }
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+  }
+}
 
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);

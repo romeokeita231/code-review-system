@@ -101,6 +101,32 @@
         "line 4's detail now starts with source=live|synthetic|unknown. The wiring fixture's 1000/1100 renders as 0.909, identical in shape to a measurement - ADR-0008's fifth occurrence, and the reason the ADR's test beats a four-word whitelist",
         "after the run: rows with no truncation evidence say --max-tools was not observed binding. They do not license \"the whole difference is attributable to whether AOR was called\", because the budget channel cannot be excluded either"
       ]
+    },
+    {
+      "version": 8,
+      "at": "2026-11-19T19:22:50+08:00",
+      "note": "v2-v7 are unchanged. This revision registers the floor rule and the re-measurement attempt of 2026-11-19. No frozen value, bound, tier boundary or prediction was changed.",
+      "changes": [
+        "the budget rule is `budget >= ceil(1.5 x p99)`, an inequality and not an equality: a value above the floor is headroom, a value below it makes the source disappear. The p99 stays in this file and in docs/live-drill.md; the gate checks the arithmetic and the inequality, and no runtime config field carries a measurement",
+        "`budgets.semgrepKillMs` and `sources.semgrep.timeoutsMs.callMs` are two copies of one number, and the copy the code reads is the second one (src/l3/semgrep.ts). Freezing the first protects nothing; the collapse to one key is registered here and implemented in a separate change",
+        "`softCapMs` is registered as dead: the schema requires it and no code reads it, and its intended meaning duplicates the existing sum invariant",
+        "re-measurement attempt, 2026-11-19: impact p50 1966 / 1922 / 2063 ms and p99 2042 / 2055 / 2364 ms over 44 calls on goof / dvna / juice-shop at their pinned commits, against the 662 ms pooled p99 recorded in v4; build_ms also roughly doubles (1510 -> 2351, 1051 -> 2601, 27928 -> 48182) on the same instrument version. Judged an environment fault rather than a budget signal, because the doubling also lands on the build path and because 3546 + 5000 > 8000 would be the conclusion if it were taken at face value. frozen.budgets is unchanged and the re-measurement criterion of #42 stays unmet",
+        "semgrep is not measurable in that environment: a single-file TypeScript scan did not return within five minutes and `--version` hangs, with and without telemetry disabled. Recorded so that the next run does not read a silent single-source result as a measurement",
+        "semgrep cold start is not gateable: every call re-materialises files into a fresh temporary directory and a fresh rule path, so there is no repository-level rule cache and cold is a machine-level page-cache state. Only the warm p99 can be asserted; the 2.8 s cold figure stands as a single observation",
+        "P1-P4 and every previously frozen value are unchanged"
+      ]
+    },
+    {
+      "version": 9,
+      "at": "2026-11-20T15:55:00+08:00",
+      "note": "v2-v8 are unchanged. This revision registers the implementation of ADR-0009: the semgrep kill key is collapsed to one, `softCapMs` is deleted, and both pre-path budgets are gated against a floor.",
+      "changes": [
+        "the semgrep kill value is now read from `budgets.semgrepKillMs` alone; `sources.semgrep.timeoutsMs.callMs` is removed from the schema and from every config, so the number the run enforces is the number the gate reads",
+        "`budgets.softCapMs` is deleted: it had no reader and its intended meaning duplicated the sum invariant",
+        "frozen.budgets.semgrep_kill_ms = 975 is added as a floor, derived as ceil(650 x 1.5) from the single warm observation. It is registered with its evidence level rather than as a target: 5000 is the shipped value and stays above it",
+        "preflight gates are now `crg budget` (config crgQueryMs >= frozen floor) and `semgrep budget` (config semgrepKillMs >= frozen floor); equality is no longer required, because a value above the floor is headroom, not a deviation",
+        "`assertBudgetRelations` still asserts only `semgrepKillMs + crgQueryMs <= min(callMs, turnMs)`; no measurement enters the runtime config"
+      ]
     }
   ],
   "observations": {
@@ -135,6 +161,8 @@
       "at": "2026-11-13T21:05:00+08:00",
       "crg_query_ms": 993,
       "derivation": "crgQueryMs = ceil(p99(impact latency) x 1.5) = ceil(662 x 1.5) = 993 ms; measured on the three pinned sources, n = 44, before any tier was computed",
+      "semgrep_kill_ms": 975,
+      "semgrep_derivation": "semgrepKillMs floor = ceil(warm latency x 1.5) = ceil(650 x 1.5) = 975 ms; the 0.65 s figure is the single 2026-11-13 observation recorded in docs/live-drill.md, used as the p99 stand-in because the warm sample was never taken to a p99. Evidence level: single observation, not a distribution. Cold start is not gated at all (no repository-level rule cache).",
       "latency": {
         "method": "`code-review-graph impact --repo <pinned checkout> --files <one file>` timed through CrgTriage.analyze, files sampled evenly from `git ls-files`; each repository indexed once with `build --skip-flows`",
         "unit": "ms",

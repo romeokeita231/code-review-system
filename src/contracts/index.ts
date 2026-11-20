@@ -174,7 +174,6 @@ export const Budgets = z.object({
   semgrepKillMs: z.number().int().positive(),
   crgQueryMs: z.number().int().positive(),
   fusionWriteMs: z.number().int().positive(),
-  softCapMs: z.number().int().positive(),
   cacheTtlMs: z.number().int().positive(),
   maxConcurrency: z.number().int().positive(),
 });
@@ -203,7 +202,6 @@ export const SemgrepSourceConfig = z.object({
       }),
     )
     .nonempty(),
-  timeoutsMs: z.object({ callMs: z.number().int().positive() }),
 });
 
 export const AorSourceConfig = z.object({

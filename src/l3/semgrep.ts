@@ -10,7 +10,7 @@ import type {
   SourceStatus,
 } from "../contracts/index.js";
 
-import { TOOL_ENV, sha256 } from "../config/index.js";
+import { TOOL_ENV, killProcessTree, sha256 } from "../config/index.js";
 import { asNumber, asRecord, asString } from "./json.js";
 
 export interface CommandRequest {
@@ -34,9 +34,8 @@ export interface CommandRunner {
 export const execaRunner: CommandRunner = {
   async run(request: CommandRequest): Promise<CommandResult> {
     const { execa } = await import("execa");
-    const result = await execa(request.file, request.args, {
+    const child = execa(request.file, request.args, {
       cwd: request.cwd,
-      timeout: request.timeoutMs,
       killSignal: "SIGKILL",
       forceKillAfterDelay: 0,
       cleanup: true,
@@ -45,12 +44,25 @@ export const execaRunner: CommandRunner = {
       stdin: "ignore",
       env: { ...process.env, ...TOOL_ENV },
     });
-    return {
-      stdout: typeof result.stdout === "string" ? result.stdout : "",
-      stderr: typeof result.stderr === "string" ? result.stderr : "",
-      exitCode: result.exitCode ?? -1,
-      timedOut: result.timedOut ?? false,
-    };
+    // #49: execa's own timeout kills only the direct child; on Windows the
+    // grandchildren keep the stdio pipes open, so `await` never settles. Time
+    // it here and kill the tree in one shot, before anything is orphaned.
+    let timedOut = false;
+    const treeKill = setTimeout(() => {
+      timedOut = true;
+      killProcessTree(child.pid);
+    }, request.timeoutMs);
+    try {
+      const result = await child;
+      return {
+        stdout: typeof result.stdout === "string" ? result.stdout : "",
+        stderr: typeof result.stderr === "string" ? result.stderr : "",
+        exitCode: result.exitCode ?? -1,
+        timedOut,
+      };
+    } finally {
+      clearTimeout(treeKill);
+    }
   },
 };
 
@@ -242,7 +254,7 @@ export class SemgrepSource implements SignalSource {
     }
 
     const remaining = input.deadline - Date.now();
-    const timeoutMs = Math.min(semgrepConfig.timeoutsMs.callMs, remaining);
+    const timeoutMs = Math.min(this.config.budgets.semgrepKillMs, remaining);
     if (timeoutMs <= 0) return blank("timeout", "deadline", startedAt, 0, targets.length);
 
     let tempRoot: string;

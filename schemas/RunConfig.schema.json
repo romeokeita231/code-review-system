@@ -44,10 +44,6 @@
               "exclusiveMinimum": 0,
               "type": "integer"
             },
-            "softCapMs": {
-              "exclusiveMinimum": 0,
-              "type": "integer"
-            },
             "turnMs": {
               "exclusiveMinimum": 0,
               "type": "integer"
@@ -59,7 +55,6 @@
             "semgrepKillMs",
             "crgQueryMs",
             "fusionWriteMs",
-            "softCapMs",
             "cacheTtlMs",
             "maxConcurrency"
           ],
@@ -353,19 +348,6 @@
                   "minItems": 1,
                   "type": "array"
                 },
-                "timeoutsMs": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "callMs": {
-                      "exclusiveMinimum": 0,
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "callMs"
-                  ],
-                  "type": "object"
-                },
                 "version": {
                   "minLength": 1,
                   "type": "string"
@@ -377,8 +359,7 @@
                 "osemgrepCommand",
                 "version",
                 "fullBlockMaxBytes",
-                "subsets",
-                "timeoutsMs"
+                "subsets"
               ],
               "type": "object"
             }
