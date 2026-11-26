@@ -536,6 +536,15 @@ export interface RunPassRecord {
   pid: number | null;
   jsonl_bytes_at_timeout: number | null;
   jsonl_bytes_after_wait: number | null;
+  /**
+   * Review rows appended by this pass. `null` on old runs that did not measure
+   * it. A correction pass with 0 rows made no write and emitted no warn, so
+   * neither "delivered and ignored" nor "session never resumed" can be told
+   * apart; the driver refuses to record such a pass as ordinary.
+   */
+  tool_events?: number | null;
+  /** Session ids seen in the rows this pass appended; empty when none. */
+  session_ids?: string[];
 }
 
 export interface RunManifest {
@@ -731,6 +740,31 @@ async function jsonlBytes(path: string): Promise<number | null> {
     return (await stat(path)).size;
   } catch {
     return null;
+  }
+}
+
+async function jsonlLineCount(path: string): Promise<number> {
+  try {
+    const text = await readFile(path, "utf8");
+    return text.split("\n").filter((line) => line.trim().length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Session ids of the rows appended after `skip`, in file order. */
+async function sessionIdsAfter(path: string, skip: number): Promise<string[]> {
+  try {
+    const text = await readFile(path, "utf8");
+    return text
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .slice(skip)
+      .map((line) => JSON.parse(line) as ReviewRow)
+      .map((row) => row.change_event?.sessionId)
+      .filter((id): id is string => typeof id === "string");
+  } catch {
+    return [];
   }
 }
 
@@ -2963,6 +2997,8 @@ async function main(): Promise<void> {
         jsonl_bytes_after_wait: null,
       });
       if (write.sessionId) {
+        const reviewPath = join(outDir, baseline, "review.jsonl");
+        const rowsBefore = await jsonlLineCount(reviewPath);
         const fix = await runDsh({
           outDir,
           profile,
@@ -2972,10 +3008,17 @@ async function main(): Promise<void> {
           timeoutMs: 20 * 60_000,
         });
         process.stdout.write(`${baseline} correction pass: ${fix.stdout.trim().slice(-200)}\n`);
+        // Keep the only record of what the correction pass said: dsh session
+        // transcripts are not retained, so without this a zero-row pass leaves
+        // "delivered and ignored" and "session never resumed" indistinguishable.
+        await writeFile(join(outDir, `correction-${baseline}.log`), fix.stdout, "utf8");
+        const toolEvents = (await jsonlLineCount(reviewPath)) - rowsBefore;
+        const sessionIds =
+          toolEvents > 0 ? [...new Set(await sessionIdsAfter(reviewPath, rowsBefore))] : [];
         let orphan = { growing: false, pid: null as number | null, bytesAtTimeout: null as number | null, bytesAfterWait: null as number | null };
         if (fix.timedOut) {
           truncated = true;
-          orphan = await observeOrphanWriter(join(outDir, baseline, "review.jsonl"), fix.pid);
+          orphan = await observeOrphanWriter(reviewPath, fix.pid);
           process.stdout.write(
             `TRUNCATED ${baseline} correction pass at ${fix.elapsedMs} ms` +
               `${orphan.growing ? ` - writer still growing (pid ${fix.pid ?? "unknown"})` : " - writer stopped"}\n`,
@@ -2990,7 +3033,21 @@ async function main(): Promise<void> {
           pid: orphan.pid,
           jsonl_bytes_at_timeout: orphan.bytesAtTimeout,
           jsonl_bytes_after_wait: orphan.bytesAfterWait,
+          tool_events: toolEvents,
+          session_ids: sessionIds,
         });
+        if (!fix.timedOut && toolEvents === 0) {
+          throw new Error(
+            `correction pass ${baseline}: no review rows appended, so delivery cannot be verified ` +
+              `(stdout in correction-${baseline}.log)`,
+          );
+        }
+        if (!fix.timedOut && (sessionIds.length !== 1 || sessionIds[0] !== write.sessionId)) {
+          throw new Error(
+            `correction pass ${baseline}: resumed session mismatch ` +
+              `(expected ${write.sessionId}, saw ${sessionIds.join(",") || "none"})`,
+          );
+        }
         if (truncated) break;
       }
     }

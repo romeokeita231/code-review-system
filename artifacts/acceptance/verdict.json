@@ -50,14 +50,15 @@
     "metrics": {
       "warned_rows": 53,
       "warned_samples": 20,
-      "classed": 10,
-      "corrected": 0,
+      "warned_pairs": 32,
+      "classed": 20,
+      "corrected": 9,
       "recurred": 1,
-      "unfixed": 9,
+      "unfixed": 10,
       "classed_rows": 40,
-      "corrected_rows": 26,
-      "recurred_rows": 4,
-      "unfixed_rows": 10
+      "corrected_rows": 24,
+      "recurred_rows": 1,
+      "unfixed_rows": 15
     }
   },
   {
@@ -77,7 +78,7 @@
     }
   },
   {
-    "name": "line5: correction anchor visible on the next request",
+    "name": "line5: correction text carries an anchor (template self-check)",
     "state": "pass",
     "pass": true,
     "metrics": {

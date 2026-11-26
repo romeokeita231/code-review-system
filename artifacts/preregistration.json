@@ -127,6 +127,35 @@
         "preflight gates are now `crg budget` (config crgQueryMs >= frozen floor) and `semgrep budget` (config semgrepKillMs >= frozen floor); equality is no longer required, because a value above the floor is headroom, not a deviation",
         "`assertBudgetRelations` still asserts only `semgrepKillMs + crgQueryMs <= min(callMs, turnMs)`; no measurement enters the runtime config"
       ]
+    },
+    {
+      "version": 10,
+      "at": "2026-11-20T16:40:00+08:00",
+      "note": "v2-v9 are unchanged. A second re-measurement produced usable numbers, but the floor they imply cannot coexist with the call budget; no frozen value is moved while that is unresolved.",
+      "changes": [
+        "44-call re-measurement on the three pinned sources, same instrument and commits: per-source p50 2139 / 2125 / 2243 ms, build_ms 2553 / 2543 / 50377, pooled p99 2672 ms",
+        "`code-review-graph --version` alone costs 560-580 ms on this machine, so the shape (process start dominates, file count barely matters) is unchanged and only the machine is slower",
+        "applying the ADR-0009 rule to that p99 gives a 4008 ms floor, and 4008 + 5000 exceeds callMs 8000; a measurement that cannot fit the call budget does not get to rewrite the frozen values",
+        "the archived 662 ms p99 and the 993 ms floor stand; the 2026-11-20 numbers are recorded as a different-machine observation",
+        "semgrep stayed unmeasurable (single-file scan >180 s with --metrics off and --disable-version-check), so semgrep_kill_ms keeps its single-observation evidence level",
+        "the slowdown was chased to its end: the stuck pysemgrep process accounted for ~10%, the high-performance plan changed nothing (1424 ms), and the python child burns 1.56 s of CPU in 1.31 s of wall time, so the cost is real start/import work rather than a lock, network wait, or disk stall",
+        "the archived 662 ms p99 is therefore not reproducible here by any external means, which is what makes this machine unsupported rather than merely slow on that day",
+        "the gate protects a config against the frozen floor, not against the machine: a floor below the running machine's own p99 passes every gate and still loses the source at run time"
+      ]
+    },
+    {
+      "version": 11,
+      "at": "2026-11-20T18:30:00+08:00",
+      "note": "v2-v10 are unchanged. This revision fixes two measurement defects found in the first scored run (issue #43): line 3 pooled two baselines by sample name, and line 5 was named as if a template check were delivery evidence. No frozen value, bound, prediction or tier boundary is moved; the direction of every gate is unchanged and line 3 becomes stricter, not looser.",
+      "changes": [
+        "line 3 now counts (baseline, sample) pairs: B4 and B4g stage the same sample names from different runs, and the previous grouping by sample name let one baseline's later rows decide the other baseline's state. `warned_pairs` is the gate denominator; `warned_samples` is reported only as the distinct sample count. Criterion: every-warned-pair-acts (first warn onward, same baseline)",
+        "line 3's state is read from the first warn in that pair, not from the last: `unfixed` means no post-warn row at all, `recurred` means the class reappears after that warn, `corrected` means rows follow and the class does not reappear. A warning issued at the end of a pass no longer reads as inaction. The row-level tallies stay in the detail for diagnosis only",
+        "reading of the existing ds-2 rows under the new rule: warned_rows=53, warned_samples=20, warned_pairs=32; classed pairs 20 = corrected 9 + recurred 1 (B4/ts-cwe798-0001) + unfixed 10 (all B4g). Line 3 remains FAIL, and the 10 unfixed pairs are a delivery fact: the correction pass appended no rows for that baseline, so no post-warn row exists to score. They are not evidence of an agent refusing to act",
+        "line 5 is renamed `correction text carries an anchor (template self-check)` and its detail carries `self-check, not delivery evidence`: it asserts the rendered message shape, and it passed on 53/53 injected rows in the same run in which 10 pairs had no observed action, so it cannot be quoted as proof the warning was received or acted on",
+        "the warn template now renders what the sources computed rather than a fixed phrase: `via=<source>/sev=<source>:<severity>` keeps the numeric severity, and for AOR findings without a CWE the evidence excerpt is rendered (`see: <evidence>`, clipped to evidenceChars 80) instead of `review the flagged construct`. maxChars 700 -> 600, perGroupChars 260 -> 220; maxGroups 3, fixClauseChars 40, maxLines 3, maxPathChars 60 are unchanged",
+        "`run` records `tool_events` and `session_ids` per correction pass and writes `correction-<baseline>.log`; a non-timeout pass with tool_events = 0 throws, and so does a resumed session that differs from the write pass's. A correction pass with no appended row is unobservable and cannot be scored - it is not a zero",
+        "P1-P4 and every previously frozen value are unchanged"
+      ]
     }
   ],
   "observations": {

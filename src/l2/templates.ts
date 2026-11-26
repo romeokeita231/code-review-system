@@ -5,18 +5,21 @@ export interface TemplateLimits {
   maxChars: number;
   perGroupChars: number;
   fixClauseChars: number;
+  /** Width of the quoted evidence line shown when no class-specific fix exists. */
+  evidenceChars: number;
   maxLines: number;
   maxPathChars: number;
 }
 
 export const DEFAULT_LIMITS: TemplateLimits = {
   maxGroups: 3,
-  maxChars: 400,
-  // The provenance tag is mandatory on every injected finding, so it sits right
-  // after the anchor where clipping cannot reach it; the extra width keeps the
-  // fix clause alive behind it.
-  perGroupChars: 150,
+  // A warning without a class used to be a bare "review the flagged construct":
+  // three such lines fit in 400 chars, but adding the evidence line per group
+  // needed more room, so the cap and the per-group width were raised together.
+  maxChars: 600,
+  perGroupChars: 220,
   fixClauseChars: 40,
+  evidenceChars: 80,
   maxLines: 3,
   maxPathChars: 60,
 };
@@ -29,6 +32,8 @@ export interface TemplateGroup {
   cwe: string | null;
   lines: number[];
   fixClause: string;
+  /** The flagged source line; the only "what" available when no class is known. */
+  evidence: string | null;
   /** Which sources produced this finding; more than one means agreement. */
   sources: string[];
   /** The source whose severity the group carries. */
@@ -76,6 +81,11 @@ export function groupsFromFindings(findings: MergedFinding[]): TemplateGroup[] {
     const existing = map.get(key);
     if (existing) {
       existing.lines.push(finding.startLine);
+      // Keep the evidence of the most severe finding in the group: the line a
+      // reader is pointed at should be the one that scored highest.
+      if (finding.severity > existing.severity && finding.evidence) {
+        existing.evidence = finding.evidence;
+      }
       continue;
     }
     map.set(key, {
@@ -86,6 +96,7 @@ export function groupsFromFindings(findings: MergedFinding[]): TemplateGroup[] {
       cwe: finding.cwe ?? null,
       lines: [finding.startLine],
       fixClause: fixClauseFor(finding),
+      evidence: finding.evidence ?? null,
       sources: [...finding.sources].sort(),
       severitySource: finding.severitySource ?? finding.source,
     });
@@ -117,14 +128,27 @@ function fixClauseFor(finding: Finding | MergedFinding): string {
 
 function provenanceTag(group: TemplateGroup): string {
   const via = `${group.sources.join("+")}${group.sources.length > 1 ? "/agree" : ""}`;
-  return `via=${via}/sev=${group.severitySource}`;
+  // `severity_source` alone said who scored it, not how high; a reader cannot
+  // rank `sev=aor` against `sev=semgrep` without the number.
+  return `via=${via}/sev=${group.severitySource}/${group.severity}`;
+}
+
+/**
+ * Without a class there is no class-specific fix, and "review the flagged
+ * construct" gives a reader nothing to act on. The flagged source line is the
+ * one piece of "what" AOR does provide, so use it there.
+ */
+function fixOrEvidence(group: TemplateGroup, limits: TemplateLimits): string {
+  const evidence = group.evidence?.replace(/\s+/g, " ").trim();
+  if (group.cwe !== null || !evidence) return clip(group.fixClause, limits.fixClauseChars);
+  return `see: ${clip(evidence, limits.evidenceChars)}`;
 }
 
 function buildLine(group: TemplateGroup, limits: TemplateLimits, anchor: string): string {
   const path = shortenPath(group.file, limits.maxPathChars);
   const cwe = group.cwe ? `${group.cwe} ` : "";
   const lines = lineList(group.lines, limits.maxLines);
-  const fix = clip(group.fixClause, limits.fixClauseChars);
+  const fix = fixOrEvidence(group, limits);
   // Provenance first: `sources`, agreement and `severity_source` must survive
   // clipping, so the tag sits before the path instead of after the fix clause.
   const head = `${anchor} ${provenanceTag(group)} ${path}:${lines} ${cwe}${group.ruleId}`.replace(/\s+/g, " ").trim();

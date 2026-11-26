@@ -783,11 +783,18 @@ export function evaluateAcceptance(
     (row) => row.disposition.postDecision === "inject_warn" && evaluatedAor(row),
   );
   type Line3State = "corrected" | "recurred" | "unfixed";
+  // B4 and B4g write the same sample names, so a sample-only key merges two
+  // independent runs into one timeline: B4g's staged write would then count as
+  // a later write of B4, and B4g's terminal warning would turn B4's edits into
+  // "unfixed". A baseline is a separate run; key by baseline and sample.
+  const line3Key = (row: Pick<AcceptanceRowLike, "baseline" | "sample">): string =>
+    `${row.baseline}\u0000${row.sample}`;
   const perSample = new Map<string, AcceptanceRowLike[]>();
   for (const row of postRows) {
-    const list = perSample.get(row.sample) ?? [];
+    const key = line3Key(row);
+    const list = perSample.get(key) ?? [];
     list.push(row);
-    perSample.set(row.sample, list);
+    perSample.set(key, list);
   }
   // Line 3 is three outcomes per warned *sample*, not one repeat count: a sample
   // whose later writes no longer carry the class was corrected; one whose later
@@ -799,7 +806,18 @@ export function evaluateAcceptance(
   const rowStates: Array<{ row: AcceptanceRowLike; state: Line3State }> = [];
   const sampleStates = new Map<string, Line3State>();
   const warnedSamples = [...new Set(warned.map((row) => row.sample))];
-  for (const sample of warnedSamples) {
+  const warnedPairs = [...new Set(warned.map(line3Key))];
+  const reappearsAnywhere = (
+    later: AcceptanceRowLike[],
+    classes: ReadonlySet<string>,
+  ): boolean =>
+    later.some((candidate) =>
+      candidate.findings_merged.some((finding) => finding.cwe !== null && classes.has(finding.cwe)),
+    );
+  for (const pair of warnedPairs) {
+    const separator = pair.indexOf("\u0000");
+    const baseline = pair.slice(0, separator);
+    const sample = pair.slice(separator + 1);
     const classes = new Set(
       (truth.get(sample)?.labels ?? [])
         .map((label) => label.cwe)
@@ -808,33 +826,37 @@ export function evaluateAcceptance(
     // A warned sample without ground-truth classes (e.g. the dependency probe)
     // cannot carry line 3's assertion either way.
     if (classes.size === 0) continue;
-    const warnedRows = warned.filter((candidate) => candidate.sample === sample);
+    const rows = perSample.get(pair) ?? [];
+    const warnedRows = rows.filter((row) => row.disposition.postDecision === "inject_warn");
+    // Sample level is judged from the first warning onward: a warning on the
+    // sample's final write cannot be told apart from "acted and stopped" by row
+    // position, and reading it as inaction is what marked every B4g sample
+    // `unfixed` while B4 had edited all of them. The gate's question is whether
+    // a warning produced any later write, and whether the class survived it.
+    const firstWarnTs = Math.min(...warnedRows.map((row) => row.change_event?.ts ?? 0));
+    const afterFirstWarn = rows.filter((row) => (row.change_event?.ts ?? 0) > firstWarnTs);
+    sampleStates.set(
+      `${baseline}/${sample}`,
+      afterFirstWarn.length === 0
+        ? "unfixed"
+        : reappearsAnywhere(afterFirstWarn, classes)
+          ? "recurred"
+          : "corrected",
+    );
     for (const row of warnedRows) {
-      // Line 3: after the correction lands, the same class must not reappear in
-      // that sample's later writes (the corrected file), for up to two fixes.
-      const later = (perSample.get(row.sample) ?? []).filter(
+      const later = rows.filter(
         (candidate) => (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
-      );
-      const reappeared = later.some((candidate) =>
-        candidate.findings_merged.some((finding) => finding.cwe !== null && classes.has(finding.cwe)),
       );
       rowStates.push({
         row,
-        state: later.length === 0 ? "unfixed" : reappeared ? "recurred" : "corrected",
+        state:
+          later.length === 0
+            ? "unfixed"
+            : reappearsAnywhere(later, classes)
+              ? "recurred"
+              : "corrected",
       });
     }
-    // Worst observation wins: a sample that reappeared anywhere is a recurrence
-    // even if another of its writes was never revisited. When a warning lands on
-    // what turns out to be the final write, "no later write" says nothing about
-    // whether the code was fixed, and letting it override a confirmed
-    // reappearance would hide the stronger fact behind the weaker one.
-    const states = new Set(
-      rowStates.filter((entry) => entry.row.sample === sample).map((entry) => entry.state),
-    );
-    sampleStates.set(
-      sample,
-      states.has("recurred") ? "recurred" : states.has("unfixed") ? "unfixed" : "corrected",
-    );
   }
   const samplesIn = (state: Line3State): string[] =>
     [...sampleStates].filter(([, value]) => value === state).map(([sample]) => sample);
@@ -844,32 +866,28 @@ export function evaluateAcceptance(
   const classedSamples = sampleStates.size;
   const rowsIn = (state: Line3State): number =>
     rowStates.filter((entry) => entry.state === state).length;
-  // D13's denominator is the number of warned *rows* whose sample has a ground
-  // truth class, so the gate is read off rows: every such warn row must be
-  // corrected, none may recur, none may go unanswered. The per-sample states
-  // below are the worst-case aggregate of those rows (a sample with three
-  // corrected writes and one unfixed write is `unfixed`), which is what makes a
-  // "half-handled" warning visible in the sample-level numbers; the two agree
-  // by construction because a sample is `corrected` only when all its rows are.
-  const line3Pass =
-    rowStates.length > 0 &&
-    rowsIn("corrected") === rowStates.length &&
-    rowsIn("recurred") === 0 &&
-    rowsIn("unfixed") === 0;
+  // D13's denominator is one entry per warned (baseline, sample) pair, because
+  // each baseline is an independent run: B4 and B4g stage and edit the same
+  // sample names, so pooling them by name let B4g's single write answer for B4.
+  // The gate is read off sample level — every warned pair must show a write
+  // after its first warning and no return of the ground-truth class. Row states
+  // stay in the detail as a diagnostic; a terminal warning is not inaction.
+  const line3Pass = classedSamples > 0 && correctedSamples.length === classedSamples;
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
     state: stateOf(null, line3Pass),
     pass: line3Pass,
     detail:
-      `warned_rows=${warned.length} warned_samples=${warnedSamples.length} ` +
+      `warned_rows=${warned.length} warned_samples=${warnedSamples.length} warned_pairs=${warnedPairs.length} ` +
       `classed=${classedSamples} samples corrected=${correctedSamples.length} ` +
       `recurred=${recurredSamples.length}${recurredSamples.length > 0 ? `(${recurredSamples.join(",")})` : ""} ` +
       `unfixed=${unfixedSamples.length}${unfixedSamples.length > 0 ? `(${unfixedSamples.join(",")})` : ""} ` +
       `| rows corrected=${rowsIn("corrected")} recurred=${rowsIn("recurred")} unfixed=${rowsIn("unfixed")}` +
-      ` | criterion=all-warns-handled (precedence recurred>unfixed>corrected)`,
+      ` | criterion=every-warned-pair-acts (first warn onward, same baseline)`,
     metrics: {
       warned_rows: warned.length,
       warned_samples: warnedSamples.length,
+      warned_pairs: warnedPairs.length,
       classed: classedSamples,
       corrected: correctedSamples.length,
       recurred: recurredSamples.length,
@@ -1053,10 +1071,14 @@ export function evaluateAcceptance(
   );
   const line5Pass = anchored.length > 0 && anchored.length === warned.length;
   const line5: LineResult = {
-    name: "line5: correction anchor visible on the next request",
+    // This checks the generated text, not the request the agent received: it
+    // passes whenever the template carries a path/line token, including when
+    // delivery failed. Naming it "visible on the next request" claimed evidence
+    // this line never observes.
+    name: "line5: correction text carries an anchor (template self-check)",
     state: stateOf(null, line5Pass),
     pass: line5Pass,
-    detail: `warned=${warned.length} anchored=${anchored.length}`,
+    detail: `warned=${warned.length} anchored=${anchored.length} | self-check, not delivery evidence`,
     metrics: { warned: warned.length, anchored: anchored.length },
   };
 

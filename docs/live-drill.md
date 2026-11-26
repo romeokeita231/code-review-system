@@ -383,6 +383,57 @@ is a machine-level page-cache state that cannot be produced on demand, so only t
 be asserted; the once-observed 2.8 s stands as a single observation with its evidence level
 written down.
 
+### Re-measurement, 2026-11-20: the floor and the call budget no longer fit
+
+The same 44-call method, same instrument version, same pinned checkouts, run again after the
+stuck `pysemgrep --version` from the #49 investigation was found still burning a core — it had
+been running since 15:38 and no earlier check had looked for it:
+
+| repo | n | archived p50 / p99 | 2026-11-20 p50 / p99 | build_ms archived -> today |
+| --- | --- | --- | --- | --- |
+| goof | 10 | 581 / 662 | 2139 / 2269 | 1510 -> 2553 |
+| dvna | 14 | 528 / 639 | 2125 / 2672 | 1051 -> 2543 |
+| juice-shop | 20 | 598 / 652 | 2243 / 2450 | 27928 -> 50377 |
+
+Killing the stuck process moved p50 by ~10% (`2297 -> 2079` on goof), so it was not the whole
+gap. `code-review-graph --version` alone costs 560-580 ms here; the archived 581 ms p50 is
+therefore a query almost free of query time, while today's 2.1 s is the same shape on a slower
+machine. File count still barely moves it (10 files 2139 ms, 674 files 2243 ms), which is the
+property the decision rests on.
+
+Pooled over 44 calls the p99 is 2672 ms, so the ADR-0009 rule demands a floor of
+`ceil(1.5 x 2672) = 4008 ms`. That does not fit: `4008 + 5000 > 8000`, and raising
+`semgrepKillMs` to cover its own floor only widens the gap. A config at the frozen 993 ms would
+kill every `impact` call on this machine and lose the triage layer silently — the exact failure
+mode the gate exists to catch, which the gate cannot catch because it reads the frozen number
+rather than the machine.
+
+semgrep remained unmeasurable. A single-file scan with `--metrics off --disable-version-check`
+did not return in 180 s, and the same scan through the source timed out at 120 s. #49's fix kills
+the tree on timeout, so the run degrades instead of hanging, but the instrument still does not
+answer here, which leaves `semgrep_kill_ms = 975` resting on its single 2026-11-13 observation.
+
+The slowdown was then chased rather than assumed, and every external cause was ruled out:
+
+| suspect | measurement | verdict |
+| --- | --- | --- |
+| leftover process | a `pysemgrep --version` stuck since 15:38, 5 h of CPU; killed | not it: goof p50 2297 -> 2079 ms, ~10% |
+| CPU throttling | `% Processor Performance` 88.7% on balanced, 177% under high performance | not it: impact 1424 ms at full boost, unchanged |
+| disk / db size | NVMe volume, `graph.db` 0.71 MB | not it |
+| lock or network wait | python child CPU 1.56 s over 1.31 s wall (multi-core) | not it: the work is real compute |
+| machine load | 31% total CPU, 4.1 GB of 15.7 GB free | contributes, not decisive |
+
+What the numbers do show is where the time sits: the `.local\bin` launcher adds ~0.4 s with no CPU
+at all (`--version` 495 ms through it), and the python process then spends ~1 s importing and
+starting. File count still does not move it. This is the same shape as the archived 581 ms, just
+larger: the archived number cannot be reproduced on this machine by clearing processes, raising
+the power plan, or re-indexing.
+
+So the floor question is settled against the measurement: a 4008 ms floor would have to live
+inside a call budget it does not fit, and the machine that produces 2672 ms p99 is not the machine
+the 993 ms floor describes. `frozen.budgets` stays at 993, this machine is recorded as outside the
+supported environment, and the run that needs a comparable number has to happen elsewhere.
+
 ### Wiring is checked without degrading a gate
 
 `--allow-degraded` used to double as "let me check the wiring". That is what a bypass for
@@ -580,6 +631,28 @@ Agent behaviour is read from the DSH side only. CRS's own `review.jsonl` records
 plugin wrote, not what the agent did; its line count carries no timing and may not be used
 to reconstruct "what the agent did in minute N". Any such statement needs a DSH-side
 source, otherwise it is deleted.
+
+The one exception is a **delivery precondition**, not a behaviour reading: `run` records
+`tool_events` (rows appended to `review.jsonl` during the correction pass) and
+`session_ids` (the session each new row carries). A non-timeout correction pass with
+`tool_events = 0` throws, because nothing was delivered to resume from and the pass cannot
+be scored; rows arriving under a session other than the write pass's are also refused.
+The pass's stdout is written to `correction-<baseline>.log`. A pass that reaches
+`tool_events = 0` is unobservable, not "the agent ignored the warning".
+
+### Line 3 counts pairs, not sample names (2026-11-20)
+
+B4 and B4g stage the same sample names from different baselines. Pooling them by name
+merged two independent runs into one state and let the later baseline's rows decide the
+earlier baseline's outcome. Line 3 now counts `(baseline, sample)` pairs, and the unit of
+the gate is the pair: `warned_pairs` is its denominator, `warned_samples` is only the
+distinct sample count.
+
+The state is read from the **first** warn onward in that baseline, so a warning near the
+end of a pass no longer reads as inaction: `unfixed` means no post-warn row at all,
+`recurred` means the class reappears after that warn, `corrected` means rows follow and
+the class does not. The old row-level 26/4/10 and the sample-level 0/10 were pooling
+artefacts of the same two bugs; both remain in the detail as `rows ...` for diagnosis.
 
 `plan.controls` stages the defect-free rows the low-risk pool did not take — on `ds-2` that
 is the single `create` sample, which is 38 lines and therefore `high` risk. Low-risk rows
