@@ -31,7 +31,7 @@ export function makeConfig(overrides: ConfigOverrides = {}): RunConfig {
           {
             id: "py-block",
             path: "research/semgrep-bench/snapshot/py_block.yaml",
-            sha256: "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+            sha256: "ab8998b6128c0ab94bf199a67676f870553e5f31b436e8a41cf0dc78ba4ab375",
             langs: ["python"],
             blockRules: ["command-injection-os-system"],
           },

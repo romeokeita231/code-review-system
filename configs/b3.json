@@ -11,7 +11,7 @@
         {
           "id": "py-block",
           "path": "research/semgrep-bench/snapshot/py_block.yaml",
-          "sha256": "612934ee063172544c19624a043d03b9fc576be518a74b0b9d72fbacd1f98e90",
+          "sha256": "ab8998b6128c0ab94bf199a67676f870553e5f31b436e8a41cf0dc78ba4ab375",
           "langs": [
             "python"
           ],
@@ -27,7 +27,7 @@
         {
           "id": "ts-dedup",
           "path": "research/semgrep-bench/snapshot/ts_dedup.yaml",
-          "sha256": "42e5be0c4fe108ed7d3be0575d45c1d34990050b28d9a60c2b376e146a7c470b",
+          "sha256": "d492ded53ee9a1592a74bfbb43df10667439f5f9c13742afd86ab7a5c223f715",
           "langs": [
             "typescript"
           ],
@@ -36,7 +36,7 @@
         {
           "id": "py-nontaint",
           "path": "research/semgrep-bench/snapshot/py_nontaint.yaml",
-          "sha256": "77a53be6fdd00dd1dded89a73b316af32193674114487e2657608a1d0ae2825c",
+          "sha256": "2164b607ea76bcd0df25c8b199056f7c7b8fcc3ef3d5be92e9a7757bb8e3d04d",
           "langs": [
             "python"
           ],

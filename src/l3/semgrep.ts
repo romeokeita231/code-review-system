@@ -10,7 +10,7 @@ import type {
   SourceStatus,
 } from "../contracts/index.js";
 
-import { TOOL_ENV, killProcessTree, sha256 } from "../config/index.js";
+import { TOOL_ENV, contentSha256, killProcessTree, sha256 } from "../config/index.js";
 import { asNumber, asRecord, asString } from "./json.js";
 
 export interface CommandRequest {
@@ -351,7 +351,10 @@ export class SemgrepSource implements SignalSource {
       const absolute = path.isAbsolute(subset.path) ? subset.path : path.resolve(this.root, subset.path);
       try {
         const text = await readFile(absolute, "utf8");
-        if (sha256(text) !== subset.sha256) {
+        // The pin is over the rule text, not over this checkout's line endings:
+        // see `contentSha256`. Hashing the bytes as they sit on disk made the pin
+        // true on one platform only, and the failure mode was `findings: []`.
+        if (contentSha256(text) !== subset.sha256) {
           failures.push("rules_sha256");
           continue;
         }

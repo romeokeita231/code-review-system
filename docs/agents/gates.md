@@ -1,12 +1,13 @@
 # Gates
 
-Five checks added by the 2026-11-27 retro, plus the replay harness that keeps them honest. Each one exists because a run completed, produced a complete report, and a source behind that report was already gone.
+Six checks added by the 2026-11-27 retro, plus the replay harness that keeps them honest. Each one exists because a run completed, produced a complete report, and a source behind that report was already gone.
 
 Run them from the repo root; all of them work in the **default sandbox** (no elevated shell needed):
 
 ```bash
-npm run gate:all        # replay + degeneration; the two that must be green before a commit
-npm run gate:replay     # feeds every check its incident; all 21 must land on the expected state
+npm run gate:all        # replay + hashes + degeneration; the three that must be green before a commit
+npm run gate:replay     # feeds every check its incident; all 25 must land on the expected state
+npm run gate:hashes     # does every recorded sha256 describe the tracked form it claims?
 npm run gate:machine    # is this machine the one the frozen floor describes?
 npm run gate:residue    # is something still running that a probe started?
 npm run gate:degeneration  # do the failures that print a number instead of throwing still pass?
@@ -38,7 +39,19 @@ So `scripts/run.mjs` emits with `tsc` (pure file I/O) into `.tmp/run/` and runs 
 | `gate:residue` | the process table cannot be enumerated | "could not look" must never render as "clean" |
 | `wiring:check` / `gate:*` | the script starts through a spawning transpiler | the replacement for `--allow-degraded` exited 1 with `spawn EPERM` |
 | `gate:degeneration` | the archived `report.md` no longer recomputes to the same bytes | the table is a recomputation; silent evaluator drift makes it describe a program that no longer exists |
+| `gate:hashes` | a recorded hash or size does not describe the tracked form it claims (index, not disk) | first CI run: 9 `SemgrepSource` tests degraded with `rules_sha256`; the pin described a CRLF working copy that no checkout reproduces |
 | `preflight` (in `drill`) | the worktree is dirty, a run has no `repo.commit`, line 4 has no row source | "which code did that run measure" had no answer |
+
+## Content pins and byte pins
+
+A recorded `sha256` is a claim about something. Which something is not obvious, and getting it wrong made the scanner go quiet twice, so every record now declares one of two kinds (`scripts/hash-agreement.ts`):
+
+- **content** — the pin is about what the file says. Take it with `contentSha256` (`src/config/index.ts`), which folds CRLF to LF first. Rule pins live here: `SemgrepSource` will not scan unless the pin matches, and the rules bench measured the rules, not a checkout.
+- **bytes** — the pin is about an emitted artifact. Take it with plain `sha256`. `research/semgrep-bench/snapshot/manifest.json` is the build's own description of what it wrote; normalising it would let the manifest lie about the file it produced.
+
+The rule is: **a pin is EOL-independent only if both sides fold.** A pin taken over a checkout's bytes is a function of that checkout's line-ending policy — the same rule set is `612934ee…` under `core.autocrlf=true` and `ab8998b6…` on an LF tree — and `git status` reports neither, because the index agrees with `HEAD` while the working copy does not. That is how the first CI run this repository ever had came back with nine `SemgrepSource` tests degraded and the report saying "no findings".
+
+`research/**`, `artifacts/**`, `datasets/**` and `schemas/**` are `-text` in `.gitattributes`, so git never rewrites them and a `bytes` pin is reproducible everywhere. A `content` pin needs no such help — prefer one, unless the value really is a claim about written bytes.
 
 ## `na` is not `0`
 

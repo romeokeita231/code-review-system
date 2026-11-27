@@ -1,5 +1,8 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { contentSha256 } from "../../src/config/index.js";
 import { createSemgrepSource } from "../../src/l3/index.js";
 import { ScriptedRunner, commandResult, makeConfig, makeInput } from "./support.js";
 
@@ -138,5 +141,40 @@ describe("SemgrepSource", () => {
 
     expect(result.status).toBe("degraded");
     expect(result.errorKind).toBe("result_shape");
+  });
+
+  it("accepts the pinned rules whichever line endings the checkout produced", async () => {
+    // The pin is a claim about the rules, not about a checkout. It used to be
+    // `sha256` of the bytes on disk, which made it true on exactly one platform:
+    // the first CI run this repository ever had degraded every semgrep test with
+    // `rules_sha256`, and the degraded path reports no findings, so the only
+    // visible symptom was that the scanner had gone quiet.
+    const rules = readFileSync(
+      new URL("../../research/semgrep-bench/snapshot/py_block.yaml", import.meta.url),
+      "utf8",
+    );
+    const pinned = makeConfig().sources.semgrep.subsets[0]!;
+    expect(pinned.sha256).toBe(contentSha256(rules));
+
+    const dir = mkdtempSync(join(tmpdir(), "crs-rules-"));
+    try {
+      const forms: Array<[string, string]> = [
+        ["crlf.yaml", rules.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n")],
+        ["lf.yaml", rules.replace(/\r\n/g, "\n")],
+      ];
+      for (const [name, text] of forms) {
+        const file = join(dir, name);
+        writeFileSync(file, text);
+        const config = makeConfig({ semgrep: { subsets: [{ ...pinned, path: file }] } });
+        const runner = runnerFor(cloneDoc());
+        const source = createSemgrepSource(config, { root: process.cwd(), runner });
+        const result = await source.review(makeInput(config, ["target.py"], { "target.py": "import subprocess\n" }));
+
+        expect(result.status, `${name} should scan`).toBe("ok");
+        expect(runner.calls, `${name} should reach semgrep`).toHaveLength(1);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

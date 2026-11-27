@@ -60,6 +60,31 @@ export function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+/**
+ * The hash of what a file *says*, with line endings folded first.
+ *
+ * `sha256` answers "what are these bytes". When the bytes are a checkout of a
+ * tracked file, that answer is a function of the checkout's line-ending policy
+ * rather than of the file: the same rule set is `612934ee…` under
+ * `core.autocrlf=true` and `ab8998b6…` on an LF tree, and `git status` reports
+ * neither, because the index agrees with `HEAD` while the working copy does not.
+ * That is what broke the first CI run this repository ever had - the rule pin
+ * matched this machine and no other checkout, so `SemgrepSource` degraded with
+ * `rules_sha256` everywhere else and reported it as "no findings".
+ *
+ * A rule pin is a claim about the rules the bench measured, so it is taken over
+ * the text with CRLF folded to LF. Then every platform reproduces it, and the
+ * pin stops moving when an editor rewrites the file without changing it.
+ *
+ * Keep plain `sha256` for values that describe a build output - the `artifacts`
+ * in `research/semgrep-bench/snapshot/manifest.json` are hashes of emitted bytes
+ * and have to keep describing them exactly. Which of the two a recorded value
+ * wants is declared at the record, in `scripts/hash-agreement.ts`.
+ */
+export function contentSha256(text: string): string {
+  return sha256(text.replace(/\r\n/g, "\n"));
+}
+
 export function configHash(config: RunConfig): string {
   return sha256(stableStringify(config));
 }

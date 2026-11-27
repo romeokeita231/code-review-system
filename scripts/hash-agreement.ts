@@ -23,13 +23,29 @@
  * So the assertion is not "the hash matches the file". It is: **the hash matches
  * what the next commit ships**, read back out of the index rather than off the
  * disk. The working copy is reported only to explain a failure: when a pin
- * matches the working copy and not the tracked bytes, that is the specific
- * defect, and the message says so instead of leaving the next person to
+ * matches the working copy's bytes and not the tracked content, that is the
+ * specific defect, and the message says so instead of leaving the next person to
  * re-derive it.
+ *
+ * Two kinds of record, and the difference is not cosmetic:
+ *
+ *  - `content` - the pin is a claim about *what the file says*, so it is taken
+ *    over the text with CRLF folded to LF (`contentSha256`). Rule pins live
+ *    here: `SemgrepSource` compares the pin before it will scan, and the rules
+ *    bench measured the rules, not a checkout. A CRLF copy of the same rules is
+ *    the same rules, and no longer a reason to degrade to "no findings".
+ *  - `bytes` - the pin is a claim about an *emitted artifact*, so it is taken
+ *    over the bytes exactly. `snapshot/manifest.json` is the build's own
+ *    description of what it wrote; normalising it would let the manifest lie
+ *    about the file it produced. `PROVENANCE.md` anchors are the same promise.
+ *
+ * `research/**`, `artifacts/**`, `datasets/**` and `schemas/**` are `-text` in
+ * `.gitattributes` so git never rewrites them; that is what makes a `bytes` pin
+ * reproducible on every platform. A `content` pin needs no such help.
  *
  * Recorded values are gathered from every place that pins one:
  *   - `configs/*.json` -> `sources.semgrep.subsets[].{path,sha256}`
- *   - `tests/l3/support.ts` -> the same pair in a fixture config
+ *   - `tests/l3/support.ts`, `tests/l5/helpers.ts` -> the same pair in a fixture
  *   - `research/semgrep-bench/snapshot/manifest.json` -> `artifacts.<name>`, plus
  *     `bytes`, which is a second and independent witness
  *   - `artifacts/acceptance/PROVENANCE.md` -> the `sha256:` anchor column
@@ -40,10 +56,14 @@ import { join } from "node:path";
 import { captureBytesSync } from "./capture.js";
 import type { GateVerdict } from "./shared.js";
 
+/** Which form of the tracked file the recorded hash is a claim about. */
+export type PinKind = "content" | "bytes";
+
 export interface HashRecord {
   /** Repo-relative path of the file the hash is about. */
   path: string;
   sha256: string;
+  kind: PinKind;
   /** A recorded size, when the record carries one. */
   bytes?: number;
   /** Where the record lives, so a failure points at something editable. */
@@ -54,13 +74,21 @@ export interface ResolvedRecord extends HashRecord {
   /** sha256 of the bytes the index ships for this path. */
   blobSha: string | null;
   blobBytes: number | null;
+  /** sha256 of the index bytes with CRLF folded to LF. */
+  blobContentSha: string | null;
+  blobContentBytes: number | null;
   /** sha256 of the working copy, only ever used to explain a mismatch. */
   workSha: string | null;
   workBytes: number | null;
+  workContentSha: string | null;
 }
 
 function sha256Bytes(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function contentOf(bytes: Buffer): Buffer {
+  return Buffer.from(bytes.toString("utf8").replace(/\r\n/g, "\n"), "utf8");
 }
 
 /**
@@ -85,18 +113,31 @@ export function resolveRecord(repo: string, record: HashRecord): ResolvedRecord 
   const absolute = join(repo, record.path);
   const blob = trackedBytes(repo, record.path);
   const work = existsSync(absolute) ? readFileSync(absolute) : null;
+  const blobContent = blob === null ? null : contentOf(blob);
+  const workContent = work === null ? null : contentOf(work);
   return {
     ...record,
     blobSha: blob === null ? null : sha256Bytes(blob),
     blobBytes: blob === null ? null : blob.length,
+    blobContentSha: blobContent === null ? null : sha256Bytes(blobContent),
+    blobContentBytes: blobContent === null ? null : blobContent.length,
     workSha: work === null ? null : sha256Bytes(work),
     workBytes: work === null ? null : work.length,
+    workContentSha: workContent === null ? null : sha256Bytes(workContent),
   };
 }
 
+/** The view of the tracked file this record's pin is actually about. */
+function shippedView(record: ResolvedRecord): { sha: string; size: number | null } {
+  if (record.kind === "content") {
+    return { sha: record.blobContentSha ?? "", size: record.blobContentBytes };
+  }
+  return { sha: record.blobSha ?? "", size: record.blobBytes };
+}
+
 /**
- * The verdict. Red when a recorded hash does not describe the tracked bytes,
- * or when the committed size disagrees with a recorded size.
+ * The verdict. Red when a recorded hash does not describe the tracked form it
+ * claims to describe, or when a recorded size disagrees with the shipped size.
  */
 export function judgeHashAgreement(records: readonly ResolvedRecord[]): GateVerdict {
   const name = "every recorded hash matches the tracked bytes";
@@ -109,23 +150,29 @@ export function judgeHashAgreement(records: readonly ResolvedRecord[]): GateVerd
       missing.push(`${record.path} (pinned by ${record.source}) is not tracked`);
       continue;
     }
-    const hashOk = record.blobSha === record.sha256;
-    const sizeOk =
-      record.bytes === undefined || record.blobBytes === null || record.bytes === record.blobBytes;
+    const shipped = shippedView(record);
+    const hashOk = shipped.sha === record.sha256;
+    const sizeOk = record.bytes === undefined || shipped.size === null || record.bytes === shipped.size;
     if (hashOk && sizeOk) continue;
-    if (record.workSha === record.sha256) {
+    const pinIsWorkingBytes = record.workSha !== null && record.workSha === record.sha256;
+    if (pinIsWorkingBytes) {
       // The specific defect: the pin describes this machine's checkout.
       workOnly.push(
         `${record.path} (${record.source}): the pin ${record.sha256.slice(0, 12)} is the ` +
-          `working copy; the index ships ${record.blobSha.slice(0, 12)}` +
-          (record.bytes !== undefined && record.blobBytes !== record.bytes
-            ? `, ${record.bytes} bytes recorded against ${record.blobBytes}`
+          `working copy's bytes; the index ships ${record.blobSha.slice(0, 12)}` +
+          (record.kind === "content" ? ` as bytes, ${shipped.sha.slice(0, 12)} as content` : "") +
+          (record.bytes !== undefined && shipped.size !== record.bytes
+            ? `, ${record.bytes} bytes recorded against ${shipped.size}`
             : ""),
       );
     } else {
+      const raw =
+        record.kind === "content" && record.blobSha !== shipped.sha
+          ? ` (its raw bytes are ${record.blobSha.slice(0, 12)})`
+          : "";
       disagree.push(
         `${record.path} (${record.source}): recorded ${record.sha256.slice(0, 12)}, ` +
-          `the index ships ${record.blobSha.slice(0, 12)}`,
+          `the index ships ${shipped.sha.slice(0, 12)} as ${record.kind}${raw}`,
       );
     }
   }
@@ -143,8 +190,9 @@ export function judgeHashAgreement(records: readonly ResolvedRecord[]): GateVerd
           ? ""
           : `${workOnly.length} pin(s) describe the working copy, which no checkout reproduces: ` +
             workOnly.join("; ") +
-            `. Restore the bytes (\`git add --renormalize\`) or recompute the pin - but decide ` +
-            `which, because the archived measurements were taken against one of the two forms`,
+            `. A content pin is EOL-free (recompute it with \`contentSha256\`); a bytes pin has to ` +
+            `be restored (\`git add --renormalize\`) or recomputed - but decide which, because the ` +
+            `archived measurements were taken against one of the two forms`,
         disagree.length === 0 ? "" : `${disagree.length} recorded hash(es) match neither form: ${disagree.join("; ")}`,
         missing.length === 0 ? "" : `${missing.length} record(s) point at a path HEAD does not have: ${missing.join("; ")}`,
       ]
@@ -163,21 +211,23 @@ export function collectRecords(repo: string): HashRecord[] {
     };
     for (const subset of raw.sources?.semgrep?.subsets ?? []) {
       if (typeof subset.path === "string" && typeof subset.sha256 === "string") {
-        records.push({ path: subset.path, sha256: subset.sha256, source: `configs/${name}` });
+        records.push({ path: subset.path, sha256: subset.sha256, kind: "content", source: `configs/${name}` });
       }
     }
   }
 
-  const supportPath = join(repo, "tests", "l3", "support.ts");
-  if (existsSync(supportPath)) {
-    const text = readFileSync(supportPath, "utf8");
+  for (const fixture of ["tests/l3/support.ts", "tests/l5/helpers.ts"]) {
+    const fixturePath = join(repo, fixture);
+    if (!existsSync(fixturePath)) continue;
+    const text = readFileSync(fixturePath, "utf8");
     for (const match of text.matchAll(
       /path:\s*"([^"]+)",\s*\r?\n\s*sha256:\s*"([0-9a-f]{64})"/g,
     )) {
       records.push({
         path: match[1] ?? "",
         sha256: match[2] ?? "",
-        source: "tests/l3/support.ts",
+        kind: "content",
+        source: fixture,
       });
     }
   }
@@ -194,6 +244,7 @@ export function collectRecords(repo: string): HashRecord[] {
       records.push({
         path: `research/semgrep-bench/snapshot/${file}`,
         sha256: entry.sha256,
+        kind: "bytes",
         ...(typeof entry.bytes === "number" ? { bytes: entry.bytes } : {}),
         source: "snapshot/manifest.json",
       });
@@ -202,6 +253,7 @@ export function collectRecords(repo: string): HashRecord[] {
       records.push({
         path: "research/semgrep-bench/snapshot/rules.yaml",
         sha256: manifest.rules_yaml_sha256,
+        kind: "bytes",
         ...(typeof manifest.rules_yaml_bytes === "number" ? { bytes: manifest.rules_yaml_bytes } : {}),
         source: "snapshot/manifest.json (rules_yaml)",
       });
@@ -216,7 +268,7 @@ export function collectRecords(repo: string): HashRecord[] {
       const cells = line.split("|").map((cell) => cell.trim().replace(/^`|`$/g, ""));
       const path = cells[1] ?? "";
       if (path.length === 0) continue;
-      records.push({ path, sha256: anchor[1] ?? "", source: "PROVENANCE.md" });
+      records.push({ path, sha256: anchor[1] ?? "", kind: "bytes", source: "PROVENANCE.md" });
     }
   }
 

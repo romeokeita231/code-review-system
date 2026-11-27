@@ -27,6 +27,7 @@ import {
 } from "./instrument-gate.js";
 import { judgeGateEntrypoints, judgePairGrouping, judgeTruncatedRun, judgeRowsSource, judgeDefectSpans } from "./silent-degeneration.js";
 import { judgeHashAgreement, type ResolvedRecord } from "./hash-agreement.js";
+import { contentSha256, sha256 } from "../src/config/index.js";
 import type { GateVerdict } from "./shared.js";
 import { classifyResidue, DEFAULT_LIMITS, judgePatrolCoverage, type ProcessEntry } from "./residue-check.js";
 import { judgeRunRepo, REPO_RECORDING_SINCE } from "./repo-identity.js";
@@ -47,6 +48,16 @@ interface Replay {
 
 const BUDGETS: Budgets = { crgQueryMs: 993, semgrepKillMs: 5000, callMs: 8000 };
 const FROZEN_FLOOR = { crg_query_ms: 993 };
+
+/** Rule text in its CRLF form, which is what this machine's checkout holds. */
+const CRLF_RULES = "rules:\n  - id: command-injection-os-system\n    severity: ERROR\n".replace(/\n/g, "\r\n");
+
+/**
+ * `sha256` of that text with its line endings folded - so this pin holds for the
+ * CRLF form and the LF form both. Re-derive with `contentSha256`; a literal is
+ * the point, because a pin in the repository is also a literal.
+ */
+const CRLF_RULES_CONTENT_SHA = "d67d33134d1c56b6335e92b8a6e59087abbd0c9a0d7106ffdcdd1465c15268f2";
 
 /** A measurement of this shape, with the pooled p99 the record gives. */
 function measurement(p99: number, n: number, buildMs: number | null): ImpactMeasurement {
@@ -300,14 +311,7 @@ function replays(): Replay[] {
       row: "every recorded hash matches the tracked bytes",
       expect: "red",
       verdicts: judgeHashAgreement([
-        record({
-          sha256: "612934ee",
-          blobSha: "ab8998b6",
-          blobBytes: 268608,
-          bytes: 278490,
-          workSha: "612934ee",
-          workBytes: 278490,
-        }),
+        contentRecord({ text: CRLF_RULES, pin: sha256(CRLF_RULES) }),
       ]),
     },
     {
@@ -329,6 +333,19 @@ function replays(): Replay[] {
         record({ sha256: "612934ee", blobSha: "612934ee", blobBytes: 278490, bytes: 278490, workSha: "612934ee" }),
       ]),
     },
+    {
+      // The fix for the fixture above, replayed through the same judge. The pin is
+      // a literal, exactly as it sits in `configs/*.json`; the tracked file is the
+      // CRLF form. Drop the fold from `contentSha256` and the resolved content
+      // becomes the CRLF hash, the literal stops matching, and this goes red.
+      incident:
+        "control: a rule pin taken over the content matches whichever line endings the checkout produced",
+      source:
+        "contentSha256 folds CRLF to LF, so a CRLF checkout of the same rules lands on the same pin",
+      row: "every recorded hash matches the tracked bytes",
+      expect: "green",
+      verdicts: judgeHashAgreement([contentRecord({ text: CRLF_RULES, pin: CRLF_RULES_CONTENT_SHA })]),
+    },
   ];
 }
 
@@ -344,12 +361,42 @@ function record(parts: {
   return {
     path: "research/semgrep-bench/snapshot/py_block.yaml",
     source: "configs/b4.json",
+    // The byte view: the pin is a claim about emitted bytes, so the content
+    // columns are never read for this kind.
+    kind: "bytes",
     sha256: parts.sha256,
     blobSha: parts.blobSha,
     blobBytes: parts.blobBytes,
+    blobContentSha: null,
+    blobContentBytes: null,
     workSha: parts.workSha,
     workBytes: parts.workBytes ?? parts.blobBytes,
+    workContentSha: null,
     ...(parts.bytes === undefined ? {} : { bytes: parts.bytes }),
+  };
+}
+
+/**
+ * A record whose pin is a claim about the rule text, resolved from the text the
+ * checkout actually holds - both views computed from it, so a change to the
+ * normalisation shows up here rather than being assumed away.
+ */
+function contentRecord(parts: { text: string; pin: string }): ResolvedRecord {
+  const raw = Buffer.from(parts.text, "utf8");
+  const folded = Buffer.from(parts.text.replace(/\r\n/g, "\n"), "utf8");
+  const rawSha = sha256(raw.toString("utf8"));
+  return {
+    path: "research/semgrep-bench/snapshot/py_block.yaml",
+    source: "configs/b4.json",
+    kind: "content",
+    sha256: parts.pin,
+    blobSha: rawSha,
+    blobBytes: raw.length,
+    blobContentSha: contentSha256(parts.text),
+    blobContentBytes: folded.length,
+    workSha: rawSha,
+    workBytes: raw.length,
+    workContentSha: contentSha256(parts.text),
   };
 }
 
