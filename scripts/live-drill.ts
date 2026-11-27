@@ -18,7 +18,7 @@ import { computeTier, configuredModelOf, parseAorProbe } from "../src/l2/index.j
 import { createCrgTriage } from "../src/l3/index.js";
 import { synthesizeDiff } from "../src/l1/events.js";
 import { labelsOf, loadDataset, type DatasetSample } from "../src/l5/replay.js";
-import { assertInstrumentIdentity, certifiedSubsets, evaluateAcceptance, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
+import { assertInstrumentIdentity, certifiedSubsets, evaluateAcceptance, line3PairKey, loadFinalContent, loadTruth, tier0Counterfactual, type AcceptanceRowLike, type FrozenInstruments, type RuleCoverage } from "./acceptance.js";
 import { runSecretGate } from "./secret-gate.js";
 import { arg } from "./shared.js";
 import type { StagedContext } from "./upstream-context.js";
@@ -526,8 +526,7 @@ export interface OcrIdentityRecord {
  * process was still appending to `review.jsonl` 30 s after the cap, so the
  * tree cannot be shown to have stopped growing.
  */
-export interface RunPassRecord {
-  baseline: "B4" | "B4g";
+export interface RunPassRecord {  baseline: "B4" | "B4g";
   pass: "write" | "correction";
   timed_out: boolean;
   elapsed_ms: number;
@@ -2304,6 +2303,31 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
     );
   }
   await writeFile(join(outDir, "rows.jsonl"), all.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
+  // The final body of every staged file, so line 3 can ask whether the GT text
+  // is still there instead of inferring it from a silent detector. A file that
+  // cannot be read is `null` with `missing: true`, never an empty string.
+  const entries: Record<string, { path: string; content: string | null; missing: boolean }> = {};
+  for (const baseline of ["B4", "B4g"] as const) {
+    for (const sample of allSamples(plan)) {
+      const path = join(outDir, "scratch", baseline, sample.path);
+      let content: string | null = null;
+      try {
+        content = await readFile(path, "utf8");
+      } catch {
+        content = null;
+      }
+      entries[line3PairKey(baseline, sample.sampleId)] = {
+        path: sample.path,
+        content,
+        missing: content === null,
+      };
+    }
+  }
+  await writeFile(
+    join(outDir, "final-content.json"),
+    `${JSON.stringify({ captured_at: new Date().toISOString(), entries }, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 /**
@@ -2580,12 +2604,15 @@ export async function evaluate(
       );
     }
   }
+  const finalContentPath = join(outDir, "final-content.json");
+  const finalContent = existsSync(finalContentPath) ? loadFinalContent(finalContentPath) : undefined;
   const report = evaluateAcceptance(rows, await loadTruth(datasetDir), gaps, {
     coverage,
     frozenInstruments: run.frozen_instruments,
     ...(options.rowsSource === undefined ? {} : { rowsSource: options.rowsSource }),
     ...(options.certifiedRules === undefined ? {} : { subsets: options.certifiedRules }),
     ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
+    ...(finalContent === undefined ? {} : { finalContent }),
   });
   await mkdir(acceptanceOut, { recursive: true });
   const truncationNote = truncated

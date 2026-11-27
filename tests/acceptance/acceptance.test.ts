@@ -26,7 +26,29 @@ function truthOf(
     sample_cwe: sampleCwe,
     labels: detectable.length > 0 ? [{ path: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }] : [],
     expected_detectable_by: detectable,
+    after: "",
   };
+}
+
+const contentKey = (baseline: string, sample: string): string => `${baseline}\u0000${sample}`;
+
+function warnedPair(sample: string): AcceptanceRowLike[] {
+  return [
+    row({
+      sample,
+      baseline: "B4",
+      ts: 10,
+      change_event: { sessionId: "s1", ts: 10, phase: "post" },
+      disposition: {
+        preDecision: "allow",
+        postDecision: "inject_warn",
+        finalDisposition: "instruction_correction",
+        text: "[CRS-WARN] src/a.ts:1 CWE-79 r",
+      },
+      findings_merged: [{ file: "src/a.ts", startLine: 1, endLine: 2, cwe: "CWE-79" }],
+    }),
+    row({ sample, baseline: "B4", ts: 20, change_event: { sessionId: "s1", ts: 20, phase: "post" } }),
+  ];
 }
 
 function row(over: Partial<AcceptanceRowLike> & { sample: string; baseline: string; ts: number }): AcceptanceRowLike {
@@ -554,6 +576,85 @@ describe("acceptance", () => {
     const report = evaluateAcceptance(rows, truth, gaps);
     expect(report.lines[2]!.pass).toBe(false);
     expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, corrected: 0, unfixed: 1 });
+  });
+
+  it("fails line3 as not_removed when the GT defect text is still in the final file", () => {
+    const after = "const a = 1;\nconst token = 'HARDCODED';\n";
+    const truth = new Map<string, SampleTruth>([
+      ["a", { ...truthOf("a", "high", ["aor"]), after }],
+    ]);
+    const report = evaluateAcceptance(warnedPair("a"), truth, gaps, {
+      finalContent: new Map([[contentKey("B4", "a"), "// header\nconst a = 1;\nconst token = 'HARDCODED';\n"]]),
+    });
+    expect(report.lines[2]!.pass).toBe(false);
+    expect(report.lines[2]!.metrics).toMatchObject({
+      classed: 1,
+      corrected: 0,
+      not_removed: 1,
+      not_measured: 0,
+      content_checked: 1,
+      content_missing: 0,
+    });
+    expect(report.lines[2]!.detail).toContain("criterion=gt-text-absent");
+  });
+
+  it("fails line3 as not_measured when the final file is missing", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["a", { ...truthOf("a", "high", ["aor"]), after: "const a = 1;\n" }],
+    ]);
+    const report = evaluateAcceptance(warnedPair("a"), truth, gaps, {
+      finalContent: new Map([[contentKey("B4", "a"), null]]),
+    });
+    expect(report.lines[2]!.pass).toBe(false);
+    expect(report.lines[2]!.metrics).toMatchObject({
+      classed: 1,
+      corrected: 0,
+      not_removed: 0,
+      not_measured: 1,
+      content_checked: 0,
+      content_missing: 1,
+    });
+  });
+
+  it("reads a reformat-only rewrite as corrected (registered false negative)", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["a", { ...truthOf("a", "high", ["aor"]), after: "const a = 1;\nconst b = 2;\n" }],
+    ]);
+    const report = evaluateAcceptance(warnedPair("a"), truth, gaps, {
+      finalContent: new Map([[contentKey("B4", "a"), "const b = 2;\nconst a = 1;\n"]]),
+    });
+    expect(report.lines[2]!.pass).toBe(true);
+    expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, corrected: 1, not_removed: 0 });
+  });
+
+  it("keeps the detection-only reading and writes na when no snapshot is supplied", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["a", { ...truthOf("a", "high", ["aor"]), after: "const a = 1;\nconst token = 'HARDCODED';\n" }],
+    ]);
+    const report = evaluateAcceptance(warnedPair("a"), truth, gaps);
+    expect(report.lines[2]!.pass).toBe(true);
+    expect(report.lines[2]!.metrics).toMatchObject({
+      classed: 1,
+      corrected: 1,
+      not_removed: null,
+      not_measured: null,
+      content_checked: null,
+      content_missing: null,
+    });
+    expect(report.lines[2]!.detail).toContain("criterion=detection-only");
+    expect(report.lines[2]!.detail).toContain("content_checked=na");
+  });
+
+  it("counts checked and missing pairs separately in line3's detail", () => {
+    const truth = new Map<string, SampleTruth>([
+      ["a", { ...truthOf("a", "high", ["aor"]), after: "const a = 1;\n" }],
+      ["b", { ...truthOf("b", "high", ["aor"]), after: "const b = 2;\n" }],
+    ]);
+    const report = evaluateAcceptance([...warnedPair("a"), ...warnedPair("b")], truth, gaps, {
+      finalContent: new Map([[contentKey("B4", "a"), "const a = 1;\n"]]),
+    });
+    expect(report.lines[2]!.detail).toContain("content_checked=1");
+    expect(report.lines[2]!.detail).toContain("content_missing=1");
   });
 
   it("keeps a never-attempted language out of the recall denominator", () => {

@@ -26,6 +26,13 @@ export interface SampleTruth {
   sample_cwe: string | null;
   labels: LabelSpan[];
   expected_detectable_by: string[];
+  /** The dataset's `after` body; line 3 extracts the GT text from it by label span. */
+  after: string;
+}
+
+/** The identity line 3 uses for one independent run of one sample. */
+export function line3PairKey(baseline: string, sample: string): string {
+  return `${baseline}\u0000${sample}`;
 }
 
 /**
@@ -193,6 +200,13 @@ export interface AcceptanceOptions {
    * not say, and the line is gated the way it always was.
    */
   subsets?: ReadonlyArray<{ langs: readonly string[]; blockRules: readonly string[] }>;
+  /**
+   * The final body of each staged file, keyed by `line3PairKey(baseline, sample)`.
+   * `null` (or an absent key) is a missing snapshot, never an empty file. When
+   * the whole map is absent the run carries no snapshot and line 3 keeps the
+   * detection-only reading instead of calling every pair `not_measured`.
+   */
+  finalContent?: ReadonlyMap<string, string | null>;
 }
 
 export type { FrozenInstruments } from "./frozen.js";
@@ -407,6 +421,57 @@ export async function loadRuns(root: string): Promise<AcceptanceRowLike[]> {
   return rows;
 }
 
+interface FinalContentSnapshot {
+  entries?: Record<string, { path?: string; content?: string | null; missing?: boolean }>;
+}
+
+/**
+ * Read the final-content snapshot `collect` writes next to `rows.jsonl`.
+ *
+ * A missing file is `null`, not `""`: an empty file and an unreadable one are
+ * different facts, and only the second makes line 3 unmeasurable. The snapshot
+ * is keyed by `line3PairKey`, the same identity the pair timeline uses.
+ */
+export function loadFinalContent(path: string): Map<string, string | null> {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as FinalContentSnapshot;
+  if (raw.entries === undefined || typeof raw.entries !== "object") {
+    throw new Error(`${path} is not a final-content snapshot: entries is required`);
+  }
+  const out = new Map<string, string | null>();
+  for (const [key, entry] of Object.entries(raw.entries)) {
+    out.set(key, entry.missing === true || typeof entry.content !== "string" ? null : entry.content);
+  }
+  return out;
+}
+
+/** Trim each line and collapse internal whitespace runs to one space. */
+export function normalizedText(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/\s+/g, " "))
+    .join("\n");
+}
+
+/**
+ * The GT text line 3 searches for, taken from the label spans of `after`.
+ * A span whose normalized text is empty does not take part. Paths are not
+ * aligned: a staged sample is one file, and line numbers drift after a rewrite.
+ */
+function gtSpans(sample: SampleTruth | undefined): string[] {
+  if (sample === undefined || sample.after.length === 0) return [];
+  const lines = sample.after.split(/\r?\n/);
+  const spans: string[] = [];
+  for (const label of sample.labels) {
+    if (label.cwe === null) continue;
+    const start = Math.max(0, label.startLine - 1);
+    const end = Math.min(label.endLine, lines.length);
+    if (end <= start) continue;
+    const text = normalizedText(lines.slice(start, end).join("\n"));
+    if (text.length > 0) spans.push(text);
+  }
+  return spans;
+}
+
 /**
  * Ground truth, read through the dataset's own schema.
  *
@@ -434,6 +499,7 @@ export async function loadTruth(datasetDir: string): Promise<Map<string, SampleT
       sample_cwe: sample.cwe,
       labels: sample.labels,
       expected_detectable_by: sample.expected_detectable_by,
+      after: sample.after,
     });
   }
   return truth;
@@ -782,13 +848,13 @@ export function evaluateAcceptance(
   const warned = postRows.filter(
     (row) => row.disposition.postDecision === "inject_warn" && evaluatedAor(row),
   );
-  type Line3State = "corrected" | "recurred" | "unfixed";
+  type Line3State = "corrected" | "recurred" | "unfixed" | "not_removed" | "not_measured";
   // B4 and B4g write the same sample names, so a sample-only key merges two
   // independent runs into one timeline: B4g's staged write would then count as
   // a later write of B4, and B4g's terminal warning would turn B4's edits into
   // "unfixed". A baseline is a separate run; key by baseline and sample.
   const line3Key = (row: Pick<AcceptanceRowLike, "baseline" | "sample">): string =>
-    `${row.baseline}\u0000${row.sample}`;
+    line3PairKey(row.baseline, row.sample);
   const perSample = new Map<string, AcceptanceRowLike[]>();
   for (const row of postRows) {
     const key = line3Key(row);
@@ -796,13 +862,32 @@ export function evaluateAcceptance(
     list.push(row);
     perSample.set(key, list);
   }
-  // Line 3 is three outcomes per warned *sample*, not one repeat count: a sample
-  // whose later writes no longer carry the class was corrected; one whose later
-  // writes do carry it recurred; one that was never written again after the
-  // warning was not corrected at all. The last two are different failures - "it
-  // was told and submitted the same class again" versus "it was told and stopped
-  // touching the file" - so they are counted apart, and both stay in the gate:
-  // a warning nobody acts on is not a successful correction.
+  // Line 3 decides per warned pair, from the first warning onward. Detection
+  // staying silent is not evidence the defect is gone: once a write follows and
+  // the class does not return, the GT text is looked up in the final file.
+  // `not_measured` is a missing/unreadable snapshot, not an empty file.
+  const finalContent = options.finalContent;
+  const contentCriterion = finalContent !== undefined;
+  let contentChecked = 0;
+  let contentMissing = 0;
+  const contentVerdict = (
+    pair: string,
+    sample: string,
+  ): { state: Line3State; checked: boolean; missing: boolean } => {
+    if (finalContent === undefined) return { state: "corrected", checked: false, missing: false };
+    const content = finalContent.get(pair);
+    if (content === undefined || content === null) {
+      return { state: "not_measured", checked: false, missing: true };
+    }
+    const spans = gtSpans(truth.get(sample));
+    if (spans.length === 0) return { state: "corrected", checked: false, missing: false };
+    const final = normalizedText(content);
+    return {
+      state: spans.some((span) => final.includes(span)) ? "not_removed" : "corrected",
+      checked: true,
+      missing: false,
+    };
+  };
   const rowStates: Array<{ row: AcceptanceRowLike; state: Line3State }> = [];
   const sampleStates = new Map<string, Line3State>();
   const warnedSamples = [...new Set(warned.map((row) => row.sample))];
@@ -835,27 +920,31 @@ export function evaluateAcceptance(
     // a warning produced any later write, and whether the class survived it.
     const firstWarnTs = Math.min(...warnedRows.map((row) => row.change_event?.ts ?? 0));
     const afterFirstWarn = rows.filter((row) => (row.change_event?.ts ?? 0) > firstWarnTs);
-    sampleStates.set(
-      `${baseline}/${sample}`,
-      afterFirstWarn.length === 0
-        ? "unfixed"
-        : reappearsAnywhere(afterFirstWarn, classes)
-          ? "recurred"
-          : "corrected",
-    );
+    let state: Line3State;
+    if (afterFirstWarn.length === 0) {
+      state = "unfixed";
+    } else if (reappearsAnywhere(afterFirstWarn, classes)) {
+      state = "recurred";
+    } else {
+      const verdict = contentVerdict(pair, sample);
+      if (verdict.checked) contentChecked += 1;
+      if (verdict.missing) contentMissing += 1;
+      state = verdict.state;
+    }
+    sampleStates.set(`${baseline}/${sample}`, state);
     for (const row of warnedRows) {
       const later = rows.filter(
         (candidate) => (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
       );
-      rowStates.push({
-        row,
-        state:
-          later.length === 0
-            ? "unfixed"
-            : reappearsAnywhere(later, classes)
-              ? "recurred"
-              : "corrected",
-      });
+      let rowState: Line3State;
+      if (later.length === 0) {
+        rowState = "unfixed";
+      } else if (reappearsAnywhere(later, classes)) {
+        rowState = "recurred";
+      } else {
+        rowState = contentVerdict(pair, sample).state;
+      }
+      rowStates.push({ row, state: rowState });
     }
   }
   const samplesIn = (state: Line3State): string[] =>
@@ -863,6 +952,8 @@ export function evaluateAcceptance(
   const correctedSamples = samplesIn("corrected");
   const recurredSamples = samplesIn("recurred");
   const unfixedSamples = samplesIn("unfixed");
+  const notRemovedSamples = samplesIn("not_removed");
+  const notMeasuredSamples = samplesIn("not_measured");
   const classedSamples = sampleStates.size;
   const rowsIn = (state: Line3State): number =>
     rowStates.filter((entry) => entry.state === state).length;
@@ -873,6 +964,10 @@ export function evaluateAcceptance(
   // after its first warning and no return of the ground-truth class. Row states
   // stay in the detail as a diagnostic; a terminal warning is not inaction.
   const line3Pass = classedSamples > 0 && correctedSamples.length === classedSamples;
+  const criterion = contentCriterion ? "gt-text-absent" : "detection-only";
+  const naOr = (value: number): number | string => (contentCriterion ? value : "na");
+  const notMeasuredRelevant = contentCriterion;
+  const notMeasuredText = notMeasuredRelevant ? notMeasuredSamples.length : "na";
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
     state: stateOf(null, line3Pass),
@@ -882,8 +977,16 @@ export function evaluateAcceptance(
       `classed=${classedSamples} samples corrected=${correctedSamples.length} ` +
       `recurred=${recurredSamples.length}${recurredSamples.length > 0 ? `(${recurredSamples.join(",")})` : ""} ` +
       `unfixed=${unfixedSamples.length}${unfixedSamples.length > 0 ? `(${unfixedSamples.join(",")})` : ""} ` +
-      `| rows corrected=${rowsIn("corrected")} recurred=${rowsIn("recurred")} unfixed=${rowsIn("unfixed")}` +
-      ` | criterion=every-warned-pair-acts (first warn onward, same baseline)`,
+      `not_removed=${naOr(notRemovedSamples.length)}` +
+      `${notRemovedSamples.length > 0 ? `(${notRemovedSamples.join(",")})` : ""} ` +
+      `not_measured=${notMeasuredText}` +
+      `${notMeasuredSamples.length > 0 ? `(${notMeasuredSamples.join(",")})` : ""} ` +
+      `| rows corrected=${rowsIn("corrected")} recurred=${rowsIn("recurred")} unfixed=${rowsIn("unfixed")} ` +
+      `not_removed=${naOr(rowsIn("not_removed"))} ` +
+      `not_measured=${notMeasuredRelevant ? rowsIn("not_measured") : "na"}` +
+      ` | criterion=${criterion} content_checked=${naOr(contentChecked)} ` +
+      `content_missing=${naOr(contentMissing)} ` +
+      `content_not_measured=${contentCriterion ? 0 : classedSamples}`,
     metrics: {
       warned_rows: warned.length,
       warned_samples: warnedSamples.length,
@@ -892,10 +995,17 @@ export function evaluateAcceptance(
       corrected: correctedSamples.length,
       recurred: recurredSamples.length,
       unfixed: unfixedSamples.length,
+      not_removed: contentCriterion ? notRemovedSamples.length : null,
+      not_measured: notMeasuredRelevant ? notMeasuredSamples.length : null,
       classed_rows: rowStates.length,
       corrected_rows: rowsIn("corrected"),
       recurred_rows: rowsIn("recurred"),
       unfixed_rows: rowsIn("unfixed"),
+      not_removed_rows: rowsIn("not_removed"),
+      not_measured_rows: rowsIn("not_measured"),
+      content_checked: contentCriterion ? contentChecked : null,
+      content_missing: contentCriterion ? contentMissing : null,
+      criterion,
     },
   };
 
@@ -1274,7 +1384,7 @@ export function evaluateAcceptance(
       : [
           "",
           `line3 的判据是「每条 warn 均被处理」，不是「大部分被处理」：同一 classed 样本内 5 条 warn 已修、` +
-            `1 条未处理，该样本整条记 \`unfixed\`（优先级 recurred > unfixed > corrected）。` +
+            `1 条未处理，该样本整条记 \`unfixed\`（优先级 unfixed > recurred > not_measured > not_removed > corrected）。` +
             `所以 corrected ${correctedSamples.length}/${classedSamples} 读作「闭环合上的样本数为 ${correctedSamples.length}」，` +
             `不是「多数失败」。本线不设容忍度；将来若要容忍度，须是新的预注册阈值，而不是本次读数的注脚。`,
         ]),
@@ -1344,11 +1454,17 @@ async function main(): Promise<void> {
   // The certified block face comes from the config, not from the run: the run
   // records only its hash, and `blockRules` is wiring rather than a result.
   const configPath = resolve(arg("--config", "configs/b4.json"));
+  // The snapshot `collect` writes sits beside rows.jsonl. Absent means the run
+  // predates it, and line 3 then says `criterion=detection-only` rather than
+  // reading the absence as "no content remained".
+  const finalContentPath = join(resolve(runsDir), "final-content.json");
+  const finalContent = existsSync(finalContentPath) ? loadFinalContent(finalContentPath) : undefined;
   const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
     frozenInstruments: pin,
     subsets: certifiedSubsets(configPath),
     ...(existsSync(stagedContextPath) ? { stagedContext: tier0Counterfactual(stagedContextPath) } : {}),
+    ...(finalContent === undefined ? {} : { finalContent }),
   });
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "report.md"), `# 验收结果表（${report.mode}）\n\n${report.resultsTable}\n`, "utf8");

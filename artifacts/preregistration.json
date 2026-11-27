@@ -156,6 +156,21 @@
         "`run` records `tool_events` and `session_ids` per correction pass and writes `correction-<baseline>.log`; a non-timeout pass with tool_events = 0 throws, and so does a resumed session that differs from the write pass's. A correction pass with no appended row is unobservable and cannot be scored - it is not a zero",
         "P1-P4 and every previously frozen value are unchanged"
       ]
+    },
+    {
+      "version": 12,
+      "at": "2026-11-27T00:08:51+08:00",
+      "note": "v2-v11 are unchanged. This revision registers line 3's content-level criterion before the next run. The criterion becomes stricter, not looser; no bound, tier boundary, budget, exclusion rule or prediction is changed, and the published 9/1/10 is not rewritten.",
+      "changes": [
+        "`corrected` now requires three things at once: a write after the warning, no same-class finding in the later writes, and the GT-labelled defect content absent from the final file",
+        "content comparison: take the whole text the GT label covers, trim each line, collapse internal whitespace runs to one space, then search the whole final file for that text as a substring; no line-number alignment. A label whose normalized text is empty does not take part",
+        "two new states: `not_removed` (a write follows, no same-class finding, content still present) and `not_measured` (final file missing, unreadable, or the run carries no final-content snapshot). Both fail line 3; the denominator is unchanged",
+        "state precedence: unfixed (no write after the warning) -> recurred (same class reported again) -> not_measured -> not_removed -> corrected. Existing evidence is read first; the content criterion only decides the case where detection stayed silent",
+        "the final file content is snapshotted by `collect` into the run directory and the report reads only that snapshot; the line 3 detail prints how many pairs were content-checked and how many were missing, `na` rather than 0 when absent",
+        "runs without a snapshot keep the detection-only reading and say so in the detail (`criterion=detection-only`); the published 9/1/10 is not rewritten",
+        "known false negative accepted and registered: an agent that only reformats the line without changing its meaning is read as corrected. It is closer to the content fact than `no detection`, and it is a registered limit rather than a defect to fix",
+        "P1-P4 and every previously frozen value are unchanged"
+      ]
     }
   ],
   "observations": {

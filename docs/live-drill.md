@@ -654,6 +654,14 @@ end of a pass no longer reads as inaction: `unfixed` means no post-warn row at a
 the class does not. The old row-level 26/4/10 and the sample-level 0/10 were pooling
 artefacts of the same two bugs; both remain in the detail as `rows ...` for diagnosis.
 
+Since ADR-0011, `corrected` also needs the GT text to be absent from the final file.
+`collect` snapshots every staged file into `final-content.json` (keyed by
+`(baseline, sample)`; an unreadable file is `missing: true`, never `""`), and
+`evaluate` reads that snapshot. A pair whose GT text is still present is
+`not_removed`; one with no readable snapshot is `not_measured`; both fail line 3.
+A run without the snapshot keeps the detection-only reading and its detail says
+`criterion=detection-only`.
+
 `plan.controls` stages the defect-free rows the low-risk pool did not take — on `ds-2` that
 is the single `create` sample, which is 38 lines and therefore `high` risk. Low-risk rows
 that carry a defect are **not** staged (`3` of them on `ds-2`, all fit-split positives):
