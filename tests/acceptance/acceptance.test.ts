@@ -578,6 +578,34 @@ describe("acceptance", () => {
     expect(report.lines[2]!.metrics).toMatchObject({ classed: 1, corrected: 0, unfixed: 1 });
   });
 
+  it("marks a warned pair not_measured when a post hook failed after the warning", () => {
+    const truth = new Map<string, SampleTruth>([["s-1", truthOf("s-1", "high", ["semgrep"])]]);
+    const report = evaluateAcceptance(warnedPair("s-1"), truth, gaps, {
+      postHookDegraded: { total: 1, pairs: [{ baseline: "B4", sample: "s-1", ts: 15 }] },
+    });
+    const line3 = report.lines[2]!;
+    expect(line3.pass).toBe(false);
+    expect(line3.detail).toContain("post_hook_degraded=1");
+    expect(line3.detail).toContain("post_hook_not_measured=1(B4/s-1)");
+  });
+
+  it("leaves a pair measurable when the post hook failed before its warning", () => {
+    const truth = new Map<string, SampleTruth>([["s-1", truthOf("s-1", "high", ["semgrep"])]]);
+    const report = evaluateAcceptance(warnedPair("s-1"), truth, gaps, {
+      postHookDegraded: { total: 1, pairs: [{ baseline: "B4", sample: "s-1", ts: 5 }] },
+    });
+    const line3 = report.lines[2]!;
+    expect(line3.pass).toBe(true);
+    expect(line3.detail).toContain("post_hook_degraded=1");
+    expect(line3.detail).toContain("post_hook_not_measured=0");
+  });
+
+  it("prints na, not 0, for a run that never counted post-hook failures", () => {
+    const truth = new Map<string, SampleTruth>([["s-1", truthOf("s-1", "high", ["semgrep"])]]);
+    const report = evaluateAcceptance(warnedPair("s-1"), truth, gaps);
+    expect(report.lines[2]!.detail).toContain("post_hook_degraded=na");
+  });
+
   it("fails line3 as not_removed when the GT defect text is still in the final file", () => {
     const after = "const a = 1;\nconst token = 'HARDCODED';\n";
     const truth = new Map<string, SampleTruth>([

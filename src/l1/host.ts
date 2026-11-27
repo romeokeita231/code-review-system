@@ -115,6 +115,16 @@ export class DshAdapter implements HookAdapter {
     }
   }
 
+  /**
+   * The repo-relative spelling of a tool argument path, or `null` when it
+   * escapes the root. Exposed so a row written without a hook event names the
+   * file the same way the reviewed rows do; an absolute path here would read as
+   * a different file to anything that joins on the repo root.
+   */
+  relativePath(filePath: string): string | null {
+    return this.relativeOf(filePath);
+  }
+
   preDecision(input: ChangeEvent | PreVerdict | null): HostDecision {
     if (input === null) return { decision: "allow" };
     const record = input as unknown as Record<string, unknown>;

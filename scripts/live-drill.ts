@@ -546,6 +546,25 @@ export interface RunPassRecord {  baseline: "B4" | "B4g";
   session_ids?: string[];
 }
 
+/**
+ * A write whose post review failed before it produced a conclusion (#51).
+ *
+ * `pairs` only carries the failures that could be attributed to a sample; the
+ * `total` counts every degraded row, so a reader can tell "nothing degraded"
+ * from "some degraded rows could not be mapped".
+ */
+export interface PostHookDegradedPair {
+  baseline: string;
+  sample: string;
+  ts: number;
+}
+
+export interface PostHookDegraded {
+  total: number;
+  by_baseline: Record<string, number>;
+  pairs: PostHookDegradedPair[];
+}
+
 export interface RunManifest {
   dataset_version: string;
   dataset_dir: string;
@@ -580,6 +599,11 @@ export interface RunManifest {
     actual: { tokens: number; rows: number; rows_without_tokens: number; wall_ms: number } | null;
   };
   one_shot: OneShot;
+  /**
+   * Post-hook failures seen while collecting. Absent on runs that predate the
+   * counter (rendered `na`, never 0).
+   */
+  post_hook_degraded?: PostHookDegraded;
 }
 
 /**
@@ -2191,6 +2215,9 @@ export async function recordActualCost(outDir: string): Promise<void> {
     for (const line of readFileSync(jsonl, "utf8").split("\n")) {
       if (line.trim().length === 0) continue;
       const row = JSON.parse(line) as ReviewRow;
+      // A degraded row has no token count by construction; counting it as
+      // "missing tokens" would report the hook's failure as a cost gap.
+      if (isPostHookDegraded(row)) continue;
       rows += 1;
       wall += row.latency_ms;
       if (typeof row.tokens === "number") tokens += row.tokens;
@@ -2273,6 +2300,39 @@ export function toAcceptanceRows(
   return out;
 }
 
+/** A row the post hook wrote because it could not review the write at all. */
+function isPostHookDegraded(row: ReviewRow): boolean {
+  return row.review_skip_reason === "post_hook_failed";
+}
+
+/**
+ * Split post-hook failures out of one baseline's rows.
+ *
+ * The fixed reason is the discriminator, not `review_status`: a row whose source
+ * timed out is also `degraded` but *was* reviewed, and dropping it would move a
+ * measured row out of a denominator.
+ */
+export function classifyDegradedRows(
+  rows: readonly ReviewRow[],
+  pathToSample: Map<string, string>,
+  baseline: Baseline,
+): { kept: ReviewRow[]; degraded: number; pairs: PostHookDegradedPair[] } {
+  const kept: ReviewRow[] = [];
+  const pairs: PostHookDegradedPair[] = [];
+  let degraded = 0;
+  for (const row of rows) {
+    if (!isPostHookDegraded(row)) {
+      kept.push(row);
+      continue;
+    }
+    degraded += 1;
+    const path = row.change_event.files?.[0];
+    const sample = path === undefined ? undefined : pathToSample.get(path);
+    if (sample !== undefined) pairs.push({ baseline, sample, ts: row.change_event.ts });
+  }
+  return { kept, degraded, pairs };
+}
+
 export async function collect(plan: DrillPlan, outDir: string, datasetDir: string): Promise<void> {
   const manifest = readRunManifest(outDir, datasetDir);
   // A truncated run may still be collected when its writer demonstrably
@@ -2281,6 +2341,7 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
   const pathToSample = new Map<string, string>();
   for (const sample of allSamples(plan)) pathToSample.set(sample.path, sample.sampleId);
   const all: AcceptanceRowLike[] = [];
+  const postHookDegraded: PostHookDegraded = { total: 0, by_baseline: {}, pairs: [] };
   for (const baseline of ["B4", "B4g"] as const) {
     const jsonl = join(outDir, baseline, "review.jsonl");
     if (!existsSync(jsonl)) continue;
@@ -2289,7 +2350,14 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
       if (line.trim().length === 0) continue;
       rows.push(JSON.parse(line) as ReviewRow);
     }
-    all.push(...toAcceptanceRows(rows, pathToSample, baseline));
+    // A degraded row carries no review conclusion, so it is not an acceptance
+    // row: leaving it in would put a negative with no decision into the
+    // precision denominator as if it had been judged.
+    const classified = classifyDegradedRows(rows, pathToSample, baseline);
+    if (classified.degraded > 0) postHookDegraded.by_baseline[baseline] = classified.degraded;
+    postHookDegraded.total += classified.degraded;
+    postHookDegraded.pairs.push(...classified.pairs);
+    all.push(...toAcceptanceRows(classified.kept, pathToSample, baseline));
   }
   // Every row a new run writes carries the field, so every new `rows.jsonl` has
   // it on every line. The count is asserted here rather than assumed, because a
@@ -2303,6 +2371,10 @@ export async function collect(plan: DrillPlan, outDir: string, datasetDir: strin
     );
   }
   await writeFile(join(outDir, "rows.jsonl"), all.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
+  // Written even when nothing degraded: a new run must say "0", so `na` can
+  // stay reserved for runs that never counted.
+  manifest.post_hook_degraded = postHookDegraded;
+  await writeFile(join(outDir, "run.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   // The final body of every staged file, so line 3 can ask whether the GT text
   // is still there instead of inferring it from a silent detector. A file that
   // cannot be read is `null` with `missing: true`, never an empty string.
@@ -2612,6 +2684,7 @@ export async function evaluate(
     ...(options.rowsSource === undefined ? {} : { rowsSource: options.rowsSource }),
     ...(options.certifiedRules === undefined ? {} : { subsets: options.certifiedRules }),
     ...(counterfactual === undefined ? {} : { stagedContext: counterfactual }),
+    ...(run.post_hook_degraded === undefined ? {} : { postHookDegraded: run.post_hook_degraded }),
     ...(finalContent === undefined ? {} : { finalContent }),
   });
   await mkdir(acceptanceOut, { recursive: true });

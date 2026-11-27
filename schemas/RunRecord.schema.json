@@ -362,7 +362,8 @@
                     "duplicate_reuse",
                     "no_change",
                     "command_event",
-                    "disposition_missing"
+                    "disposition_missing",
+                    "post_hook_failed"
                   ],
                   "type": "string"
                 },

@@ -622,6 +622,14 @@ because no gate may be printed for a prefix. `collect` refuses any pass whose
 both byte counts), since a tree that is still writing has not been shown to have stopped.
 `evaluate` refuses to print an `N/5` for a truncated run and marks the report `TRUNCATED`.
 
+`collect` drops rows whose `review_skip_reason` is `post_hook_failed`: the post hook failed
+after runtime startup and wrote a `degraded` row instead of leaving the write unaccounted
+for (ADR-0010). Those rows carry no review conclusion, so they never become acceptance rows
+and never enter a denominator; the count goes to `run.json` as
+`post_hook_degraded: { total, by_baseline, pairs }`, with `pairs` only for failures whose
+`change_event.files` maps to a staged sample. A warned pair with a degraded write after its
+first warning is `not_measured` on line 3, and an old run without the counter prints `na`.
+
 The run duration is the `ocr_identity.before.at` → `after.at` span, recorded as
 `duration_ms`. `created_at` and the directory timestamp are staging time, about an hour
 before the first row, and are never used; a recorded duration that differs from the

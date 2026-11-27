@@ -4,14 +4,23 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   CalibrationArtifact,
+  ChangeEvent,
   ReviewRow,
   RunConfig,
   SignalSource,
   TriageProvider,
 } from "../contracts/index.js";
-import { ConfigError, loadCalibration, loadConfig } from "../config/index.js";
-import { DshAdapter } from "../l1/index.js";
-import { DenyGuard, ConclusionCache, TurnBudgetLedger, ledgerFor, review } from "../l2/index.js";
+import { ConfigError, configHash, loadCalibration, loadConfig } from "../config/index.js";
+import { DshAdapter, triggerFor } from "../l1/index.js";
+import {
+  DenyGuard,
+  ConclusionCache,
+  TurnBudgetLedger,
+  declaredInstruments,
+  defaultToolchain,
+  ledgerFor,
+  review,
+} from "../l2/index.js";
 import { createSources, createTriage } from "../l3/index.js";
 import { appendRow } from "../l5/index.js";
 
@@ -169,6 +178,83 @@ function logError(ctx: PluginContext, message: string, error: unknown): void {
   else process.stderr.write(`${line}\n`);
 }
 
+const DEGRADED_REASON_MAX_CHARS = 200;
+
+/** One line, bounded: the fixed category says what happened, this says why. */
+function degradedReasonOf(error: unknown): string {
+  const raw =
+    error instanceof Error
+      ? error.message.length > 0
+        ? error.message
+        : error.stack ?? ""
+      : String(error);
+  const line = raw.replace(/\s+/g, " ").trim();
+  return line.length <= DEGRADED_REASON_MAX_CHARS
+    ? line
+    : `${line.slice(0, DEGRADED_REASON_MAX_CHARS - 1)}…`;
+}
+
+/** A hop that failed before any hook event existed still has to name its write. */
+function degradedEvent(runtime: PluginRuntime, exec: HookExec, callId: string): ChangeEvent {
+  const args =
+    typeof exec.arguments === "object" && exec.arguments !== null
+      ? (exec.arguments as Record<string, unknown>)
+      : {};
+  const filePath = typeof args.file_path === "string" ? args.file_path : null;
+  const path = filePath === null ? null : runtime.adapter.relativePath(filePath);
+  return {
+    id: callId,
+    sessionId: sessionOf(exec),
+    rootCallId: exec.rootCallId ?? callId,
+    phase: "post",
+    trigger: triggerFor(exec.name),
+    files: path === null ? null : [path],
+    diff: null,
+    diffProvenance: "none",
+    ts: Date.now(),
+  };
+}
+
+/**
+ * The row a failed post hook leaves behind (ADR-0010).
+ *
+ * Absence and "never reviewed" are indistinguishable in the log, so a degraded
+ * hop records that nothing was decided rather than nothing happening. It names
+ * no sources and no instrument observed in this process: pretending otherwise
+ * would make a skipped review look like a measurement.
+ */
+function degradedRow(runtime: PluginRuntime, exec: HookExec, error: unknown): ReviewRow {
+  const callId = exec.callId ?? `${Date.now()}`;
+  return {
+    run_id: callId,
+    config_hash: configHash(runtime.config),
+    baseline: runtime.config.baseline,
+    mode: runtime.config.mode,
+    change_event: degradedEvent(runtime, exec, callId),
+    tier: 0,
+    tier_source: "none",
+    sources: [],
+    findings_merged: [],
+    p_semgrep: null,
+    p_fused: null,
+    pre_decision: "not_run",
+    post_decision: "not_run",
+    final_disposition: "record",
+    review_status: "degraded",
+    review_skip_reason: "post_hook_failed",
+    degraded_reason: degradedReasonOf(error),
+    block_loop: false,
+    threshold_source: null,
+    text: null,
+    tokens: null,
+    aor_invoked: false,
+    latency_ms: 0,
+    status: "failed",
+    toolchain: defaultToolchain(runtime.config),
+    instrument: declaredInstruments(runtime.config),
+  };
+}
+
 function boundSummary(text: string): string {
   const firstLine = text.split("\n")[0] ?? text;
   return firstLine.length <= SUMMARY_MAX_CHARS
@@ -305,6 +391,12 @@ export function apply(ctx: PluginContext, config: PluginConfig): void {
         return mergeContexts(downstream, outcome.correction) as Decision;
       } catch (error) {
         logError(ctx, "post-execute review failed open", error);
+        try {
+          const runtime = await ready;
+          await appendRow(runtime.jsonlPath, degradedRow(runtime, exec, error));
+        } catch (recordError) {
+          logError(ctx, "post-execute degraded row was not written", recordError);
+        }
         return downstream;
       }
     })();

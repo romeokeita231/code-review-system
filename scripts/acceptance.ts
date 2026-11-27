@@ -207,6 +207,16 @@ export interface AcceptanceOptions {
    * detection-only reading instead of calling every pair `not_measured`.
    */
   finalContent?: ReadonlyMap<string, string | null>;
+  /**
+   * Post-hook failures recorded while collecting (#51). A write that was never
+   * reviewed leaves no row to say whether it repeated a warned class, so the
+   * warned pair it falls into is `not_measured`, not `corrected`. Absent means
+   * the run predates the counter: line 3 prints `na`, never 0.
+   */
+  postHookDegraded?: {
+    total: number;
+    pairs?: ReadonlyArray<{ baseline: string; sample: string; ts: number }>;
+  };
 }
 
 export type { FrozenInstruments } from "./frozen.js";
@@ -855,6 +865,7 @@ export function evaluateAcceptance(
   // "unfixed". A baseline is a separate run; key by baseline and sample.
   const line3Key = (row: Pick<AcceptanceRowLike, "baseline" | "sample">): string =>
     line3PairKey(row.baseline, row.sample);
+  const pairName = (key: string): string => key.replace("\u0000", "/");
   const perSample = new Map<string, AcceptanceRowLike[]>();
   for (const row of postRows) {
     const key = line3Key(row);
@@ -892,6 +903,31 @@ export function evaluateAcceptance(
   const sampleStates = new Map<string, Line3State>();
   const warnedSamples = [...new Set(warned.map((row) => row.sample))];
   const warnedPairs = [...new Set(warned.map(line3Key))];
+  // The first warning of each pair, so a post-hook failure can be placed on the
+  // timeline: one that happened before the warning says nothing about whether a
+  // correction was ignored.
+  const firstWarnTsOf = new Map<string, number>();
+  for (const pair of warnedPairs) {
+    const rows = perSample.get(pair) ?? [];
+    const warnedRows = rows.filter((row) => row.disposition.postDecision === "inject_warn");
+    if (warnedRows.length > 0) {
+      firstWarnTsOf.set(pair, Math.min(...warnedRows.map((row) => row.change_event?.ts ?? 0)));
+    }
+  }
+  const postHookDegraded = options.postHookDegraded;
+  // A degraded write inside the measured window is an unobserved write: "no
+  // later write" and "a later write nobody reviewed" are indistinguishable, so
+  // the pair cannot be called corrected. Pairs whose failure predates the
+  // warning are unaffected and stay measurable.
+  const postHookAffected = new Set(
+    warnedPairs.filter((pair) => {
+      const at = firstWarnTsOf.get(pair);
+      if (at === undefined) return false;
+      return (postHookDegraded?.pairs ?? []).some(
+        (entry) => line3Key(entry) === pair && entry.ts >= at,
+      );
+    }),
+  );
   const reappearsAnywhere = (
     later: AcceptanceRowLike[],
     classes: ReadonlySet<string>,
@@ -918,10 +954,12 @@ export function evaluateAcceptance(
     // position, and reading it as inaction is what marked every B4g sample
     // `unfixed` while B4 had edited all of them. The gate's question is whether
     // a warning produced any later write, and whether the class survived it.
-    const firstWarnTs = Math.min(...warnedRows.map((row) => row.change_event?.ts ?? 0));
+    const firstWarnTs = firstWarnTsOf.get(pair) ?? 0;
     const afterFirstWarn = rows.filter((row) => (row.change_event?.ts ?? 0) > firstWarnTs);
     let state: Line3State;
-    if (afterFirstWarn.length === 0) {
+    if (postHookAffected.has(pair)) {
+      state = "not_measured";
+    } else if (afterFirstWarn.length === 0) {
       state = "unfixed";
     } else if (reappearsAnywhere(afterFirstWarn, classes)) {
       state = "recurred";
@@ -937,7 +975,9 @@ export function evaluateAcceptance(
         (candidate) => (candidate.change_event?.ts ?? 0) > (row.change_event?.ts ?? 0),
       );
       let rowState: Line3State;
-      if (later.length === 0) {
+      if (postHookAffected.has(pair)) {
+        rowState = "not_measured";
+      } else if (later.length === 0) {
         rowState = "unfixed";
       } else if (reappearsAnywhere(later, classes)) {
         rowState = "recurred";
@@ -966,7 +1006,9 @@ export function evaluateAcceptance(
   const line3Pass = classedSamples > 0 && correctedSamples.length === classedSamples;
   const criterion = contentCriterion ? "gt-text-absent" : "detection-only";
   const naOr = (value: number): number | string => (contentCriterion ? value : "na");
-  const notMeasuredRelevant = contentCriterion;
+  // `not_measured` also carries post-hook failures, which are measurable even
+  // when no content snapshot exists; only the content-only states fall back to na.
+  const notMeasuredRelevant = contentCriterion || options.postHookDegraded !== undefined;
   const notMeasuredText = notMeasuredRelevant ? notMeasuredSamples.length : "na";
   const line3: LineResult = {
     name: "line3: no repeat of the same class after a correction",
@@ -981,6 +1023,9 @@ export function evaluateAcceptance(
       `${notRemovedSamples.length > 0 ? `(${notRemovedSamples.join(",")})` : ""} ` +
       `not_measured=${notMeasuredText}` +
       `${notMeasuredSamples.length > 0 ? `(${notMeasuredSamples.join(",")})` : ""} ` +
+      `post_hook_degraded=${postHookDegraded === undefined ? "na" : postHookDegraded.total} ` +
+      `post_hook_not_measured=${postHookAffected.size}` +
+      `${postHookAffected.size > 0 ? `(${[...postHookAffected].map(pairName).join(",")})` : ""} ` +
       `| rows corrected=${rowsIn("corrected")} recurred=${rowsIn("recurred")} unfixed=${rowsIn("unfixed")} ` +
       `not_removed=${naOr(rowsIn("not_removed"))} ` +
       `not_measured=${notMeasuredRelevant ? rowsIn("not_measured") : "na"}` +
@@ -997,6 +1042,8 @@ export function evaluateAcceptance(
       unfixed: unfixedSamples.length,
       not_removed: contentCriterion ? notRemovedSamples.length : null,
       not_measured: notMeasuredRelevant ? notMeasuredSamples.length : null,
+      post_hook_degraded: postHookDegraded === undefined ? null : postHookDegraded.total,
+      post_hook_not_measured: postHookAffected.size,
       classed_rows: rowStates.length,
       corrected_rows: rowsIn("corrected"),
       recurred_rows: rowsIn("recurred"),

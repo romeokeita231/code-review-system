@@ -14,6 +14,7 @@ import {
   assertStrata,
   attachUpstreamContext,
   baselineConfigPath,
+  classifyDegradedRows,
   estimateCostTokens,
   evaluate,
   existingEvalRuns,
@@ -332,6 +333,29 @@ describe("acceptance row conversion", () => {
   it("carries the observed instrument through to the acceptance row", () => {
     const [converted] = toAcceptanceRows([row()], new Map([["src/a.ts", "s-1"]]), "B4");
     expect(converted?.instrument?.ocr.commit).toBe("04deca6");
+  });
+
+  it("keeps post-hook failures out of acceptance rows and counts them", () => {
+    const planned = new Map([["src/a.ts", "s-1"]]);
+    const failed = row({ review_skip_reason: "post_hook_failed" });
+    const result = classifyDegradedRows([row(), failed], planned, "B4");
+    // The reviewed-but-source-degraded row stays: `review_status` alone is not
+    // the discriminator, or a timed-out source would leave its denominator.
+    expect(result.kept).toHaveLength(1);
+    expect(result.kept[0]?.review_status).toBe("degraded");
+    expect(result.degraded).toBe(1);
+    expect(result.pairs).toEqual([{ baseline: "B4", sample: "s-1", ts: 1 }]);
+  });
+
+  it("counts a failure whose path maps to no sample without inventing a pair", () => {
+    const unmapped = row({
+      review_skip_reason: "post_hook_failed",
+      change_event: { ...row().change_event, files: ["src/other.ts"] },
+    });
+    const result = classifyDegradedRows([unmapped], new Map([["src/a.ts", "s-1"]]), "B4");
+    expect(result.kept).toHaveLength(0);
+    expect(result.degraded).toBe(1);
+    expect(result.pairs).toEqual([]);
   });
 });
 

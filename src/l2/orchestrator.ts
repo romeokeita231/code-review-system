@@ -73,7 +73,7 @@ function ruleIdOf(finding: Finding): string {
   return finding.rawId.split("\u0000")[0] ?? finding.rawId;
 }
 
-function defaultToolchain(config: RunConfig): Toolchain {
+export function defaultToolchain(config: RunConfig): Toolchain {
   return {
     semgrep: config.sources.semgrep.version,
     aor: config.sources.aor.versionCommit,

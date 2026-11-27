@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -188,6 +188,103 @@ describe("plugin entry", () => {
       value: { before: "", after: "print(1)\n" },
     });
     expect(outcome.correction).toBeNull();
+  });
+});
+
+type PostHandler = (
+  exec: HookExec,
+  result: { value?: unknown },
+  next: () => Promise<{ kind: string }>,
+) => Promise<{ kind: string }>;
+
+function hookHarness(jsonlPath: string): PostHandler {
+  const dir = mkdtempSync(join(tmpdir(), "crs-hook-"));
+  const config = JSON.parse(readFileSync("configs/b4g.json", "utf8")) as Record<string, unknown>;
+  (config.persistence as Record<string, unknown>).jsonlPath = jsonlPath;
+  const configPath = join(dir, "b4g.json");
+  writeFileSync(configPath, JSON.stringify(config), "utf8");
+  const handlers = new Map<string, PostHandler>();
+  apply(
+    {
+      on: (event: string, handler: (...args: never[]) => unknown) => {
+        handlers.set(event, handler as never as PostHandler);
+        return handler;
+      },
+      logger: { warn: vi.fn(), error: vi.fn() },
+    },
+    { configPath, artifactPath: "artifacts/calibration.json" },
+  );
+  const handler = handlers.get("tools/post-execute");
+  if (handler === undefined) throw new Error("post-execute hook was not registered");
+  return handler;
+}
+
+function readRows(path: string): Array<Record<string, unknown>> {
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+describe("post hook fail-open", () => {
+  it("appends a degraded row instead of leaving the write unaccounted for", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "crs-hook-"));
+    const jsonl = join(dir, "review.jsonl");
+    const post = hookHarness(jsonl);
+    const spy = vi
+      .spyOn(DshAdapter.prototype, "postExecute")
+      .mockRejectedValueOnce(new Error("boom\nsecond line"));
+    const next = vi.fn(async () => ({ kind: "allow" }));
+    try {
+      await expect(post(exec(), { value: { after: "print(1)\n" } }, next)).resolves.toEqual({
+        kind: "allow",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(next).toHaveBeenCalledTimes(1);
+    const rows = readRows(jsonl);
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.review_status).toBe("degraded");
+    expect(row.status).toBe("failed");
+    expect(row.review_skip_reason).toBe("post_hook_failed");
+    expect(row.degraded_reason).toBe("boom second line");
+    expect(row.pre_decision).toBe("not_run");
+    expect(row.post_decision).toBe("not_run");
+    expect(row.sources).toEqual([]);
+    expect(row.findings_merged).toEqual([]);
+    expect(row.tier).toBe(0);
+    expect(row.tier_source).toBe("none");
+    expect(row.aor_invoked).toBe(false);
+    expect(row.tokens).toBeNull();
+    expect(row.text).toBeNull();
+    expect(row.run_id).toBe("call-1");
+    const event = row.change_event as Record<string, unknown>;
+    expect(event.phase).toBe("post");
+    expect(event.trigger).toBe("write");
+    expect(event.files).toEqual(["src/demo/app.py"]);
+    expect(event.diff).toBeNull();
+    expect(event.diffProvenance).toBe("none");
+    const instrument = row.instrument as { semgrep: { source: string } };
+    expect(instrument.semgrep.source).toBe("declared");
+  });
+
+  it("does not block the write when the degraded row cannot be written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "crs-hook-"));
+    const jsonl = join(dir, "review.jsonl");
+    mkdirSync(jsonl);
+    const post = hookHarness(jsonl);
+    const spy = vi.spyOn(DshAdapter.prototype, "postExecute").mockRejectedValueOnce(new Error("boom"));
+    const next = vi.fn(async () => ({ kind: "allow" }));
+    try {
+      await expect(post(exec(), { value: { after: "print(1)\n" } }, next)).resolves.toEqual({
+        kind: "allow",
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });
 

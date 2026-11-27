@@ -26,6 +26,7 @@ export const REVIEW_SKIP_REASONS = [
   "no_change",
   "command_event",
   "disposition_missing",
+  "post_hook_failed",
 ] as const;
 
 export const Phase = z.enum(PHASES);
@@ -359,6 +360,12 @@ export const ReviewRow = z.object({
   final_disposition: DispositionMechanism,
   review_status: ReviewStatus,
   review_skip_reason: ReviewSkipReason.nullable(),
+  /**
+   * The concrete post-hook failure behind a `post_hook_failed` row, collapsed to
+   * one truncated line. The skip reason is the fixed category a consumer counts;
+   * this is only for a reader trying to reproduce the fault.
+   */
+  degraded_reason: z.string().optional(),
   block_loop: z.boolean(),
   threshold_source: ThresholdSource.nullable(),
   gate: z.object({ perFileTier: z.record(z.string(), Tier) }).optional(),

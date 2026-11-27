@@ -1,5 +1,6 @@
 export {
   review,
+  defaultToolchain,
   DenyGuard,
   type ReviewContext,
   type ReviewOutcome,

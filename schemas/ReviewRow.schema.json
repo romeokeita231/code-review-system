@@ -104,6 +104,9 @@
           "minLength": 1,
           "type": "string"
         },
+        "degraded_reason": {
+          "type": "string"
+        },
         "final_disposition": {
           "enum": [
             "mechanical_block",
@@ -482,7 +485,8 @@
                 "duplicate_reuse",
                 "no_change",
                 "command_event",
-                "disposition_missing"
+                "disposition_missing",
+                "post_hook_failed"
               ],
               "type": "string"
             },
