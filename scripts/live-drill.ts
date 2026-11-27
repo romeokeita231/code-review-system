@@ -1,3 +1,31 @@
+/**
+ * The drill: plan, stage, gate, run, collect, evaluate.
+ *
+ * This file is 3.3k lines and every stage is in it, so it is worth knowing which
+ * region you want before scrolling. Search for the entry-point symbol:
+ *
+ *   plan        `planDrill` (and `DrillPlan`, `PlannedSample`, `DEP_PROBE`) -
+ *               which samples a run stages, and how many per class
+ *   stage       `stageDrill`, `newRunDir`, `assertRunDir`, `writeRunManifest`
+ *               (`RunManifest` is the shape of run.json), `buildIndex`,
+ *               `projectStrata` - everything that materialises a run directory
+ *   preflight   `preflight`, `gatePreflight`, `frozenFromConfig`,
+ *               `pinnedTsRuleset`, `parseDegradedGates` - the gates that must
+ *               refuse *before* the first write. If a run will not start, the
+ *               sentence explaining why is produced here
+ *   run         `runDsh`, `runTask`, `observeOrphanWriter`,
+ *               `recordOcrIdentity`, `recordRunOutcome`, `assertOneShot`,
+ *               `assertRunDuration` - the passes, and the proof that each one
+ *               stopped
+ *   collect     `collect`, `toAcceptanceRows`, `classifyDegradedRows`,
+ *               `readRunManifest`, `assertNoOrphanWriter` - rows.jsonl,
+ *               final-content.json and the post-hook counter
+ *   evaluate    `evaluate` - turns a collected run into the five lines
+ *
+ * The instrument, residue and repo-identity checks are not in this file; they
+ * are `scripts/instrument-gate.ts`, `residue-check.ts` and `repo-identity.ts`,
+ * and `preflight` composes them.
+ */
 import { execa } from "execa";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
