@@ -26,6 +26,7 @@ import {
   type ImpactMeasurement,
 } from "./instrument-gate.js";
 import { judgeGateEntrypoints, judgePairGrouping, judgeTruncatedRun, judgeRowsSource, judgeDefectSpans } from "./silent-degeneration.js";
+import { judgeHashAgreement, type ResolvedRecord } from "./hash-agreement.js";
 import type { GateVerdict } from "./shared.js";
 import { classifyResidue, DEFAULT_LIMITS, judgePatrolCoverage, type ProcessEntry } from "./residue-check.js";
 import { judgeRunRepo, REPO_RECORDING_SINCE } from "./repo-identity.js";
@@ -289,7 +290,67 @@ function replays(): Replay[] {
       expect: "red",
       verdicts: judgeTruncatedRun({ truncated: true, gateScorePublished: true }),
     },
+
+    // recorded hashes vs shipped bytes ---------------------------------------
+    {
+      incident:
+        "a pinned rules hash described the CRLF working copy; no checkout could satisfy it, so semgrep returned no findings everywhere else",
+      source:
+        "first CI run 45955954086: 9 SemgrepSource tests degraded with rules_sha256; pin 612934ee (278490 B) vs blob ab8998b6 (268608 B)",
+      row: "every recorded hash matches the tracked bytes",
+      expect: "red",
+      verdicts: judgeHashAgreement([
+        record({
+          sha256: "612934ee",
+          blobSha: "ab8998b6",
+          blobBytes: 268608,
+          bytes: 278490,
+          workSha: "612934ee",
+          workBytes: 278490,
+        }),
+      ]),
+    },
+    {
+      incident:
+        "a recorded size disagrees with the shipped size, even though the hash was never the thing that broke",
+      source: "snapshot/manifest.json records 486251 bytes for rules.yaml against a 468950-byte blob",
+      row: "every recorded hash matches the tracked bytes",
+      expect: "red",
+      verdicts: judgeHashAgreement([
+        record({ sha256: "aaaa", blobSha: "aaaa", blobBytes: 468950, bytes: 486251, workSha: "zzzz" }),
+      ]),
+    },
+    {
+      incident: "control: a record whose hash and size both describe the tracked bytes passes",
+      source: "the state after `git add --renormalize` on the eight files the gate named",
+      row: "every recorded hash matches the tracked bytes",
+      expect: "green",
+      verdicts: judgeHashAgreement([
+        record({ sha256: "612934ee", blobSha: "612934ee", blobBytes: 278490, bytes: 278490, workSha: "612934ee" }),
+      ]),
+    },
   ];
+}
+
+/** A resolved record with only the fields the check reads. */
+function record(parts: {
+  sha256: string;
+  blobSha: string | null;
+  blobBytes: number | null;
+  bytes?: number;
+  workSha: string | null;
+  workBytes?: number | null;
+}): ResolvedRecord {
+  return {
+    path: "research/semgrep-bench/snapshot/py_block.yaml",
+    source: "configs/b4.json",
+    sha256: parts.sha256,
+    blobSha: parts.blobSha,
+    blobBytes: parts.blobBytes,
+    workSha: parts.workSha,
+    workBytes: parts.workBytes ?? parts.blobBytes,
+    ...(parts.bytes === undefined ? {} : { bytes: parts.bytes }),
+  };
 }
 
 function main(): void {

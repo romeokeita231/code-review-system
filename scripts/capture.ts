@@ -76,6 +76,38 @@ export function captureSync(file: string, args: string[], options: CaptureOption
   }
 }
 
+/** Synchronous variant returning raw bytes, for hashing what a command prints. */
+export function captureBytesSync(
+  file: string,
+  args: string[],
+  options: CaptureOptions = {},
+): { bytes: Buffer; exitCode: number; stderr: string } {
+  const { dir, out, err } = scratch("bytes");
+  const outFd = openSync(out, "w");
+  const errFd = openSync(err, "w");
+  try {
+    const result = spawnSync(file, args, {
+      cwd: options.cwd,
+      env: options.env ?? { ...process.env, ...TOOL_ENV },
+      stdio: ["ignore", outFd, errFd],
+      windowsHide: true,
+      timeout: options.timeoutMs ?? 60_000,
+    });
+    // Bytes, not text: a `\r\n` -> `\n` round-trip through a string is exactly
+    // the corruption this function exists to measure honestly.
+    const bytes = readFileSync(out);
+    return {
+      bytes,
+      exitCode: result.status ?? -1,
+      stderr: safeRead(err),
+    };
+  } finally {
+    closeSync(outFd);
+    closeSync(errFd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Asynchronous variant: same trick, plus a whole-tree kill on timeout. */
 export function capture(file: string, args: string[], options: CaptureOptions = {}): Promise<CaptureResult> {
   const { dir, out, err } = scratch("async");
