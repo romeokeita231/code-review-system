@@ -55,10 +55,19 @@
       "corrected": 9,
       "recurred": 1,
       "unfixed": 10,
+      "not_removed": null,
+      "not_measured": null,
+      "post_hook_degraded": null,
+      "post_hook_not_measured": 0,
       "classed_rows": 40,
       "corrected_rows": 24,
       "recurred_rows": 1,
-      "unfixed_rows": 15
+      "unfixed_rows": 15,
+      "not_removed_rows": 0,
+      "not_measured_rows": 0,
+      "content_checked": null,
+      "content_missing": null,
+      "criterion": "detection-only"
     }
   },
   {
