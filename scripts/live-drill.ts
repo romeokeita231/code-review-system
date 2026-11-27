@@ -382,6 +382,17 @@ export interface StageOptions {
 /** Where the frozen values live. A pin that is only in someone's head is not a pin. */
 export { PREREGISTRATION, loadCostCeiling, loadFrozenBudgets, loadFrozenPin } from "./frozen.js";
 import { loadCostCeiling, loadFrozenBudgets, loadFrozenPin, PREREGISTRATION } from "./frozen.js";
+// 2026-11-27 retro: the gaps these close were all "a check that existed but was
+// not in the path of the run" - the machine (①), leftover probes (②) and the
+// commit under test (⑤) were in no gate at all.
+import { judgeRepoClean, readRepoIdentity, type RepoIdentity } from "./repo-identity.js";
+import {
+  classifyResidue,
+  DEFAULT_LIMITS,
+  enumerateProcesses,
+  judgePatrolCoverage,
+} from "./residue-check.js";
+import { judgeMachine, measureImpact, MIN_SAMPLES } from "./instrument-gate.js";
 
 /** A run directory is self-identifying: eval-<dataset>-<timestamp>. */
 export const RUN_DIR_PATTERN = /^(?:eval|smoke)-[A-Za-z0-9._-]+-\d{8}T\d{6}$/;
@@ -571,6 +582,17 @@ export interface RunManifest {
   config_hash: string;
   /** The pin the numbers must be reproduced against, frozen before the run. */
   frozen_instruments: FrozenInstruments;
+  /**
+   * The code under test: commit, branch, and whether the worktree was clean when
+   * the run was staged (2026-11-27 retro, friction ⑤).
+   *
+   * Absent on every run staged before this field existed - including the only
+   * live run there has been - and those stay absent. "Which code did this
+   * measure" is then unanswerable from the file, which is exactly why the retro's
+   * own window had to be a `--since` range. Old runs render `na`; a run staged
+   * after 2026-11-27 without it is refused rather than backfilled.
+   */
+  repo?: RepoIdentity;
   created_at: string;
   /**
    * True when any pass hit its wall-clock cap. The rows are a prefix of the
@@ -893,6 +915,10 @@ async function writeRunManifest(options: StageOptions): Promise<RunManifest> {
     dataset_dir: resolve(options.datasetDir),
     config_hash: sha256(await readFile(options.baseConfig, "utf8")),
     frozen_instruments: { ...options.frozen, crg },
+    // Observed, not configured: the commit the rows are about. A run staged from
+    // a dirty tree is refused by preflight's `repo clean`, so this field and that
+    // gate cannot disagree.
+    repo: readRepoIdentity(),
     created_at: new Date().toISOString(),
     truncated: false,
     passes: [],
@@ -1927,6 +1953,57 @@ export async function preflight(profile: string, options: PreflightOptions = {})
     ok: typeof process.env["DEEPSEEK_API_KEY"] === "string" && process.env["DEEPSEEK_API_KEY"].length > 0,
     detail: process.env["DEEPSEEK_API_KEY"] ? "present" : "missing",
   });
+
+  // ① ② ⑤ - the three gaps the 2026-11-27 retro found in this very function.
+  // Every one of them is a case where the run could start while the thing being
+  // measured was not the thing the pin describes: the machine was in no gate at
+  // all (the p99 rule was asserted against the config and the frozen value, never
+  // against the host), a leftover probe could own a core for hours with nothing
+  // looking for it, and the commit under test was recorded nowhere. They are
+  // blocking like every other gate here: no `--allow-degraded` covers them.
+  try {
+    checks.push(judgeRepoClean(readRepoIdentity()));
+  } catch (error) {
+    checks.push({
+      name: "repo clean",
+      ok: false,
+      detail: `could not read the worktree: ${(error as Error).message.slice(-300)}`,
+    });
+  }
+  const patrol = await enumerateProcesses();
+  checks.push(judgePatrolCoverage(patrol));
+  if (patrol !== null) {
+    for (const verdict of classifyResidue(patrol, DEFAULT_LIMITS)) {
+      checks.push({ name: verdict.name, ok: verdict.ok, detail: verdict.detail });
+    }
+  }
+  try {
+    const measured = await measureImpact({ repo: process.cwd(), samples: MIN_SAMPLES });
+    const frozenBudgets = loadFrozenBudgets();
+    const configBudgets = frozenFromConfig(
+      options.baseConfig ?? resolve(arg("--config", "configs/b4.json")),
+    ).budgets;
+    if (frozenBudgets === null) {
+      checks.push({
+        name: "machine fingerprint",
+        ok: false,
+        detail:
+          `${PREREGISTRATION} has no frozen.budgets.crg_query_ms, so there is no floor to compare ` +
+          `this machine's p99 (${measured.p99 ?? "unmeasured"} ms) against`,
+      });
+    } else {
+      for (const verdict of judgeMachine(measured, frozenBudgets, configBudgets)) {
+        checks.push({ name: verdict.name, ok: verdict.ok, detail: verdict.detail });
+      }
+    }
+  } catch (error) {
+    // A fingerprint that could not be taken is not a machine that passed.
+    checks.push({
+      name: "machine fingerprint",
+      ok: false,
+      detail: `could not measure this machine: ${(error as Error).message.slice(-300)}`,
+    });
+  }
 
   if (!semgrepScans) {
     checks.push({

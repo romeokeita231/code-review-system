@@ -1,0 +1,17 @@
+{
+  // Compiled to `.tmp/run/` by `scripts/run.mjs`, which then runs the output with
+  // plain `node`. `tsc` is used rather than `tsx`/`esbuild` because esbuild's
+  // service worker needs an IPC pipe that the default sandbox refuses
+  // (`spawn EPERM`), which is why `tsx` and `vitest` cannot start there.
+  //
+  // `tests` is excluded on purpose: the gates have to be runnable even when a
+  // test file is mid-edit, and the gates are not tests — `npm run gate:replay`
+  // is the harness that keeps them honest.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".tmp/run",
+    "declaration": false,
+    "noEmit": false
+  },
+  "include": ["src", "scripts"]
+}

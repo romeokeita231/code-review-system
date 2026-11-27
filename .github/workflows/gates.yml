@@ -1,0 +1,54 @@
+name: gates
+
+# The repository had no guardrail at all until 2026-11-27: no workflow, no
+# pre-commit hook, nothing that ran `typecheck`, `test` or the gates on a push.
+# Every check it owns was opt-in, and the one live evaluation was taken before
+# four later commits touched src/ and configs/ - so those commits are not covered
+# by the archived numbers and nothing would have said so.
+#
+# This job is the enforcement. `AGENTS.md` says the gates must be green before a
+# commit; this is what makes that true rather than a sentence.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: `check:secrets` traces exempt-zone bytes back to a
+          # commit, and a depth-1 checkout turns that into a false red.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Replays every known incident through the check that catches it, then
+      # runs the silent-degeneration gates. Both run on plain `node`, so this
+      # step is the same on a developer's machine and here.
+      - name: Gates
+        run: npm run gate:all
+
+      # `npm test` cannot start in the default DSH sandbox (vitest loads its
+      # config through esbuild, whose IPC pipe is refused). CI is where the
+      # suite actually runs - which is the second reason this job exists.
+      - name: Test suite
+        run: npm test
+
+      - name: Secret gate
+        run: npm run check:secrets
+
+      # NOT here: `npm run gate:machine`. It measures the host it runs on -
+      # `impact` latency against the frozen crg_query_ms floor - so on a shared
+      # runner it would be red or green for reasons unrelated to this commit.
+      # It belongs in preflight, where the machine is the one about to run.

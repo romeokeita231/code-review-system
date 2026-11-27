@@ -91,6 +91,17 @@ export interface FrozenBudgets {
   semgrep_kill_ms: number;
   derivation: string | null;
   semgrep_derivation: string | null;
+  /**
+   * The distribution behind `semgrep_kill_ms`, when there is one.
+   *
+   * `null` is the honest reading of the current pin: the floor is
+   * `ceil(650 x 1.5)` from a **single** 2026-11-13 observation, which the
+   * preregistration itself labels "single observation, not a distribution".
+   * One sample cannot separate "warm 650 ms" from "hangs forever", and on this
+   * machine semgrep does hang, so the gate has to be able to see the difference
+   * between a floor that was measured and a floor that was assumed.
+   */
+  semgrep_latency: { n: number; p99: number } | null;
 }
 
 export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null {
@@ -101,6 +112,7 @@ export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null 
         semgrep_kill_ms?: unknown;
         derivation?: unknown;
         semgrep_derivation?: unknown;
+        semgrep_latency?: { n?: unknown; p99?: unknown };
       };
     };
   };
@@ -109,6 +121,9 @@ export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null 
   const semgrep = raw.frozen?.budgets?.semgrep_kill_ms;
   const derivation = raw.frozen?.budgets?.derivation;
   const semgrepDerivation = raw.frozen?.budgets?.semgrep_derivation;
+  const latency = raw.frozen?.budgets?.semgrep_latency;
+  const latencyN = typeof latency?.n === "number" ? Math.trunc(latency.n) : null;
+  const latencyP99 = typeof latency?.p99 === "number" ? latency.p99 : null;
   return {
     crg_query_ms: Math.trunc(crg),
     semgrep_kill_ms:
@@ -117,5 +132,9 @@ export function loadFrozenBudgets(path = PREREGISTRATION): FrozenBudgets | null 
         : 0,
     derivation: typeof derivation === "string" ? derivation : null,
     semgrep_derivation: typeof semgrepDerivation === "string" ? semgrepDerivation : null,
+    semgrep_latency:
+      latencyN === null || latencyP99 === null || latencyN <= 0
+        ? null
+        : { n: latencyN, p99: latencyP99 },
   };
 }

@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { AorModel, Instruments, ReviewRow, RunRecord } from "../src/contracts/index.js";
 import { loadDataset } from "../src/l5/replay.js";
 import { coverageCounts, cweKey, declaredCoverage, loadRulesTable, semgrepLanguage } from "./coverage.js";
+import { judgeRunRepo, type RunRepoRecord } from "./repo-identity.js";
 import { arg } from "./shared.js";
 
 export interface LabelSpan {
@@ -1506,10 +1507,35 @@ async function main(): Promise<void> {
   // reading the absence as "no content remained".
   const finalContentPath = join(resolve(runsDir), "final-content.json");
   const finalContent = existsSync(finalContentPath) ? loadFinalContent(finalContentPath) : undefined;
+  // Two refusals on the same directory, both from the 2026-11-27 retro.
+  //
+  // #43 (7) / #51 (4): running this script bare does not equal `--stage evaluate`.
+  // Without the run's context `rowsSource` stays "unknown", line 4 degrades, and
+  // its ratios stop being comparable with the run they claim to describe - while
+  // the table still renders and still reads like a measurement.
+  //
+  // ⑤: a run staged after recording began has to name the commit it measured.
+  // Old runs (`na`) are evaluated exactly as before; nothing is backfilled.
+  const runJsonPath = join(resolve(runsDir), "run.json");
+  const rowsSourceArg = arg("--rows-source", "unknown");
+  if (existsSync(runJsonPath)) {
+    const manifest = JSON.parse(readFileSync(runJsonPath, "utf8")) as RunRepoRecord;
+    const repo = judgeRunRepo(manifest);
+    if (!repo.ok) throw new Error(`refusing to evaluate ${runsDir}: ${repo.detail}`);
+    if (rowsSourceArg === "unknown") {
+      throw new Error(
+        `refusing to evaluate ${runsDir}: it holds a run.json, so it is a run, but no rows source ` +
+          `was given - line 4 would render \`source=unknown\` and its ratios would stop being ` +
+          `comparable with the run they describe. Use \`npm run drill -- --stage evaluate --out ` +
+          `<run dir>\`, or pass --rows-source live|synthetic to accept the degraded line 4`,
+      );
+    }
+  }
   const report = evaluateAcceptance(await loadRuns(resolve(runsDir)), await loadTruth(datasetDir), gaps, {
     coverage: { language: declared.language, perCwe: coverageCounts(declared) },
     frozenInstruments: pin,
     subsets: certifiedSubsets(configPath),
+    ...(rowsSourceArg === "live" || rowsSourceArg === "synthetic" ? { rowsSource: rowsSourceArg } : {}),
     ...(existsSync(stagedContextPath) ? { stagedContext: tier0Counterfactual(stagedContextPath) } : {}),
     ...(finalContent === undefined ? {} : { finalContent }),
   });
@@ -1536,7 +1562,13 @@ async function main(): Promise<void> {
   );
 }
 
-if (process.argv[1]?.replace(/\\/g, "/").endsWith("scripts/acceptance.ts")) {
+// `.js` as well as `.ts`: `scripts/run.mjs` executes the compiled output, and a
+// guard that only recognises the source path would make the whole entry point
+// look like a library when it is run the only way that works in this sandbox.
+if (
+  process.argv[1]?.replace(/\\/g, "/").endsWith("scripts/acceptance.ts") ||
+  process.argv[1]?.replace(/\\/g, "/").endsWith("scripts/acceptance.js")
+) {
   main().catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

@@ -7,6 +7,24 @@ export function arg(
   return index >= 0 && argv[index + 1] ? argv[index + 1]! : fallback;
 }
 
+/**
+ * One row of a gate's table.
+ *
+ * Every check added by the 2026-11-27 retro reports in this shape, so
+ * `scripts/gate-replay.ts` can replay an incident through a check and judge the
+ * row without knowing which gate produced it.
+ *
+ * `na` is a third state on purpose, and it is #50's lesson applied to the gates
+ * themselves: "not looked" is not "looked and clean", and it is not "looked and
+ * broken" either. A row that is `na` renders `na`, never `0` or `PASS`.
+ */
+export interface GateVerdict {
+  name: string;
+  ok: boolean;
+  na?: boolean;
+  detail: string;
+}
+
 export const CWES = ["CWE-78", "CWE-79", "CWE-89", "CWE-94", "CWE-22", "CWE-502", "CWE-798"] as const;
 export type Cwe = (typeof CWES)[number];
 export type Risk = "low" | "medium" | "high";
